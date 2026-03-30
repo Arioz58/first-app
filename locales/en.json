@@ -1,0 +1,19 @@
+{
+  "welcome": "Welcome",
+  "login": "Log in",
+  "register": "Register",
+  "phone": "Phone number",
+  "send_code": "Send code",
+  "verify_code": "Verify code",
+  "enter_code": "Enter the code",
+  "profile": "Profile",
+  "settings": "Settings",
+  "messages": "Messages",
+  "search": "Search",
+  "saved": "Saved",
+  "logout": "Log out",
+  "save": "Save",
+  "cancel": "Cancel",
+  "error": "Error",
+  "success": "Success"
+}

@@ -1,6 +1,7 @@
-import { Tabs } from 'expo-router'
-import React from 'react'
-import { Ionicons } from '@expo/vector-icons'
+import { Ionicons } from '@expo/vector-icons';
+import { Tabs } from 'expo-router';
+import React from 'react';
+import '../../lib/i18n';
 
 const _layout = () => {
   return (

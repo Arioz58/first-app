@@ -1,0 +1,19 @@
+{
+  "welcome": "Hoş geldiniz",
+  "login": "Giriş yap",
+  "register": "Kayıt ol",
+  "phone": "Telefon numarası",
+  "send_code": "Kod gönder",
+  "verify_code": "Kodu doğrula",
+  "enter_code": "Kodu girin",
+  "profile": "Profil",
+  "settings": "Ayarlar",
+  "messages": "Mesajlar",
+  "search": "Ara",
+  "saved": "Kaydedilenler",
+  "logout": "Çıkış yap",
+  "save": "Kaydet",
+  "cancel": "İptal",
+  "error": "Hata",
+  "success": "Başarılı"
+}
