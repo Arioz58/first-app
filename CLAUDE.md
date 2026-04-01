@@ -12,8 +12,6 @@ npm run web        # Lancer en mode web
 npm run lint       # Lancer ESLint via expo lint
 ```
 
-Pas de commande de build ou de test définie pour l'instant.
-
 ---
 
 ## Contexte projet
@@ -23,8 +21,8 @@ Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintena
 
 ### Planning
 
-- **Mois 1** — Architecture AWS, base de données, authentification (JWT), profils, confidentialité, i18n
-- **Mois 2** — Messagerie temps réel (Socket.io), groupes, notifications push (FCM)
+- **Mois 1** ✅ — Architecture, base de données, auth (JWT + OTP), profils, confidentialité, i18n
+- **Mois 2** 🔄 — Messagerie temps réel (Socket.io) ✅, groupes 🔜 (API créée, rooms Socket.io à finaliser), notifications push (FCM) 🔜
 - **Mois 3** — Stories (24h), version web (Next.js + Firebase), localisation, médias (S3)
 - **Mois 4** — Appels audio/vidéo (Agora.io)
 - **Mois 5** — Points, leaderboard, anti-spam, module B2B, dashboard admin, site vitrine
@@ -32,77 +30,138 @@ Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintena
 
 ---
 
-## Architecture technique
+## Repos du projet
 
-### Frontend
-- **React Native (Expo)** — iOS + Android (ce repo)
-- **Next.js** — version web synchronisée multi-appareils (type WhatsApp Web)
-
-### Backend (repo séparé)
-- Node.js + Express
-- Socket.io pour la messagerie temps réel — API REST pour le reste
-- JWT + refresh tokens pour l'auth
-
-### Infrastructure AWS
-- **ECS** — backend Node.js en containers Docker
-- **RDS PostgreSQL** — base de données principale
-- **ElastiCache Redis** — sessions, cache, présence en ligne, statuts temps réel
-- **S3** — fichiers, photos, médias, stories
-- **CloudFront** — CDN mondial, HTTPS
-- **API Gateway + Load Balancer** — routage, rate limiting
-
-### Services tiers
-- **Agora.io** — appels audio/vidéo (facturation par participant : 1à1 = ×2)
-- **Firebase** — sync multi-appareils web
-- **FCM** — notifications push (gratuit)
-- **Google Maps + expo-location** — localisation et partage de position
-
-### Modèle de données (tables principales)
 ```
-users, profiles, conversations, conversation_members,
-messages, stories, calls, points, points_history,
-leaderboard_monthly, sponsors, locations_shared
+first-app/           → ce repo — app mobile React Native (Expo)
+first-app-backend/   → backend Node.js + Express (repo séparé, même machine)
+first-app-web/       → Next.js — à créer au Mois 3
 ```
 
 ---
 
-## Architecture de l'app mobile (ce repo)
+## Architecture technique
 
-Application Expo SDK 54 avec Expo Router (routage fichier).
+### Frontend mobile (ce repo)
 
-### Structure des routes
+- **Expo SDK 54** + **Expo Router** (routage fichier)
+- **NativeWind v4** — Tailwind CSS via prop `className`, couleur primaire `#1E40AF`
+- **i18next + react-i18next** — 3 langues : turc (`tr`), français (`fr`), anglais (`en`)
+- TypeScript strict, alias `@/*` → racine
+
+### Backend (`first-app-backend/`)
+
+- Node.js + Express + TypeScript
+- Prisma v5 + PostgreSQL (RDS en prod, Docker en local)
+- Redis (ElastiCache en prod, Docker en local)
+- Socket.io (Mois 2)
+- JWT + refresh tokens pour l'auth
+
+### Infrastructure AWS (prod)
+
+- ECS → backend Docker, RDS PostgreSQL, ElastiCache Redis, S3, CloudFront, API Gateway
+
+### Services tiers
+
+- **Agora.io** — appels audio/vidéo (facturation par participant)
+- **Firebase** — sync multi-appareils web
+- **FCM** — notifications push (gratuit)
+- **Google Maps + expo-location** — localisation
+
+---
+
+## Structure de l'app mobile
+
 ```
 app/
-├── _layout.tsx          # Layout racine (Stack navigator)
-├── globals.css          # Tailwind global
+├── _layout.tsx          # Layout racine — importe lib/i18n
+├── globals.css
 └── (tabs)/
     ├── _layout.tsx      # Tab navigator (4 onglets)
     ├── index.tsx        # Home
     ├── search.tsx       # Recherche
     ├── saved.tsx        # Sauvegardé
     └── profile.tsx      # Profil
+lib/
+└── i18n.ts              # Config i18next (tr/fr/en)
+locales/
+├── tr.json
+├── fr.json
+└── en.json
 ```
 
-### Styling
-**NativeWind v4** — classes Tailwind via prop `className`. Couleur primaire : `#1E40AF`.
-Alias `@/*` → racine du projet.
+## Structure du backend
 
-### Configuration notable
-- TypeScript strict activé
-- React Compiler + Typed Routes activés (`app.json`)
-- New Architecture React Native activée
-- Icônes : `@expo/vector-icons` (Ionicons)
+```
+src/
+├── index.ts                        # Point d'entrée Express + HTTP server + Socket.io
+├── lib/
+│   ├── prisma.ts                   # Client Prisma singleton
+│   ├── redis.ts                    # Client Redis
+│   └── socket.ts                   # Init Socket.io + middleware JWT + événements
+├── middlewares/
+│   └── auth.middleware.ts          # Middleware JWT (AuthRequest)
+└── modules/
+    ├── auth/                       # OTP simulé en local (→ Twilio en prod)
+    │   ├── auth.service.ts
+    │   ├── auth.controller.ts
+    │   └── auth.routes.ts
+    ├── users/                      # Profil + KVKK + confidentialité
+    │   ├── users.service.ts
+    │   ├── users.controller.ts
+    │   └── users.routes.ts
+    └── messages/                   # Conversations + messages
+        ├── messages.service.ts
+        ├── messages.controller.ts
+        └── messages.routes.ts
+prisma/
+└── schema.prisma                   # Schéma complet (users, messages, stories, calls, points, sponsors...)
+```
+
+### Endpoints disponibles
+
+```
+GET  /health
+POST /auth/send-code                          → envoie OTP (simulé en local : log console)
+POST /auth/verify-code                        → vérifie OTP, crée user, retourne JWT
+POST /auth/refresh                            → renouvelle l'access token
+GET  /users/me                                → profil utilisateur (auth requise)
+PATCH /users/me                               → mise à jour profil (auth requise)
+POST /users/me/kvkk                           → acceptation KVKK (auth requise)
+POST /conversations/direct                    → créer/récupérer une conv directe (auth requise)
+POST /conversations/group                     → créer un groupe (auth requise)
+GET  /conversations                           → liste des conversations de l'utilisateur (auth requise)
+GET  /conversations/:conversationId/messages  → historique messages paginé (auth requise)
+```
+
+### Socket.io — événements
+
+```
+// Client → Serveur
+join_conversation(conversationId)             → rejoindre la room d'une conversation
+send_message({ conversationId, content, type }) → envoyer un message
+
+// Serveur → Client
+new_message(message)                          → message reçu en temps réel
+error({ message })                            → erreur serveur
+```
 
 ---
 
 ## Règles de développement
 
-- Variables d'environnement pour toutes les clés API (AWS, Agora, Firebase, Google Maps) — jamais en dur.
-- Architecture modulaire : chaque fonctionnalité dans son propre module/dossier.
+- Variables d'environnement pour toutes les clés API — jamais en dur.
+- Architecture modulaire : un dossier par feature dans `src/modules/`.
 - WebSockets pour la messagerie, API REST pour le reste.
-- Idempotence sur tous les appels critiques (auth, création de compte, transferts).
-- Logs centralisés via AWS CloudWatch.
-- Tests unitaires sur les modules critiques (auth, points, anti-spam).
-- Docker pour tous les services backend (déploiement ECS).
-- Modération : système de signalement → alerte dashboard admin (modération assurée par le client).
-- RGPD/KVKK : intégrer politique de confidentialité et consentement.
+- Idempotence sur les appels critiques (auth, création de compte).
+- Logs centralisés via AWS CloudWatch (en prod).
+- Docker pour tous les services backend.
+- Modération : signalement utilisateur → alerte dashboard admin (client gère la modération).
+- RGPD/KVKK : consentement intégré au modèle `User`.
+
+## Notes techniques importantes
+
+- **Prisma v5** — ne pas upgrader en v7 (breaking changes majeurs sur la config datasource).
+- **OTP** simulé en local (log console). Remplacer par Twilio avant la mise en prod.
+- **i18n** : initialisé dans `app/_layout.tsx` via `import '../../lib/i18n'`.
+- En local : PostgreSQL + Redis tournent via `docker-compose up -d` dans `first-app-backend/`.
