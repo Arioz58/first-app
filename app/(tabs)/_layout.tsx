@@ -1,53 +1,29 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
-import React from 'react';
+import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
 import '../../lib/i18n';
 
-const _layout = () => {
+export default function TabLayout() {
   return (
-    <Tabs>
-        <Tabs.Screen
-        name='index'
-        options={{
-            headerShown: false,
-            title : 'Home',
-            tabBarIcon: ({ color, size }) => (
-                <Ionicons name='home' color={color} size={size} />
-            ),
-        }}
-        />
-        <Tabs.Screen
-        name='search'
-        options={{
-            headerShown: false,
-            title : 'Search',
-            tabBarIcon: ({ color, size }) => (
-                <Ionicons name='search' color={color} size={size} />
-            ),
-        }}
-        />
-        <Tabs.Screen
-        name='saved'
-        options={{
-            headerShown: false,
-            title : 'Saved',
-            tabBarIcon: ({ color, size }) => (
-                <Ionicons name='bookmark' color={color} size={size} />
-            ),
-        }}
-        />
-        <Tabs.Screen
-        name='profile'
-        options={{
-            headerShown: false,
-            title : 'Profile',
-            tabBarIcon: ({ color, size }) => (
-                <Ionicons name='person' color={color} size={size} />
-            ),
-        }}
-        />
-    </Tabs>
-  )
-}
+    <NativeTabs>
+      <NativeTabs.Trigger name="index">
+        <Label>Messages</Label>
+        <Icon sf="message.fill" />
+      </NativeTabs.Trigger>
 
-export default _layout
+      <NativeTabs.Trigger name="search">
+        <Label>Recherche</Label>
+        <Icon sf="magnifyingglass" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="saved">
+        <Label>Appels</Label>
+        <Icon sf="phone.fill" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="profile">
+        <Label>Profil</Label>
+        <Icon sf="person.fill" />
+      </NativeTabs.Trigger>
+
+    </NativeTabs>
+  );
+}

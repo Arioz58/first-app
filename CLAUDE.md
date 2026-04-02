@@ -5,11 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commandes principales
 
 ```bash
-npm start          # Démarrer le serveur de développement Expo
-npm run ios        # Lancer sur simulateur iOS
-npm run android    # Lancer sur émulateur Android
-npm run web        # Lancer en mode web
-npm run lint       # Lancer ESLint via expo lint
+npm start                                    # Démarrer Metro (développement)
+npm run ios                                  # Lancer sur simulateur iOS
+npx expo run:ios --device <device-id>        # Lancer sur iPhone physique
+npm run android                              # Lancer sur émulateur Android
+npm run web                                  # Lancer en mode web
+npm run lint                                 # Lancer ESLint via expo lint
 ```
 
 ---
@@ -18,15 +19,19 @@ npm run lint       # Lancer ESLint via expo lint
 
 Application de messagerie communautaire ciblant le marché turc (V1), avec ambition internationale.
 Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintenance. Délai : 6 mois.
-DA finale : nuances de verts (style WhatsApp) — à appliquer en Mois 5/6. Placeholder actuel : `#1E40AF`.
+
+### DA (Design)
+- Couleurs finales : **nuances de verts style WhatsApp** — à appliquer en Mois 5/6
+- Placeholder actuel : `#1E40AF` (bleu)
+- Tab bar : **native iOS** (`expo-router/unstable-native-tabs`) avec SF Symbols — pas de tab bar custom JS
 
 ### Planning
 
-- **Mois 1** ✅ — Architecture, base de données, auth (JWT + OTP), profils, confidentialité, i18n
-- **Mois 2** ✅ — Messagerie temps réel (Socket.io), groupes (API + rooms + gestion membres), FCM, frontend mobile (auth, conversations, chat, profil)
-- **Mois 3** 🔄 — Stories (24h) 🔜, médias (S3), localisation, version web (Next.js)
+- **Mois 1** ✅ — Architecture, BDD, auth (JWT + OTP), profils, KVKK, i18n (tr/fr/en)
+- **Mois 2** ✅ — Messagerie temps réel (Socket.io), groupes (API + rooms + gestion membres), FCM push, frontend mobile complet
+- **Mois 3** 🔄 — Stories 24h ✅, médias S3 🔜, localisation 🔜, version web Next.js 🔜
 - **Mois 4** — Appels audio/vidéo (Agora.io)
-- **Mois 5** — Points, leaderboard, anti-spam, module B2B, dashboard admin, site vitrine
+- **Mois 5** — Points, leaderboard, anti-spam, module B2B, dashboard admin, site vitrine + DA verte + sécurité hardening (rate limiting, helmet, validation stricte)
 - **Mois 6** — QA, corrections, mise en production (App Store + Google Play + AWS)
 
 ---
@@ -46,28 +51,36 @@ first-app-web/       → Next.js — à créer au Mois 3
 ### Frontend mobile (ce repo)
 
 - **Expo SDK 54** + **Expo Router** (routage fichier)
-- **NativeWind v4** — Tailwind CSS via prop `className`, couleur primaire `#1E40AF`
+- **NativeWind v4** — Tailwind CSS via prop `className`
+- **Native tabs** — `expo-router/unstable-native-tabs` (SF Symbols iOS, statut alpha SDK 54)
 - **i18next + react-i18next** — 3 langues : turc (`tr`), français (`fr`), anglais (`en`)
-- TypeScript strict, alias `@/*` → racine
+- **expo-secure-store** — stockage JWT chiffré (pas AsyncStorage)
+- **socket.io-client** — messagerie temps réel
+- **expo-notifications + expo-device** — notifications push FCM
+- TypeScript strict
 
 ### Backend (`first-app-backend/`)
 
 - Node.js + Express + TypeScript
 - Prisma v5 + PostgreSQL (RDS en prod, Docker en local)
 - Redis (ElastiCache en prod, Docker en local)
-- Socket.io (messagerie temps réel)
-- JWT + refresh tokens pour l'auth
-- firebase-admin (FCM notifications push)
+- Socket.io — messagerie temps réel + vérification membership
+- JWT access (15min) + refresh tokens (7j) — auto-refresh côté client
+- firebase-admin — FCM push notifications
+- Nettoyage automatique stories expirées toutes les heures (setInterval)
 
 ### Infrastructure AWS (prod)
 
-- ECS → backend Docker, RDS PostgreSQL, ElastiCache Redis, S3, CloudFront, API Gateway
+- ECS → backend Docker, RDS PostgreSQL, ElastiCache Redis, S3 + CloudFront (médias), API Gateway
 
 ### Services tiers
 
-- **Agora.io** — appels audio/vidéo (facturation par participant)
-- **Firebase / FCM** — notifications push + sync web (iOS nécessite compte Apple Developer payant + APNs)
-- **Google Maps + expo-location** — localisation
+- **Agora.io** — appels audio/vidéo (Mois 4)
+- **Firebase / FCM** — notifications push
+  - ⚠️ iOS : nécessite compte Apple Developer payant (99€/an) + clés APNs dans Firebase Console
+  - Android : fonctionne directement
+- **Google Maps + expo-location** — localisation (Mois 3)
+- **Twilio** — OTP SMS en prod (simulé en local via console.log)
 
 ---
 
@@ -75,27 +88,32 @@ first-app-web/       → Next.js — à créer au Mois 3
 
 ```
 app/
-├── _layout.tsx          # Layout racine — auth check + socket + FCM init
+├── _layout.tsx          # Layout racine — auth check + socket connect + FCM register
 ├── globals.css
 ├── (auth)/
 │   ├── _layout.tsx
-│   ├── login.tsx        # Saisie numéro de téléphone
-│   └── verify.tsx       # Saisie OTP + nom
+│   ├── login.tsx        # Saisie numéro de téléphone → OTP
+│   └── verify.tsx       # Saisie OTP + nom → JWT stocké + socket + FCM init
 ├── (tabs)/
-│   ├── _layout.tsx      # Tab navigator (4 onglets)
-│   ├── index.tsx        # Liste des conversations
-│   ├── search.tsx       # Recherche
-│   ├── saved.tsx        # Sauvegardé
-│   └── profile.tsx      # Profil + déconnexion
+│   ├── _layout.tsx      # NativeTabs (SF Symbols) — 4 onglets
+│   ├── index.tsx        # Liste conversations + StoriesBar en header
+│   ├── search.tsx       # Recherche (à implémenter)
+│   ├── saved.tsx        # Appels (à implémenter Mois 4)
+│   └── profile.tsx      # Profil utilisateur + déconnexion
 ├── chat/
-│   └── [id].tsx         # Écran de chat temps réel
-└── group/
-    └── new.tsx          # Création de groupe
+│   └── [id].tsx         # Écran chat temps réel (Socket.io)
+├── group/
+│   └── new.tsx          # Création de groupe (saisie ID membres — améliorer avec recherche)
+└── story/
+    ├── [id].tsx         # Viewer stories plein écran (progress bar, tap nav, suppression)
+    └── create.tsx       # Créer une story (URL pour l'instant, S3 au Mois 3)
+components/
+└── StoriesBar.tsx       # Barre stories horizontale (style WhatsApp, useFocusEffect refresh)
 lib/
-├── api.ts               # Fetch wrapper JWT + auto-refresh
+├── api.ts               # Fetch wrapper — JWT Bearer + auto-refresh token
 ├── socket.ts            # Client Socket.io singleton
-├── storage.ts           # SecureStore (accessToken, refreshToken, userId)
-├── notifications.ts     # Enregistrement token FCM
+├── storage.ts           # SecureStore : accessToken, refreshToken, userId
+├── notifications.ts     # Demande permission + enregistre token FCM au backend
 └── i18n.ts              # Config i18next (tr/fr/en)
 locales/
 ├── tr.json
@@ -107,62 +125,96 @@ locales/
 
 ```
 src/
-├── index.ts                        # Point d'entrée Express + HTTP server + Socket.io
+├── index.ts                        # Express + Socket.io + nettoyage stories (setInterval 1h)
 ├── lib/
 │   ├── prisma.ts                   # Client Prisma singleton
 │   ├── redis.ts                    # Client Redis
-│   ├── socket.ts                   # Init Socket.io + middleware JWT + événements
-│   └── fcm.ts                      # Firebase Admin SDK — sendPushNotification / sendPushToMany
+│   ├── socket.ts                   # Socket.io : auth JWT + membership check + events + helpers emit
+│   └── fcm.ts                      # Firebase Admin : sendPushNotification / sendPushToMany
 ├── middlewares/
-│   └── auth.middleware.ts          # Middleware JWT (AuthRequest)
+│   └── auth.middleware.ts          # Middleware JWT → AuthRequest.userId
 └── modules/
-    ├── auth/                       # OTP simulé en local (→ Twilio en prod)
-    ├── users/                      # Profil + KVKK + token FCM
-    ├── messages/                   # Conversations + messages + gestion groupes
-    └── stories/                    # Stories 24h (Mois 3 — en cours)
+    ├── auth/                       # send-code (OTP Redis 5min) + verify-code + refresh
+    ├── users/                      # Profil + KVKK + fcmToken
+    ├── messages/                   # Conversations direct/groupe + messages + gestion membres
+    └── stories/                    # Stories 24h : CRUD + groupées par user
 prisma/
-└── schema.prisma                   # Schéma complet
+└── schema.prisma                   # User, Profile, Conversation, ConversationMember, Message, Story, Call, Points...
 ```
 
 ### Endpoints disponibles
 
 ```
 GET  /health
-POST /auth/send-code
-POST /auth/verify-code
-POST /auth/refresh
-GET  /users/me
-PATCH /users/me
-POST /users/me/kvkk
-POST /users/me/fcm-token                          → enregistrer token FCM
-POST /conversations/direct
-POST /conversations/group
-GET  /conversations
-GET  /conversations/:conversationId/messages
-POST /conversations/:conversationId/members       → ajouter membres (admin)
-DELETE /conversations/:conversationId/members/:userId → expulser (admin)
-POST /conversations/:conversationId/leave         → quitter le groupe
-PATCH /conversations/:conversationId              → renommer (admin)
+POST /auth/send-code                              → OTP simulé (log console) → Twilio en prod
+POST /auth/verify-code                            → vérifie OTP, crée user si nouveau, retourne JWT
+POST /auth/refresh                                → renouvelle access token
+
+GET  /users/me                                    → profil complet
+PATCH /users/me                                   → mise à jour (name, photoUrl, language...)
+POST /users/me/kvkk                               → acceptation KVKK
+POST /users/me/fcm-token                          → enregistrer/mettre à jour token FCM
+
+POST /conversations/direct                        → créer/récupérer conv directe
+POST /conversations/group                         → créer groupe (admin = créateur)
+GET  /conversations                               → liste convs de l'user (avec dernier message)
+GET  /conversations/:id/messages                  → historique paginé (cursor-based, 30/page)
+POST /conversations/:id/members                   → ajouter membres (admin requis)
+DELETE /conversations/:id/members/:userId         → expulser un membre (admin requis)
+POST /conversations/:id/leave                     → quitter (promeut prochain admin si besoin)
+PATCH /conversations/:id                          → renommer groupe (admin requis)
+
+POST /stories                                     → créer story (expire dans 24h)
+GET  /stories                                     → toutes stories actives groupées par user
+GET  /stories/me                                  → mes stories actives
+DELETE /stories/:storyId                          → supprimer (propriétaire uniquement)
 ```
 
 ### Socket.io — événements
 
 ```
-// Client → Serveur
+// Client → Serveur (vérification membership sur chaque event)
 join_conversation(conversationId)
 send_message({ conversationId, content, type })
 leave_conversation(conversationId)
 
 // Serveur → Client
-new_message(message)
-members_added({ conversationId, memberIds })
-member_removed({ conversationId, userId })
+new_message(message)                              → + FCM push si destinataire offline
+members_added({ conversationId, memberIds })      → + FCM push aux nouveaux membres
+member_removed({ conversationId, userId })        → + FCM push au membre expulsé
 member_left({ conversationId, userId, newAdminId? })
 added_to_group({ conversationId })
-removed_from_group({ conversationId })
-group_updated({ conversationId, name })
+removed_from_group({ conversationId })            → redirige vers accueil côté app
+group_updated({ conversationId, name })           → + FCM push à tous les membres
 error({ message })
 ```
+
+---
+
+## Sécurité — état actuel
+
+### En place ✅
+- JWT access 15min + refresh 7j, secrets en variables d'environnement
+- OTP sans mot de passe (pas de risque fuite password)
+- Socket.io : vérification JWT + membership sur chaque événement
+- Autorisation groupes : admin only pour add/remove/rename
+- Stories : owner-only delete
+- SecureStore côté client (chiffré, pas AsyncStorage)
+- KVKK/RGPD consentement intégré
+- `firebase-service-account.json` dans `.gitignore`
+
+### À faire en Mois 5 (avant prod) ⚠️
+- Rate limiting sur `/auth/send-code` et `/auth/verify-code` (anti-spam OTP)
+- Limite de tentatives OTP (3 essais max)
+- Helmet.js (headers HTTP sécurité)
+- Validation stricte des inputs (zod ou joi)
+- CORS restreint aux domaines autorisés (pas `*`)
+- Validation URLs médias (S3 uniquement en prod)
+
+### Décisions architecturales
+- **Pas de E2EE en V1** : incompatible avec modération + dashboard admin + loi turque KVKK
+  (les autorités turques ont droit d'accès aux données — E2EE serait un risque légal)
+- E2EE prévu en V2 si demande client
 
 ---
 
@@ -173,9 +225,8 @@ error({ message })
 - WebSockets pour la messagerie, API REST pour le reste.
 - Idempotence sur les appels critiques (auth, création de compte).
 - Logs centralisés via AWS CloudWatch (en prod).
-- Docker pour tous les services backend.
-- Modération : signalement utilisateur → alerte dashboard admin (client gère la modération).
-- RGPD/KVKK : consentement intégré au modèle `User`.
+- **Priorité features > finitions UI** — les polissages (tri, timestamps, animations) sont pour Mois 5/QA.
+- Médias : jamais stockés en BDD — uniquement URLs vers S3/CDN.
 
 ## Notes techniques importantes
 
@@ -183,5 +234,7 @@ error({ message })
 - **OTP** simulé en local (log console). Remplacer par Twilio avant la mise en prod.
 - **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'`.
 - En local : PostgreSQL + Redis tournent via `docker-compose up -d` dans `first-app-backend/`.
-- **FCM iOS** : nécessite compte Apple Developer payant + clés APNs uploadées dans Firebase Console.
-- **IP locale** : mettre à jour `lib/api.ts` et `lib/socket.ts` si le réseau change.
+- **FCM iOS** : nécessite compte Apple Developer payant (99€/an) + clés APNs dans Firebase Console.
+- **IP locale** : mettre à jour `lib/api.ts` et `lib/socket.ts` à chaque changement de réseau.
+- **Native tabs** : import depuis `expo-router/unstable-native-tabs` — API peut changer (alpha).
+- **Bundle ID iOS** : `com.berke.firstapp` (changé de `org.name.firstapp` pour signing perso).
