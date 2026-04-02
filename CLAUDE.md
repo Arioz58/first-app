@@ -18,12 +18,13 @@ npm run lint       # Lancer ESLint via expo lint
 
 Application de messagerie communautaire ciblant le marché turc (V1), avec ambition internationale.
 Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintenance. Délai : 6 mois.
+DA finale : nuances de verts (style WhatsApp) — à appliquer en Mois 5/6. Placeholder actuel : `#1E40AF`.
 
 ### Planning
 
 - **Mois 1** ✅ — Architecture, base de données, auth (JWT + OTP), profils, confidentialité, i18n
-- **Mois 2** 🔄 — Messagerie temps réel (Socket.io) ✅, groupes 🔜 (API créée, rooms Socket.io à finaliser), notifications push (FCM) 🔜
-- **Mois 3** — Stories (24h), version web (Next.js + Firebase), localisation, médias (S3)
+- **Mois 2** ✅ — Messagerie temps réel (Socket.io), groupes (API + rooms + gestion membres), FCM, frontend mobile (auth, conversations, chat, profil)
+- **Mois 3** 🔄 — Stories (24h) 🔜, médias (S3), localisation, version web (Next.js)
 - **Mois 4** — Appels audio/vidéo (Agora.io)
 - **Mois 5** — Points, leaderboard, anti-spam, module B2B, dashboard admin, site vitrine
 - **Mois 6** — QA, corrections, mise en production (App Store + Google Play + AWS)
@@ -54,8 +55,9 @@ first-app-web/       → Next.js — à créer au Mois 3
 - Node.js + Express + TypeScript
 - Prisma v5 + PostgreSQL (RDS en prod, Docker en local)
 - Redis (ElastiCache en prod, Docker en local)
-- Socket.io (Mois 2)
+- Socket.io (messagerie temps réel)
 - JWT + refresh tokens pour l'auth
+- firebase-admin (FCM notifications push)
 
 ### Infrastructure AWS (prod)
 
@@ -64,8 +66,7 @@ first-app-web/       → Next.js — à créer au Mois 3
 ### Services tiers
 
 - **Agora.io** — appels audio/vidéo (facturation par participant)
-- **Firebase** — sync multi-appareils web
-- **FCM** — notifications push (gratuit)
+- **Firebase / FCM** — notifications push + sync web (iOS nécessite compte Apple Developer payant + APNs)
 - **Google Maps + expo-location** — localisation
 
 ---
@@ -74,15 +75,27 @@ first-app-web/       → Next.js — à créer au Mois 3
 
 ```
 app/
-├── _layout.tsx          # Layout racine — importe lib/i18n
+├── _layout.tsx          # Layout racine — auth check + socket + FCM init
 ├── globals.css
-└── (tabs)/
-    ├── _layout.tsx      # Tab navigator (4 onglets)
-    ├── index.tsx        # Home
-    ├── search.tsx       # Recherche
-    ├── saved.tsx        # Sauvegardé
-    └── profile.tsx      # Profil
+├── (auth)/
+│   ├── _layout.tsx
+│   ├── login.tsx        # Saisie numéro de téléphone
+│   └── verify.tsx       # Saisie OTP + nom
+├── (tabs)/
+│   ├── _layout.tsx      # Tab navigator (4 onglets)
+│   ├── index.tsx        # Liste des conversations
+│   ├── search.tsx       # Recherche
+│   ├── saved.tsx        # Sauvegardé
+│   └── profile.tsx      # Profil + déconnexion
+├── chat/
+│   └── [id].tsx         # Écran de chat temps réel
+└── group/
+    └── new.tsx          # Création de groupe
 lib/
+├── api.ts               # Fetch wrapper JWT + auto-refresh
+├── socket.ts            # Client Socket.io singleton
+├── storage.ts           # SecureStore (accessToken, refreshToken, userId)
+├── notifications.ts     # Enregistrement token FCM
 └── i18n.ts              # Config i18next (tr/fr/en)
 locales/
 ├── tr.json
@@ -98,52 +111,57 @@ src/
 ├── lib/
 │   ├── prisma.ts                   # Client Prisma singleton
 │   ├── redis.ts                    # Client Redis
-│   └── socket.ts                   # Init Socket.io + middleware JWT + événements
+│   ├── socket.ts                   # Init Socket.io + middleware JWT + événements
+│   └── fcm.ts                      # Firebase Admin SDK — sendPushNotification / sendPushToMany
 ├── middlewares/
 │   └── auth.middleware.ts          # Middleware JWT (AuthRequest)
 └── modules/
     ├── auth/                       # OTP simulé en local (→ Twilio en prod)
-    │   ├── auth.service.ts
-    │   ├── auth.controller.ts
-    │   └── auth.routes.ts
-    ├── users/                      # Profil + KVKK + confidentialité
-    │   ├── users.service.ts
-    │   ├── users.controller.ts
-    │   └── users.routes.ts
-    └── messages/                   # Conversations + messages
-        ├── messages.service.ts
-        ├── messages.controller.ts
-        └── messages.routes.ts
+    ├── users/                      # Profil + KVKK + token FCM
+    ├── messages/                   # Conversations + messages + gestion groupes
+    └── stories/                    # Stories 24h (Mois 3 — en cours)
 prisma/
-└── schema.prisma                   # Schéma complet (users, messages, stories, calls, points, sponsors...)
+└── schema.prisma                   # Schéma complet
 ```
 
 ### Endpoints disponibles
 
 ```
 GET  /health
-POST /auth/send-code                          → envoie OTP (simulé en local : log console)
-POST /auth/verify-code                        → vérifie OTP, crée user, retourne JWT
-POST /auth/refresh                            → renouvelle l'access token
-GET  /users/me                                → profil utilisateur (auth requise)
-PATCH /users/me                               → mise à jour profil (auth requise)
-POST /users/me/kvkk                           → acceptation KVKK (auth requise)
-POST /conversations/direct                    → créer/récupérer une conv directe (auth requise)
-POST /conversations/group                     → créer un groupe (auth requise)
-GET  /conversations                           → liste des conversations de l'utilisateur (auth requise)
-GET  /conversations/:conversationId/messages  → historique messages paginé (auth requise)
+POST /auth/send-code
+POST /auth/verify-code
+POST /auth/refresh
+GET  /users/me
+PATCH /users/me
+POST /users/me/kvkk
+POST /users/me/fcm-token                          → enregistrer token FCM
+POST /conversations/direct
+POST /conversations/group
+GET  /conversations
+GET  /conversations/:conversationId/messages
+POST /conversations/:conversationId/members       → ajouter membres (admin)
+DELETE /conversations/:conversationId/members/:userId → expulser (admin)
+POST /conversations/:conversationId/leave         → quitter le groupe
+PATCH /conversations/:conversationId              → renommer (admin)
 ```
 
 ### Socket.io — événements
 
 ```
 // Client → Serveur
-join_conversation(conversationId)             → rejoindre la room d'une conversation
-send_message({ conversationId, content, type }) → envoyer un message
+join_conversation(conversationId)
+send_message({ conversationId, content, type })
+leave_conversation(conversationId)
 
 // Serveur → Client
-new_message(message)                          → message reçu en temps réel
-error({ message })                            → erreur serveur
+new_message(message)
+members_added({ conversationId, memberIds })
+member_removed({ conversationId, userId })
+member_left({ conversationId, userId, newAdminId? })
+added_to_group({ conversationId })
+removed_from_group({ conversationId })
+group_updated({ conversationId, name })
+error({ message })
 ```
 
 ---
@@ -163,5 +181,7 @@ error({ message })                            → erreur serveur
 
 - **Prisma v5** — ne pas upgrader en v7 (breaking changes majeurs sur la config datasource).
 - **OTP** simulé en local (log console). Remplacer par Twilio avant la mise en prod.
-- **i18n** : initialisé dans `app/_layout.tsx` via `import '../../lib/i18n'`.
+- **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'`.
 - En local : PostgreSQL + Redis tournent via `docker-compose up -d` dans `first-app-backend/`.
+- **FCM iOS** : nécessite compte Apple Developer payant + clés APNs uploadées dans Firebase Console.
+- **IP locale** : mettre à jour `lib/api.ts` et `lib/socket.ts` si le réseau change.

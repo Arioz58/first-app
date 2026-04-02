@@ -1,6 +1,6 @@
 import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from './storage';
 
-const BASE_URL = 'http://192.168.1.181:3000';
+const BASE_URL = 'http://172.29.121.35:3000';
 
 type RequestOptions = {
   method?: string;
@@ -36,7 +36,8 @@ export const apiRequest = async <T>(
       });
       if (refreshRes.ok) {
         const data = await refreshRes.json();
-        await saveTokens(data.accessToken, data.refreshToken);
+        const currentUserId = await import('./storage').then(m => m.getUserId());
+        await saveTokens(data.accessToken, data.refreshToken, currentUserId ?? '');
         headers['Authorization'] = `Bearer ${data.accessToken}`;
         const retry = await fetch(`${BASE_URL}${path}`, {
           method,

@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../../lib/api';
 import { getSocket } from '../../lib/socket';
 import { getUserId } from '../../lib/storage';
+import StoriesBar from '../../components/StoriesBar';
 
 type Message = { id: string; content: string; createdAt: string; conversationId: string };
 type Member = { userId: string; user: { name: string } };
@@ -96,6 +97,7 @@ export default function ConversationsScreen() {
       <FlatList
         data={conversations}
         keyExtractor={(item) => item.id}
+        ListHeaderComponent={<StoriesBar />}
         alwaysBounceVertical
         refreshControl={
           <RefreshControl
