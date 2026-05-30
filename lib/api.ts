@@ -1,6 +1,6 @@
 import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from './storage';
 
-const BASE_URL = 'http://172.29.121.35:3000';
+const BASE_URL = 'http://192.168.1.181:3000';
 
 type RequestOptions = {
   method?: string;

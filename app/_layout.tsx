@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import './globals.css';
+import { useEffect, useState } from 'react';
 import '../lib/i18n';
-import { getAccessToken } from '../lib/storage';
 import { registerForPushNotifications } from '../lib/notifications';
 import { connectSocket } from '../lib/socket';
+import { getAccessToken } from '../lib/storage';
+import './globals.css';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -41,7 +41,7 @@ export default function RootLayout() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="group/new" options={{ headerShown: false }} />
-      <Stack.Screen name="story/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="story/[id]" options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
       <Stack.Screen name="story/create" options={{ headerShown: false }} />
     </Stack>
   );
