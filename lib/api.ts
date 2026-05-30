@@ -2,6 +2,12 @@ import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from './stor
 
 const BASE_URL = 'http://192.168.1.181:3000';
 
+let sessionExpiredHandler: (() => void) | null = null;
+
+export const setSessionExpiredHandler = (handler: () => void) => {
+  sessionExpiredHandler = handler;
+};
+
 type RequestOptions = {
   method?: string;
   body?: object;
@@ -48,6 +54,7 @@ export const apiRequest = async <T>(
       }
     }
     await clearTokens();
+    sessionExpiredHandler?.();
     throw new Error('SESSION_EXPIRED');
   }
 

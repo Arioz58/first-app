@@ -30,8 +30,7 @@ export default function ConversationsScreen() {
     try {
       const data = await apiRequest<Conversation[]>('/conversations');
       setConversations(data);
-    } catch (e: any) {
-      if (e.message === 'SESSION_EXPIRED') router.replace('/(auth)/login');
+    } catch {
     } finally {
       setLoading(false);
       setRefreshing(false);
