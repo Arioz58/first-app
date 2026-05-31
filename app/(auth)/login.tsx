@@ -3,7 +3,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Image,
   Keyboard,
@@ -15,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { MotiView } from "moti";
 import CountryPicker from "../../components/CountryPicker";
 import { apiRequest } from "../../lib/api";
 import { COUNTRIES, Country } from "../../lib/countries";
@@ -28,7 +28,13 @@ export default function LoginScreen() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [country, setCountry] = useState<Country>(COUNTRIES[0]);
+  const [nameError, setNameError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+  const [serverError, setServerError] = useState("");
+  const [buttonError, setButtonError] = useState(false);
+
   const translateY = useRef(new Animated.Value(0)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const show = Keyboard.addListener(
@@ -59,9 +65,77 @@ export default function LoginScreen() {
     };
   }, []);
 
+  const triggerError = () => {
+    setButtonError(true);
+    shakeAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(shakeAnim, {
+        toValue: 12,
+        duration: 60,
+        useNativeDriver: true,
+      }),
+      Animated.timing(shakeAnim, {
+        toValue: -12,
+        duration: 60,
+        useNativeDriver: true,
+      }),
+      Animated.timing(shakeAnim, {
+        toValue: 8,
+        duration: 60,
+        useNativeDriver: true,
+      }),
+      Animated.timing(shakeAnim, {
+        toValue: -8,
+        duration: 60,
+        useNativeDriver: true,
+      }),
+      Animated.timing(shakeAnim, {
+        toValue: 4,
+        duration: 60,
+        useNativeDriver: true,
+      }),
+      Animated.timing(shakeAnim, {
+        toValue: 0,
+        duration: 60,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setTimeout(() => setButtonError(false), 100);
+    });
+  };
+
+  const validate = (): boolean => {
+    let valid = true;
+    setNameError("");
+    setPhoneError("");
+    setServerError("");
+
+    if (isNewUser && !name.trim()) {
+      setNameError("Veuillez entrer votre prénom");
+      valid = false;
+    } else if (isNewUser && name.trim().length < 2) {
+      setNameError("Le prénom doit contenir au moins 2 caractères");
+      valid = false;
+    }
+
+    if (!phone.trim()) {
+      setPhoneError("Veuillez entrer votre numéro de téléphone");
+      valid = false;
+    } else if (phone.replace(/\s/g, "").length < 5) {
+      setPhoneError("Numéro trop court");
+      valid = false;
+    }
+
+    return valid;
+  };
+
   const handleSend = async () => {
-    if (!phone.trim()) return;
-    if (isNewUser && !name.trim()) return;
+    Keyboard.dismiss();
+    if (!validate()) {
+      triggerError();
+      return;
+    }
+
     setLoading(true);
     try {
       await apiRequest("/auth/send-code", {
@@ -74,15 +148,23 @@ export default function LoginScreen() {
         params: { phone: country.dialCode + phone, name },
       });
     } catch (e: any) {
-      Alert.alert("Erreur", e.message);
+      setServerError(e.message || "Une erreur est survenue");
+      triggerError();
     } finally {
       setLoading(false);
     }
   };
 
+  const clearError = (field: "name" | "phone") => {
+    if (field === "name") setNameError("");
+    if (field === "phone") setPhoneError("");
+    setServerError("");
+    setButtonError(false);
+  };
+
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <SafeAreaView className="flex-1 bg-white">
+      <SafeAreaView className="flex-1 bg-white" edges={["bottom", "left", "right"]}>
         <View className="flex-row items-center px-4 py-3">
           <TouchableOpacity
             onPress={() => {
@@ -98,60 +180,100 @@ export default function LoginScreen() {
           className="flex-1 justify-center px-8"
           style={{ transform: [{ translateY }] }}
         >
-          <View className="items-center mb-5">
+          <MotiView
+            from={{ opacity: 0, translateY: 30 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 500, delay: 100 }}
+            className="items-center mb-5"
+          >
             <Image
               source={require("../../assets/images/welcome_phone.png")}
               className="w-full h-32"
               resizeMode="contain"
             />
-          </View>
-          <Text className="text-4xl font-black text-nexa italic">
-            {isNewUser ? "Créer un compte" : "Connexion"}
-          </Text>
-          <Text className="text-2xl font-medium italic text-nexa mb-4">
-            {isNewUser
-              ? "Entrez vos informations pour commencer"
-              : "Entrez votre numéro de téléphone"}
-          </Text>
+          </MotiView>
+
+          <MotiView
+            from={{ opacity: 0, translateY: 24 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 500, delay: 200 }}
+          >
+            <Text className="text-4xl font-black text-nexa italic">
+              {isNewUser ? "Créer un compte" : "Connexion"}
+            </Text>
+            <Text className="text-2xl font-medium italic text-nexa mb-4">
+              {isNewUser
+                ? "Entrez vos informations pour commencer"
+                : "Entrez votre numéro de téléphone"}
+            </Text>
+          </MotiView>
 
           {isNewUser && (
-            <TextInput
-              className="border border-gray-300 rounded-xl px-4 py-3 text-xl mb-4 mt-4"
-              placeholder="Votre prénom"
-              placeholderTextColor="#6B7280"
-              value={name}
-              onChangeText={setName}
-              autoFocus
-              returnKeyType="next"
-            />
+            <View className="mb-4 mt-4">
+              <TextInput
+                className={`border rounded-xl px-4 py-3 text-xl ${nameError ? "border-red-400" : "border-gray-300"}`}
+                placeholder="Votre prénom"
+                placeholderTextColor="#6B7280"
+                value={name}
+                onChangeText={(v) => {
+                  setName(v);
+                  clearError("name");
+                }}
+                autoFocus
+                returnKeyType="next"
+              />
+              {nameError ? (
+                <Text className="text-red-500 text-sm mt-1 ml-1">
+                  {nameError}
+                </Text>
+              ) : null}
+            </View>
           )}
 
-          <View className="flex-row mb-6">
-            <CountryPicker selected={country} onSelect={setCountry} />
-            <TextInput
-              className="flex-1 border border-gray-300 rounded-xl px-4 py-3 text-xl"
-              placeholder="6 00 00 00 00"
-              placeholderTextColor="#6B7280"
-              keyboardType="phone-pad"
-              value={phone}
-              onChangeText={setPhone}
-              autoFocus={!isNewUser}
-            />
+          <View className="mb-6">
+            <View className="flex-row">
+              <CountryPicker selected={country} onSelect={setCountry} />
+              <TextInput
+                className={`flex-1 border rounded-xl px-4 py-3 text-xl ${phoneError ? "border-red-400" : "border-gray-300"}`}
+                placeholder="6 00 00 00 00"
+                placeholderTextColor="#6B7280"
+                keyboardType="phone-pad"
+                value={phone}
+                onChangeText={(v) => {
+                  setPhone(v);
+                  clearError("phone");
+                }}
+                autoFocus={!isNewUser}
+              />
+            </View>
+            {phoneError ? (
+              <Text className="text-red-500 text-sm mt-1 ml-1">
+                {phoneError}
+              </Text>
+            ) : null}
           </View>
 
-          <TouchableOpacity
-            className="bg-nexa rounded-[2rem] py-6 items-center"
-            onPress={handleSend}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text className="text-white font-semibold text-2xl italic">
-                Recevoir le code →
-              </Text>
-            )}
-          </TouchableOpacity>
+          {serverError ? (
+            <Text className="text-red-500 text-sm text-center mb-3">
+              {serverError}
+            </Text>
+          ) : null}
+
+          <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
+            <TouchableOpacity
+              className={`rounded-[2rem] py-6 items-center ${buttonError ? "bg-red-500" : "bg-nexa"}`}
+              onPress={handleSend}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text className="text-white font-semibold text-2xl italic">
+                  Recevoir le code →
+                </Text>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
         </Animated.View>
       </SafeAreaView>
     </TouchableWithoutFeedback>

@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { MotiView } from "moti";
 import { apiRequest } from "../../lib/api";
 import { registerForPushNotifications } from "../../lib/notifications";
 import { connectSocket } from "../../lib/socket";
@@ -130,7 +131,7 @@ export default function VerifyScreen() {
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <SafeAreaView className="flex-1 bg-white">
+      <SafeAreaView className="flex-1 bg-white" edges={["bottom", "left", "right"]}>
         <View className="flex-row items-center px-4 py-3">
           <TouchableOpacity
             onPress={() => {
@@ -146,22 +147,38 @@ export default function VerifyScreen() {
           className="flex-1 justify-center px-8"
           style={{ transform: [{ translateY }] }}
         >
-          <Text className="text-5xl font-black text-nexa italic">
-            Vérification
-          </Text>
-          <Text className="text-2xl font-medium italic text-nexa mb-6">
-            Code envoyé au {phone}
-          </Text>
+          <MotiView
+            from={{ opacity: 0, translateY: 30 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 500, delay: 100 }}
+          >
+            <Text className="text-5xl font-black text-nexa italic">
+              Vérification
+            </Text>
+            <Text className="text-2xl font-medium italic text-nexa mb-6">
+              Code envoyé au {phone}
+            </Text>
+          </MotiView>
 
-          <View className="items-center">
+          <MotiView
+            from={{ opacity: 0, translateY: 40 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 500, delay: 250 }}
+            className="items-center"
+          >
             <Image
               source={require("../../assets/images/welcome_message.png")}
               className="w-full h-40 mb-8"
               resizeMode="contain"
             />
-          </View>
+          </MotiView>
 
-          <View className="flex-row justify-between mb-10">
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 500, delay: 350 }}
+            className="flex-row justify-between mb-10"
+          >
             {digits.map((digit, index) => (
               <TextInput
                 key={index}
@@ -182,8 +199,13 @@ export default function VerifyScreen() {
                 selectTextOnFocus
               />
             ))}
-          </View>
+          </MotiView>
 
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 500, delay: 450 }}
+          >
           <TouchableOpacity
             className={`rounded-[2rem] py-6 items-center ${code.length === 6 ? "bg-nexa" : "bg-gray-200"}`}
             onPress={handleVerify}
@@ -199,6 +221,7 @@ export default function VerifyScreen() {
               </Text>
             )}
           </TouchableOpacity>
+          </MotiView>
         </Animated.View>
       </SafeAreaView>
     </TouchableWithoutFeedback>
