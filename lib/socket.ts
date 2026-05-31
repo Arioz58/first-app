@@ -1,7 +1,7 @@
-import { io, Socket } from 'socket.io-client';
-import { getAccessToken } from './storage';
+import { io, Socket } from "socket.io-client";
+import { getAccessToken } from "./storage";
 
-const BASE_URL = 'http://192.168.1.181:3000';
+const BASE_URL = "http://192.168.1.3:3000";
 
 let socket: Socket | null = null;
 
@@ -12,13 +12,15 @@ export const connectSocket = async (): Promise<Socket> => {
 
   socket = io(BASE_URL, {
     auth: { token },
-    transports: ['websocket'],
+    transports: ["websocket"],
     reconnection: true,
   });
 
-  socket.on('connect', () => console.log('[Socket] Connecté'));
-  socket.on('disconnect', () => console.log('[Socket] Déconnecté'));
-  socket.on('error', (err: { message: string }) => console.warn('[Socket] Erreur:', err.message));
+  socket.on("connect", () => console.log("[Socket] Connecté"));
+  socket.on("disconnect", () => console.log("[Socket] Déconnecté"));
+  socket.on("error", (err: { message: string }) =>
+    console.warn("[Socket] Erreur:", err.message),
+  );
 
   return socket;
 };

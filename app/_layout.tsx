@@ -23,7 +23,7 @@ export default function RootLayout() {
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    setSessionExpiredHandler(() => router.replace('/(auth)/login'));
+    setSessionExpiredHandler(() => router.replace('/(auth)/welcome'));
 
     const init = async () => {
       const token = await getAccessToken();
@@ -31,7 +31,7 @@ export default function RootLayout() {
       const inAuth = segments[0] === '(auth)';
 
       if (!token) {
-        if (!inAuth) router.replace('/(auth)/login');
+        if (!inAuth) router.replace('/(auth)/welcome');
         setChecked(true);
         return;
       }
@@ -41,7 +41,7 @@ export default function RootLayout() {
 
       if (accessExpired && refreshExpired) {
         await clearTokens();
-        router.replace('/(auth)/login');
+        router.replace('/(auth)/welcome');
         setChecked(true);
         return;
       }

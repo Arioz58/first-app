@@ -30,7 +30,7 @@ export default function ProfileScreen() {
         onPress: async () => {
           disconnectSocket();
           await clearTokens();
-          router.replace('/(auth)/login');
+          router.replace('/(auth)/welcome');
         },
       },
     ]);

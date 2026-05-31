@@ -1,6 +1,11 @@
-import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from './storage';
+import {
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  saveTokens,
+} from "./storage";
 
-const BASE_URL = 'http://192.168.1.181:3000';
+const BASE_URL = "http://192.168.1.3:3000";
 
 let sessionExpiredHandler: (() => void) | null = null;
 
@@ -16,13 +21,15 @@ type RequestOptions = {
 
 export const apiRequest = async <T>(
   path: string,
-  { method = 'GET', body, auth = true }: RequestOptions = {},
+  { method = "GET", body, auth = true }: RequestOptions = {},
 ): Promise<T> => {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
 
   if (auth) {
     const token = await getAccessToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
   }
 
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -36,15 +43,21 @@ export const apiRequest = async <T>(
     const refreshToken = await getRefreshToken();
     if (refreshToken) {
       const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refreshToken }),
       });
       if (refreshRes.ok) {
         const data = await refreshRes.json();
-        const currentUserId = await import('./storage').then(m => m.getUserId());
-        await saveTokens(data.accessToken, data.refreshToken, currentUserId ?? '');
-        headers['Authorization'] = `Bearer ${data.accessToken}`;
+        const currentUserId = await import("./storage").then((m) =>
+          m.getUserId(),
+        );
+        await saveTokens(
+          data.accessToken,
+          data.refreshToken,
+          currentUserId ?? "",
+        );
+        headers["Authorization"] = `Bearer ${data.accessToken}`;
         const retry = await fetch(`${BASE_URL}${path}`, {
           method,
           headers,
@@ -55,10 +68,10 @@ export const apiRequest = async <T>(
     }
     await clearTokens();
     sessionExpiredHandler?.();
-    throw new Error('SESSION_EXPIRED');
+    throw new Error("SESSION_EXPIRED");
   }
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message || 'Erreur serveur');
+  if (!res.ok) throw new Error(data.message || "Erreur serveur");
   return data;
 };

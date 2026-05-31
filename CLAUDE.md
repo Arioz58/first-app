@@ -22,7 +22,8 @@ Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintena
 
 ### DA (Design)
 - Couleurs finales : **nuances de verts style WhatsApp** — à appliquer en Mois 5/6
-- Placeholder actuel : `#1E40AF` (bleu)
+- Couleur principale actuelle : `#1E40AF` (bleu) + `#128C7E` (nexa — vert WhatsApp, déjà en place sur les écrans auth)
+- Couleur Tailwind custom : `bg-nexa`, `text-nexa`, `border-nexa` → `#128C7E`
 - Tab bar : **native iOS** (`expo-router/unstable-native-tabs`) avec SF Symbols — pas de tab bar custom JS
 
 ### Planning
@@ -88,18 +89,20 @@ first-app-web/       → Next.js — à créer au Mois 3
 
 ```
 app/
-├── _layout.tsx          # Layout racine — auth check + socket connect + FCM register
+├── _layout.tsx          # Layout racine — vérif JWT expiry + handler SESSION_EXPIRED global + socket + FCM
 ├── globals.css
 ├── (auth)/
 │   ├── _layout.tsx
-│   ├── login.tsx        # Saisie numéro de téléphone → OTP
-│   └── verify.tsx       # Saisie OTP + nom → JWT stocké + socket + FCM init
+│   ├── welcome.tsx      # Écran d'accueil NEXA (slogan + image + Continuer)
+│   ├── intro.tsx        # Présentation chiffrement (Commencer / J'ai déjà un compte)
+│   ├── login.tsx        # Saisie numéro + indicatif pays (CountryPicker) — prénom si nouveau compte
+│   └── verify.tsx       # Saisie OTP (6 champs individuels, auto-avance, coller) → JWT + socket + FCM
 ├── (tabs)/
 │   ├── _layout.tsx      # NativeTabs (SF Symbols) — 4 onglets
 │   ├── index.tsx        # Liste conversations + StoriesBar en header
 │   ├── search.tsx       # Recherche (à implémenter)
 │   ├── saved.tsx        # Appels (à implémenter Mois 4)
-│   └── profile.tsx      # Profil utilisateur + déconnexion
+│   └── profile.tsx      # Profil utilisateur + déconnexion → welcome
 ├── chat/
 │   └── [id].tsx         # Écran chat temps réel (Socket.io)
 ├── group/
@@ -108,12 +111,14 @@ app/
     ├── [id].tsx         # Viewer stories plein écran (progress bar, tap nav, suppression)
     └── create.tsx       # Créer une story (URL pour l'instant, S3 au Mois 3)
 components/
-└── StoriesBar.tsx       # Barre stories horizontale (style WhatsApp, useFocusEffect refresh)
+├── StoriesBar.tsx       # Barre stories horizontale (style WhatsApp, useFocusEffect refresh)
+└── CountryPicker.tsx    # Sélecteur pays avec indicatif téléphonique (modal + recherche)
 lib/
-├── api.ts               # Fetch wrapper — JWT Bearer + auto-refresh token
+├── api.ts               # Fetch wrapper — JWT Bearer + auto-refresh + handler SESSION_EXPIRED global
 ├── socket.ts            # Client Socket.io singleton
 ├── storage.ts           # SecureStore : accessToken, refreshToken, userId
 ├── notifications.ts     # Demande permission + enregistre token FCM au backend
+├── countries.ts         # Liste pays avec drapeau, nom et indicatif téléphonique
 └── i18n.ts              # Config i18next (tr/fr/en)
 locales/
 ├── tr.json
@@ -195,6 +200,8 @@ error({ message })
 
 ### En place ✅
 - JWT access 15min + refresh 7j, secrets en variables d'environnement
+- Vérification expiration JWT au démarrage — redirection vers welcome si les deux tokens sont expirés
+- Handler SESSION_EXPIRED global dans `api.ts` — redirection automatique depuis n'importe quel écran
 - OTP sans mot de passe (pas de risque fuite password)
 - Socket.io : vérification JWT + membership sur chaque événement
 - Autorisation groupes : admin only pour add/remove/rename
