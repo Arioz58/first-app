@@ -4,7 +4,7 @@ import { MotiImage, MotiText, MotiView } from "moti";
 import { Image, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export default function IntroScreen() {
+export default function SecurityScreen() {
   const router = useRouter();
 
   return (
@@ -47,7 +47,7 @@ export default function IntroScreen() {
             opacity: { type: "timing", duration: 400, delay: 120 },
           }}
         >
-          Discutez librement !
+          Privé, Sécurisé, Instantané
         </MotiText>
 
         <MotiText
@@ -62,8 +62,7 @@ export default function IntroScreen() {
             opacity: { type: "timing", duration: 400, delay: 230 },
           }}
         >
-          Discute avec tes amis, ta famille, tes groupes — Partout dans le
-          monde.
+          Vos messages sont protégés, vos conversations restent les votres.
         </MotiText>
       </MotiView>
 
@@ -80,7 +79,7 @@ export default function IntroScreen() {
         }}
       >
         <MotiImage
-          source={require("../../assets/images/welcome_conversation.png")}
+          source={require("../../assets/images/welcome_lock.png")}
           className="w-full h-52"
           resizeMode="contain"
           from={{ opacity: 0 }}
@@ -103,12 +102,7 @@ export default function IntroScreen() {
       >
         <TouchableOpacity
           className="bg-nexa rounded-[2rem] py-6 items-center"
-          onPress={() =>
-            router.push({
-              pathname: "/(auth)/login" as any,
-              params: { isNew: "1" },
-            })
-          }
+          onPress={() => router.push("/(auth)/intro" as any)}
         >
           <MotiText
             className="text-white font-semibold text-2xl italic"
@@ -116,26 +110,7 @@ export default function IntroScreen() {
             animate={{ opacity: 1 }}
             transition={{ type: "timing", duration: 300, delay: 560 }}
           >
-            Commencer →
-          </MotiText>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          className="bg-transparent border-nexa border-2 rounded-[2rem] py-6 items-center"
-          onPress={() =>
-            router.push({
-              pathname: "/(auth)/login" as any,
-              params: { isNew: "0" },
-            })
-          }
-        >
-          <MotiText
-            className="text-nexa italic font-semibold text-2xl"
-            from={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ type: "timing", duration: 300, delay: 630 }}
-          >
-            J'ai déjà un compte →
+            Continuer →
           </MotiText>
         </TouchableOpacity>
       </MotiView>

@@ -2,7 +2,7 @@ import { MotiView } from "moti";
 import { Dimensions, View } from "react-native";
 
 const { width } = Dimensions.get("window");
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 const GAP = 6;
 const PADDING = 16;
 const ACTIVE_RATIO = 3;

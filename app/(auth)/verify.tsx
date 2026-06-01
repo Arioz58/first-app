@@ -187,7 +187,7 @@ export default function VerifyScreen() {
         className="flex-1 bg-white"
         edges={["bottom", "left", "right"]}
       >
-        <View className="flex-row items-center px-4 py-3">
+        <View className="flex-row items-center justify-between px-4 py-3">
           <TouchableOpacity
             onPress={() => {
               Keyboard.dismiss();
@@ -196,6 +196,16 @@ export default function VerifyScreen() {
           >
             <Ionicons name="arrow-back" size={28} color="#128C7E" />
           </TouchableOpacity>
+          <Image
+            source={require("../../assets/images/nexaLogo.png")}
+            style={{
+              width: 46,
+              height: 46,
+              opacity: 0.5,
+              tintColor: "#128C7E",
+            }}
+            resizeMode="contain"
+          />
         </View>
 
         <Animated.View
@@ -205,7 +215,13 @@ export default function VerifyScreen() {
           <MotiView
             from={{ opacity: 0, translateY: 30 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: "timing", duration: 500, delay: 100 }}
+            transition={{
+              type: "spring",
+              stiffness: 90,
+              damping: 15,
+              delay: 100,
+              opacity: { type: "timing", duration: 400, delay: 100 },
+            }}
           >
             <Text className="text-5xl font-black text-nexa italic">
               Vérification
@@ -218,7 +234,13 @@ export default function VerifyScreen() {
           <MotiView
             from={{ opacity: 0, translateY: 40 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: "timing", duration: 500, delay: 250 }}
+            transition={{
+              type: "spring",
+              stiffness: 80,
+              damping: 14,
+              delay: 220,
+              opacity: { type: "timing", duration: 500, delay: 220 },
+            }}
             className="items-center"
           >
             <Image
@@ -231,7 +253,13 @@ export default function VerifyScreen() {
           <MotiView
             from={{ opacity: 0, translateY: 20 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: "timing", duration: 500, delay: 350 }}
+            transition={{
+              type: "spring",
+              stiffness: 90,
+              damping: 15,
+              delay: 330,
+              opacity: { type: "timing", duration: 400, delay: 330 },
+            }}
             className="flex-row justify-between mb-4"
           >
             {digits.map((digit, index) => (

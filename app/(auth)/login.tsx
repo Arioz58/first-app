@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { MotiView } from "moti";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -14,7 +15,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MotiView } from "moti";
 import CountryPicker from "../../components/CountryPicker";
 import { apiRequest } from "../../lib/api";
 import { COUNTRIES, Country } from "../../lib/countries";
@@ -164,8 +164,11 @@ export default function LoginScreen() {
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <SafeAreaView className="flex-1 bg-white" edges={["bottom", "left", "right"]}>
-        <View className="flex-row items-center px-4 py-3">
+      <SafeAreaView
+        className="flex-1 bg-white"
+        edges={["bottom", "left", "right"]}
+      >
+        <View className="flex-row items-center justify-between px-4 py-3">
           <TouchableOpacity
             onPress={() => {
               Keyboard.dismiss();
@@ -174,6 +177,16 @@ export default function LoginScreen() {
           >
             <Ionicons name="arrow-back" size={28} color="#128C7E" />
           </TouchableOpacity>
+          <Image
+            source={require("../../assets/images/nexaLogo.png")}
+            style={{
+              width: 46,
+              height: 46,
+              opacity: 0.5,
+              tintColor: "#128C7E",
+            }}
+            resizeMode="contain"
+          />
         </View>
 
         <Animated.View
@@ -183,7 +196,13 @@ export default function LoginScreen() {
           <MotiView
             from={{ opacity: 0, translateY: 30 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 500, delay: 100 }}
+            transition={{
+              type: "spring",
+              stiffness: 90,
+              damping: 15,
+              delay: 100,
+              opacity: { type: "timing", duration: 400, delay: 100 },
+            }}
             className="items-center mb-5"
           >
             <Image
@@ -196,7 +215,13 @@ export default function LoginScreen() {
           <MotiView
             from={{ opacity: 0, translateY: 24 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 500, delay: 200 }}
+            transition={{
+              type: "spring",
+              stiffness: 90,
+              damping: 15,
+              delay: 210,
+              opacity: { type: "timing", duration: 400, delay: 210 },
+            }}
           >
             <Text className="text-4xl font-black text-nexa italic">
               {isNewUser ? "Créer un compte" : "Connexion"}
