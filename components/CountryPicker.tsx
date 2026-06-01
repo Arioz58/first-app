@@ -1,5 +1,5 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import { useState } from "react";
 import {
   FlatList,
   Modal,
@@ -7,9 +7,9 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { COUNTRIES, Country } from '../lib/countries';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { COUNTRIES, Country } from "../lib/countries";
 
 type Props = {
   selected: Country;
@@ -18,7 +18,7 @@ type Props = {
 
 export default function CountryPicker({ selected, onSelect }: Props) {
   const [visible, setVisible] = useState(false);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
 
   const filtered = COUNTRIES.filter(
     (c) =>
@@ -29,7 +29,7 @@ export default function CountryPicker({ selected, onSelect }: Props) {
   const handleSelect = (country: Country) => {
     onSelect(country);
     setVisible(false);
-    setSearch('');
+    setSearch("");
   };
 
   return (
@@ -39,15 +39,28 @@ export default function CountryPicker({ selected, onSelect }: Props) {
         onPress={() => setVisible(true)}
       >
         <Text className="text-xl mr-1">{selected.flag}</Text>
-        <Text className="text-base text-gray-700 mr-1">{selected.dialCode}</Text>
+        <Text className="text-base text-gray-700 mr-1">
+          {selected.dialCode}
+        </Text>
         <Ionicons name="chevron-down" size={16} color="#6B7280" />
       </TouchableOpacity>
 
-      <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
         <SafeAreaView className="flex-1 bg-white">
-          <View className="flex-row items-center px-4 py-3 border-b border-gray-100">
-            <Text className="text-lg font-semibold text-gray-900 flex-1">Choisir un pays</Text>
-            <TouchableOpacity onPress={() => { setVisible(false); setSearch(''); }}>
+          <View className="flex-row items-center px-6 py-4 border-b border-gray-100">
+            <Text className="text-lg font-semibold text-gray-900 flex-1">
+              Choisir un pays
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                setVisible(false);
+                setSearch("");
+              }}
+            >
               <Ionicons name="close" size={26} color="#6B7280" />
             </TouchableOpacity>
           </View>
@@ -73,7 +86,9 @@ export default function CountryPicker({ selected, onSelect }: Props) {
                 onPress={() => handleSelect(item)}
               >
                 <Text className="text-2xl mr-3">{item.flag}</Text>
-                <Text className="flex-1 text-base text-gray-900">{item.name}</Text>
+                <Text className="flex-1 text-base text-gray-900">
+                  {item.name}
+                </Text>
                 <Text className="text-base text-gray-500">{item.dialCode}</Text>
               </TouchableOpacity>
             )}

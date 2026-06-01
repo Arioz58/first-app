@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { MotiView } from "moti";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Image,
   Keyboard,
@@ -15,11 +15,18 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MotiView } from "moti";
 import { apiRequest } from "../../lib/api";
 import { registerForPushNotifications } from "../../lib/notifications";
 import { connectSocket } from "../../lib/socket";
 import { saveTokens } from "../../lib/storage";
+
+const OTP_DURATION = 5 * 60; // 5 minutes en secondes
+
+function formatTime(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 export default function VerifyScreen() {
   const router = useRouter();
@@ -29,6 +36,9 @@ export default function VerifyScreen() {
   }>();
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(OTP_DURATION);
+  const [error, setError] = useState("");
   const inputRefs = useRef<Array<TextInput | null>>([
     null,
     null,
@@ -38,6 +48,28 @@ export default function VerifyScreen() {
     null,
   ]);
   const translateY = useRef(new Animated.Value(0)).current;
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startTimer = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setTimeLeft(OTP_DURATION);
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current!);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  useEffect(() => {
+    startTimer();
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const show = Keyboard.addListener(
@@ -104,6 +136,7 @@ export default function VerifyScreen() {
     const code = digits.join("");
     if (code.length < 6) return;
     setLoading(true);
+    setError("");
     try {
       const data = await apiRequest<{
         accessToken: string;
@@ -119,7 +152,7 @@ export default function VerifyScreen() {
       await registerForPushNotifications();
       router.replace("/(tabs)");
     } catch (e: any) {
-      Alert.alert("Erreur", e.message);
+      setError("Code incorrect. Vérifie le SMS et réessaie.");
       setDigits(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
     } finally {
@@ -127,11 +160,33 @@ export default function VerifyScreen() {
     }
   };
 
+  const handleResend = async () => {
+    setResending(true);
+    try {
+      await apiRequest("/auth/send-code", {
+        method: "POST",
+        body: { phone },
+        auth: false,
+      });
+      setDigits(["", "", "", "", "", ""]);
+      inputRefs.current[0]?.focus();
+      startTimer();
+    } catch (e: any) {
+      setError("Impossible de renvoyer le code. Réessaie.");
+    } finally {
+      setResending(false);
+    }
+  };
+
   const code = digits.join("");
+  const expired = timeLeft === 0;
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <SafeAreaView className="flex-1 bg-white" edges={["bottom", "left", "right"]}>
+      <SafeAreaView
+        className="flex-1 bg-white"
+        edges={["bottom", "left", "right"]}
+      >
         <View className="flex-row items-center px-4 py-3">
           <TouchableOpacity
             onPress={() => {
@@ -150,7 +205,7 @@ export default function VerifyScreen() {
           <MotiView
             from={{ opacity: 0, translateY: 30 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 500, delay: 100 }}
+            transition={{ type: "timing", duration: 500, delay: 100 }}
           >
             <Text className="text-5xl font-black text-nexa italic">
               Vérification
@@ -163,7 +218,7 @@ export default function VerifyScreen() {
           <MotiView
             from={{ opacity: 0, translateY: 40 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 500, delay: 250 }}
+            transition={{ type: "timing", duration: 500, delay: 250 }}
             className="items-center"
           >
             <Image
@@ -176,8 +231,8 @@ export default function VerifyScreen() {
           <MotiView
             from={{ opacity: 0, translateY: 20 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 500, delay: 350 }}
-            className="flex-row justify-between mb-10"
+            transition={{ type: "timing", duration: 500, delay: 350 }}
+            className="flex-row justify-between mb-4"
           >
             {digits.map((digit, index) => (
               <TextInput
@@ -186,9 +241,11 @@ export default function VerifyScreen() {
                   inputRefs.current[index] = el;
                 }}
                 className={`w-14 h-16 border-2 rounded-2xl text-center text-3xl font-bold ${
-                  digit
-                    ? "border-nexa text-nexa"
-                    : "border-gray-300 text-gray-900"
+                  expired
+                    ? "border-gray-200 text-gray-300"
+                    : digit
+                      ? "border-nexa text-nexa"
+                      : "border-gray-300 text-gray-900"
                 }`}
                 keyboardType="number-pad"
                 maxLength={6}
@@ -197,30 +254,70 @@ export default function VerifyScreen() {
                 onKeyPress={(e) => handleKeyPress(e, index)}
                 autoFocus={index === 0}
                 selectTextOnFocus
+                editable={!expired}
               />
             ))}
+          </MotiView>
+
+          {error ? (
+            <MotiView
+              from={{ opacity: 0, translateY: -6 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: "timing", duration: 300 }}
+              className="mb-4"
+            >
+              <Text className="text-red-500 text-center font-medium text-base">
+                {error}
+              </Text>
+            </MotiView>
+          ) : null}
+
+          <MotiView
+            from={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ type: "timing", duration: 400, delay: 400 }}
+            className="items-center mb-6"
+          >
+            {expired ? (
+              <TouchableOpacity onPress={handleResend} disabled={resending}>
+                {resending ? (
+                  <ActivityIndicator color="#128C7E" />
+                ) : (
+                  <Text className="text-nexa font-semibold text-base">
+                    Renvoyer le code
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <Text
+                className={`text-base font-medium ${timeLeft <= 30 ? "text-red-400" : "text-gray-400"}`}
+              >
+                Code valide pendant{" "}
+                <Text className="font-bold">{formatTime(timeLeft)}</Text>
+              </Text>
+            )}
           </MotiView>
 
           <MotiView
             from={{ opacity: 0, translateY: 20 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 500, delay: 450 }}
+            transition={{ type: "timing", duration: 500, delay: 450 }}
           >
-          <TouchableOpacity
-            className={`rounded-[2rem] py-6 items-center ${code.length === 6 ? "bg-nexa" : "bg-gray-200"}`}
-            onPress={handleVerify}
-            disabled={loading || code.length < 6}
-          >
-            {loading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text
-                className={`font-semibold text-2xl italic ${code.length === 6 ? "text-white" : "text-gray-400"}`}
-              >
-                Confirmer →
-              </Text>
-            )}
-          </TouchableOpacity>
+            <TouchableOpacity
+              className={`rounded-[2rem] py-6 items-center ${code.length === 6 && !expired ? "bg-nexa" : "bg-gray-200"}`}
+              onPress={handleVerify}
+              disabled={loading || code.length < 6 || expired}
+            >
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text
+                  className={`font-semibold text-2xl italic ${code.length === 6 && !expired ? "text-white" : "text-gray-400"}`}
+                >
+                  Confirmer →
+                </Text>
+              )}
+            </TouchableOpacity>
           </MotiView>
         </Animated.View>
       </SafeAreaView>

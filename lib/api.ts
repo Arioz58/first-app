@@ -38,8 +38,8 @@ export const apiRequest = async <T>(
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  if (res.status === 401) {
-    // Tenter un refresh
+  if (res.status === 401 && auth) {
+    // Tenter un refresh uniquement pour les requêtes authentifiées
     const refreshToken = await getRefreshToken();
     if (refreshToken) {
       const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
