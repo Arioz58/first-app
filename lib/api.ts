@@ -5,7 +5,7 @@ import {
   saveTokens,
 } from "./storage";
 
-const BASE_URL = "http://192.168.1.3:3000";
+const BASE_URL = "http://192.168.1.181:3000";
 
 let sessionExpiredHandler: (() => void) | null = null;
 

@@ -1,5 +1,6 @@
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useEffect, useState } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { setSessionExpiredHandler } from "../lib/api";
 import "../lib/i18n";
 import { registerForPushNotifications } from "../lib/notifications";
@@ -58,6 +59,7 @@ export default function RootLayout() {
   if (!checked) return null;
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <Stack>
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -73,5 +75,6 @@ export default function RootLayout() {
       />
       <Stack.Screen name="story/create" options={{ headerShown: false }} />
     </Stack>
+    </GestureHandlerRootView>
   );
 }

@@ -1,11 +1,23 @@
-import { useEffect, useState, useRef } from 'react';
-import {
-  View, Text, Image, TouchableOpacity,
-  Dimensions, Animated, StatusBar,
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Reanimated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
+import {
+  Animated,
+  Dimensions,
+  Image,
+  StatusBar,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiRequest } from '../../lib/api';
 import { getUserId } from '../../lib/storage';
 
@@ -22,14 +34,68 @@ export default function StoryViewScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState('');
+  const [isZoomed, setIsZoomed] = useState(false);
+
   const progress = useRef(new Animated.Value(0)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const rotation = useSharedValue(0);
+  const savedRotation = useSharedValue(0);
+
+  const updateZoomed = (zoomed: boolean) => setIsZoomed(zoomed);
+
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = Math.max(1, savedScale.value * e.scale);
+    })
+    .onEnd(() => {
+      if (scale.value <= 1.05) {
+        scale.value = withSpring(1);
+        savedScale.value = 1;
+        runOnJS(updateZoomed)(false);
+      } else {
+        savedScale.value = scale.value;
+        runOnJS(updateZoomed)(true);
+      }
+    });
+
+  const rotationGesture = Gesture.Rotation()
+    .onUpdate((e) => {
+      rotation.value = savedRotation.value + e.rotation;
+    })
+    .onEnd(() => {
+      savedRotation.value = rotation.value;
+    });
+
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      scale.value = withSpring(1);
+      savedScale.value = 1;
+      rotation.value = withSpring(0);
+      savedRotation.value = 0;
+      runOnJS(updateZoomed)(false);
+    });
+
+  const composed = Gesture.Simultaneous(
+    pinchGesture,
+    rotationGesture,
+    doubleTapGesture,
+  );
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: scale.value },
+      { rotate: `${rotation.value}rad` },
+    ],
+  }));
 
   useEffect(() => {
     const init = async () => {
       const uid = await getUserId();
       setCurrentUserId(uid);
-
       if (uid === userId) {
         const mine = await apiRequest<Story[]>('/stories/me');
         setStories(mine);
@@ -47,13 +113,13 @@ export default function StoryViewScreen() {
   }, [userId]);
 
   useEffect(() => {
-    if (!stories.length) return;
+    if (!stories.length || isZoomed) return;
     startProgress();
     return () => {
       progress.stopAnimation();
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [stories, currentIndex]);
+  }, [stories, currentIndex, isZoomed]);
 
   const startProgress = () => {
     progress.setValue(0);
@@ -62,7 +128,6 @@ export default function StoryViewScreen() {
       duration: STORY_DURATION,
       useNativeDriver: false,
     }).start();
-
     timer.current = setTimeout(() => {
       if (currentIndex < stories.length - 1) {
         setCurrentIndex((i) => i + 1);
@@ -73,19 +138,16 @@ export default function StoryViewScreen() {
   };
 
   const goNext = () => {
+    if (isZoomed) return;
     if (timer.current) clearTimeout(timer.current);
-    if (currentIndex < stories.length - 1) {
-      setCurrentIndex((i) => i + 1);
-    } else {
-      router.back();
-    }
+    if (currentIndex < stories.length - 1) setCurrentIndex((i) => i + 1);
+    else router.back();
   };
 
   const goPrev = () => {
+    if (isZoomed) return;
     if (timer.current) clearTimeout(timer.current);
-    if (currentIndex > 0) {
-      setCurrentIndex((i) => i - 1);
-    }
+    if (currentIndex > 0) setCurrentIndex((i) => i - 1);
   };
 
   const handleDelete = async () => {
@@ -106,10 +168,9 @@ export default function StoryViewScreen() {
   const isOwner = currentUserId === userId;
 
   return (
-    <View className="flex-1 bg-black">
+    <View style={{ flex: 1, backgroundColor: 'black' }}>
       <StatusBar hidden />
 
-      {/* Barres de progression */}
       <SafeAreaView className="absolute top-0 left-0 right-0 z-10 px-2 pt-2">
         <View className="flex-row gap-1 mb-3">
           {stories.map((_, i) => (
@@ -117,7 +178,12 @@ export default function StoryViewScreen() {
               {i === currentIndex && (
                 <Animated.View
                   className="h-full bg-white rounded-full"
-                  style={{ width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }}
+                  style={{
+                    width: progress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', '100%'],
+                    }),
+                  }}
                 />
               )}
               {i < currentIndex && <View className="h-full w-full bg-white rounded-full" />}
@@ -125,7 +191,6 @@ export default function StoryViewScreen() {
           ))}
         </View>
 
-        {/* Header */}
         <View className="flex-row items-center justify-between px-2">
           <View className="flex-row items-center gap-2">
             <View className="w-8 h-8 rounded-full bg-white/20 items-center justify-center">
@@ -146,18 +211,30 @@ export default function StoryViewScreen() {
         </View>
       </SafeAreaView>
 
-      {/* Image */}
-      <Image
-        source={{ uri: current.mediaUrl }}
-        className="flex-1"
-        resizeMode="contain"
-      />
+      <GestureDetector gesture={composed}>
+        <Reanimated.View style={[{ flex: 1 }, animatedStyle]}>
+          <Image
+            source={{ uri: current.mediaUrl }}
+            style={{ flex: 1 }}
+            resizeMode="contain"
+          />
+        </Reanimated.View>
+      </GestureDetector>
 
-      {/* Zones de tap gauche/droite */}
-      <View className="absolute inset-0 flex-row">
-        <TouchableOpacity className="flex-1" onPress={goPrev} activeOpacity={1} />
-        <TouchableOpacity className="flex-1" onPress={goNext} activeOpacity={1} />
-      </View>
+      {!isZoomed && (
+        <View className="absolute inset-0 flex-row">
+          <TouchableOpacity className="flex-1" onPress={goPrev} activeOpacity={1} />
+          <TouchableOpacity className="flex-1" onPress={goNext} activeOpacity={1} />
+        </View>
+      )}
+
+      {isZoomed && (
+        <View className="absolute bottom-12 left-0 right-0 items-center">
+          <View className="bg-black/50 px-4 py-2 rounded-full">
+            <Text className="text-white/70 text-xs">Double tap pour réinitialiser</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
