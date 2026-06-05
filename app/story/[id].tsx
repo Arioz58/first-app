@@ -13,6 +13,7 @@ import {
   Dimensions,
   Image,
   StatusBar,
+  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -20,11 +21,23 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiRequest } from '../../lib/api';
 import { getUserId } from '../../lib/storage';
+import { getTextFontStyle, getTextRenderStyle, TEXT_TYPOGRAPHY, type BgMode } from '../../lib/storyText';
 
 const { width } = Dimensions.get('window');
 const STORY_DURATION = 5000;
 
-type Story = { id: string; mediaUrl: string; expiresAt: string };
+type StoryText = {
+  content: string; normX: number; normY: number;
+  scale?: number; rotation?: number;
+  color?: string; bgMode?: BgMode;
+  bold?: boolean; italic?: boolean; underline?: boolean;
+};
+type Story = {
+  id: string;
+  mediaUrl: string;
+  expiresAt: string;
+  texts?: StoryText[] | null;
+};
 type StoryGroup = { user: { id: string; name: string; photoUrl: string | null }; stories: Story[] };
 
 export default function StoryViewScreen() {
@@ -218,6 +231,36 @@ export default function StoryViewScreen() {
             style={{ flex: 1 }}
             resizeMode="contain"
           />
+          {current.texts && current.texts.length > 0 && (
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                {current.texts.map((t, i) => {
+                  const ts = getTextRenderStyle(t.color, t.bgMode);
+                  return (
+                    <View
+                      key={i}
+                      style={[
+                        ts.bubble,
+                        {
+                          position: 'absolute',
+                          transform: [
+                            { translateX: (t.normX - 0.5) * width },
+                            { translateY: (t.normY - 0.5) * Dimensions.get('window').height },
+                            { scale: t.scale ?? 1 },
+                            { rotate: t.rotation != null ? `${t.rotation}rad` : '0rad' },
+                          ],
+                        },
+                      ]}
+                    >
+                      <Text style={[TEXT_TYPOGRAPHY, getTextFontStyle(t.bold, t.italic, t.underline), ts.text]}>
+                        {t.content}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )}
         </Reanimated.View>
       </GestureDetector>
 
