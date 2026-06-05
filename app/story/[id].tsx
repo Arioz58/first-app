@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -55,6 +56,11 @@ type StoryGroup = {
   stories: Story[];
 };
 
+// Détecte une story vidéo via l'extension de l'URL (le backend la garantit).
+function isVideoUrl(url: string): boolean {
+  return /\.(mp4|mov|m4v|webm)(\?|$)/i.test(url);
+}
+
 // Ordonne les stories du plus ancien au plus récent (visionnage chronologique).
 function oldestFirst(arr: Story[]): Story[] {
   return [...arr].sort(
@@ -84,9 +90,19 @@ export default function StoryViewScreen() {
   // une story déjà vue (retour en arrière).
   const [loadedIds, setLoadedIds] = useState<Set<string>>(new Set());
 
+  // Vidéo
+  const [muted, setMuted] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
+  const videoReadyRef = useRef(false);
+  const mutedRef = useRef(false);
+  const player = useVideoPlayer(null, (p) => {
+    p.loop = false;
+  });
+
   const progress = useRef(new Animated.Value(0)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remaining = useRef(STORY_DURATION); // temps restant après une pause
+  const durationRef = useRef(STORY_DURATION); // durée de la story courante (ms)
   const pausedRef = useRef(false);
 
   const scale = useSharedValue(1);
@@ -162,35 +178,66 @@ export default function StoryViewScreen() {
   // Précharge toutes les images en cache pour accélérer la navigation.
   useEffect(() => {
     stories.forEach((s) => {
-      Image.prefetch(s.mediaUrl).catch(() => {});
+      if (!isVideoUrl(s.mediaUrl)) Image.prefetch(s.mediaUrl).catch(() => {});
     });
   }, [stories]);
+
+  // (Re)charge la source vidéo quand la story courante change.
+  useEffect(() => {
+    const cur = stories[currentIndex];
+    if (!cur) return;
+    if (isVideoUrl(cur.mediaUrl)) {
+      videoReadyRef.current = false;
+      setVideoReady(false);
+      player.muted = mutedRef.current;
+      player.replace({ uri: cur.mediaUrl });
+    } else {
+      videoReadyRef.current = false;
+      setVideoReady(false);
+      player.pause();
+    }
+  }, [stories, currentIndex, player]);
+
+  // Démarre la lecture quand la vidéo est prête et fixe la durée de la story.
+  useEffect(() => {
+    const sub = player.addListener("statusChange", ({ status }) => {
+      if (status === "readyToPlay" && !videoReadyRef.current) {
+        videoReadyRef.current = true;
+        durationRef.current = Math.max(1000, (player.duration || 5) * 1000);
+        setVideoReady(true);
+        player.play();
+      }
+    });
+    return () => sub.remove();
+  }, [player]);
 
   useEffect(() => {
     if (!stories.length || isZoomed) return;
     const currentStory = stories[currentIndex];
     if (!currentStory) return;
-    // Tant que l'image de la story n'a jamais été chargée, on garde la barre
-    // vide et on ne démarre pas le timer. Une story déjà vue (en cache) démarre
-    // aussitôt, sans attente.
-    if (!loadedIds.has(currentStory.id)) {
+    const isVid = isVideoUrl(currentStory.mediaUrl);
+    // On attend que le média soit prêt (image chargée / vidéo bufferisée) avant
+    // de démarrer la barre et le timer.
+    const ready = isVid ? videoReady : loadedIds.has(currentStory.id);
+    if (!ready) {
       progress.setValue(0);
       return;
     }
+    if (!isVid) durationRef.current = STORY_DURATION;
     startProgress();
     return () => {
       progress.stopAnimation();
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [stories, currentIndex, isZoomed, loadedIds]);
+  }, [stories, currentIndex, isZoomed, loadedIds, videoReady]);
 
   const startProgress = () => {
     pausedRef.current = false;
-    remaining.current = STORY_DURATION;
+    remaining.current = durationRef.current;
     progress.setValue(0);
     Animated.timing(progress, {
       toValue: 1,
-      duration: STORY_DURATION,
+      duration: durationRef.current,
       useNativeDriver: false,
     }).start();
     timer.current = setTimeout(() => {
@@ -199,7 +246,7 @@ export default function StoryViewScreen() {
       } else {
         router.back();
       }
-    }, STORY_DURATION);
+    }, durationRef.current);
   };
 
   // Maintien appuyé → gèle la progression à sa valeur courante
@@ -208,14 +255,16 @@ export default function StoryViewScreen() {
     pausedRef.current = true;
     if (timer.current) clearTimeout(timer.current);
     progress.stopAnimation((value: number) => {
-      remaining.current = Math.max(0, STORY_DURATION * (1 - value));
+      remaining.current = Math.max(0, durationRef.current * (1 - value));
     });
+    if (isVideoUrl(stories[currentIndex]?.mediaUrl ?? "")) player.pause();
   };
 
   // Relâché → reprend sur le temps restant
   const resumeStory = () => {
     if (!pausedRef.current) return;
     pausedRef.current = false;
+    if (isVideoUrl(stories[currentIndex]?.mediaUrl ?? "")) player.play();
     Animated.timing(progress, {
       toValue: 1,
       duration: remaining.current,
@@ -228,6 +277,15 @@ export default function StoryViewScreen() {
         router.back();
       }
     }, remaining.current);
+  };
+
+  const toggleMute = () => {
+    setMuted((m) => {
+      const next = !m;
+      mutedRef.current = next;
+      player.muted = next;
+      return next;
+    });
   };
 
   const goNext = () => {
@@ -259,6 +317,10 @@ export default function StoryViewScreen() {
 
   const current = stories[currentIndex];
   const isOwner = currentUserId === userId;
+  const currentIsVideo = isVideoUrl(current.mediaUrl);
+  const mediaReady = currentIsVideo
+    ? videoReady
+    : loadedIds.has(current.id);
 
   return (
     <View style={{ flex: 1, backgroundColor: "black" }}>
@@ -305,6 +367,15 @@ export default function StoryViewScreen() {
             </Text>
           </View>
           <View className="flex-row gap-3 items-center">
+            {currentIsVideo && (
+              <TouchableOpacity onPress={toggleMute}>
+                <Ionicons
+                  name={muted ? "volume-mute" : "volume-high"}
+                  size={24}
+                  color="white"
+                />
+              </TouchableOpacity>
+            )}
             {isOwner && (
               <TouchableOpacity onPress={handleDelete}>
                 <Ionicons name="trash-outline" size={26} color="white" />
@@ -319,20 +390,29 @@ export default function StoryViewScreen() {
 
       <GestureDetector gesture={composed}>
         <Reanimated.View style={[{ flex: 1 }, animatedStyle]}>
-          <Image
-            source={{ uri: current.mediaUrl }}
-            style={{ flex: 1 }}
-            resizeMode="contain"
-            onLoadEnd={() =>
-              setLoadedIds((prev) => {
-                if (prev.has(current.id)) return prev;
-                const next = new Set(prev);
-                next.add(current.id);
-                return next;
-              })
-            }
-          />
-          {loadedIds.has(current.id) && current.texts && current.texts.length > 0 && (
+          {currentIsVideo ? (
+            <VideoView
+              player={player}
+              style={{ flex: 1 }}
+              contentFit="contain"
+              nativeControls={false}
+            />
+          ) : (
+            <Image
+              source={{ uri: current.mediaUrl }}
+              style={{ flex: 1 }}
+              resizeMode="contain"
+              onLoadEnd={() =>
+                setLoadedIds((prev) => {
+                  if (prev.has(current.id)) return prev;
+                  const next = new Set(prev);
+                  next.add(current.id);
+                  return next;
+                })
+              }
+            />
+          )}
+          {mediaReady && current.texts && current.texts.length > 0 && (
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
               <View
                 style={{
