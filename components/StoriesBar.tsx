@@ -44,30 +44,49 @@ export default function StoriesBar({ onRefresh }: { onRefresh?: () => void }) {
     </View>
   );
 
+  const hasMyStory = myStories.length > 0;
+
   const myStoryItem = (
-    <TouchableOpacity
-      className="items-center mr-4"
-      onPress={() => {
-        if (myStories.length > 0) {
-          router.push({ pathname: '/story/[id]' as any, params: { id: myStories[0].id, userId: currentUserId } });
-        } else {
-          router.push('/story/create' as any);
-        }
-      }}
-    >
-      <View className="w-14 h-14 rounded-full bg-gray-100 items-center justify-center border-2 border-dashed border-gray-300">
-        {myStories.length > 0 ? (
-          <View className="w-full h-full rounded-full border-2 border-blue-800 overflow-hidden">
-            <Image source={{ uri: myStories[0].mediaUrl }} className="w-full h-full" />
+    <View className="items-center mr-4">
+      <View className="w-14 h-14">
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => {
+            if (hasMyStory) {
+              router.push({ pathname: '/story/[id]' as any, params: { id: myStories[0].id, userId: currentUserId } });
+            } else {
+              router.push('/story/create' as any);
+            }
+          }}
+        >
+          <View className="w-14 h-14 rounded-full bg-gray-100 items-center justify-center border-2 border-dashed border-gray-300">
+            {hasMyStory ? (
+              <View className="w-full h-full rounded-full border-2 border-blue-800 overflow-hidden">
+                <Image source={{ uri: myStories[0].mediaUrl }} className="w-full h-full" />
+              </View>
+            ) : (
+              <Ionicons name="add" size={24} color="#9CA3AF" />
+            )}
           </View>
-        ) : (
-          <Ionicons name="add" size={24} color="#9CA3AF" />
+        </TouchableOpacity>
+
+        {/* Bouton + pour ajouter une story supplémentaire (quand on en a déjà une) */}
+        {hasMyStory && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => router.push('/story/create' as any)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            className="absolute w-6 h-6 rounded-full bg-blue-800 items-center justify-center border-2 border-white"
+            style={{ bottom: -2, right: -2 }}
+          >
+            <Ionicons name="add" size={14} color="white" />
+          </TouchableOpacity>
         )}
       </View>
       <Text className="text-xs text-gray-500 mt-1 w-14 text-center" numberOfLines={1}>
-        {myStories.length > 0 ? 'Ma story' : 'Ajouter'}
+        {hasMyStory ? 'Ma story' : 'Ajouter'}
       </Text>
-    </TouchableOpacity>
+    </View>
   );
 
   return (
