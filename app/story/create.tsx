@@ -58,14 +58,25 @@ type TextItem   = {
 // Rayon (px écran) autour du centre de la poubelle qui déclenche la suppression
 const TRASH_RADIUS = 90;
 
+// Aimantation des guides d'alignement
+const SNAP_PX = 12;             // distance d'accroche au centre (px écran)
+const ROT_SNAP = 0.07;          // tolérance d'accroche en rotation (~4°)
+const ROT_STEP = Math.PI / 4;   // pas d'aimantation de rotation (45°)
+const GUIDE_COLOR = '#34C759';
+
 type TextOverlayProps = {
   item: TextItem;
   imageScale: SharedValue<number>;
+  imageTX: SharedValue<number>;
+  imageTY: SharedValue<number>;
   // Centre de la poubelle en coordonnées écran (absolues)
   trashCenterX: number;
   trashCenterY: number;
   isDraggingAnyText: SharedValue<boolean>;
   isOverTrash: SharedValue<boolean>;
+  // Guides d'alignement (centre X / centre Y)
+  showVGuide: SharedValue<boolean>;
+  showHGuide: SharedValue<boolean>;
   // Texte actif piloté par le pinch/rotation du conteneur (plein écran)
   activeTextId: SharedValue<string>;
   activeScale: SharedValue<number>;
@@ -79,9 +90,10 @@ type TextOverlayProps = {
 
 function TextOverlay({
   item,
-  imageScale,
+  imageScale, imageTX, imageTY,
   trashCenterX, trashCenterY,
   isDraggingAnyText, isOverTrash,
+  showVGuide, showHGuide,
   activeTextId, activeScale, activeRotation,
   simultaneousGestures,
   onEdit, onDelete, onUpdate,
@@ -127,8 +139,27 @@ function TextOverlay({
       if (!owns.value) return;
       // Le texte vit dans l'espace (scalé) de l'image : on divise la translation
       // par le zoom pour qu'il suive le doigt au 1:1 à l'écran.
-      localX.value = savedX.value + e.translationX / imageScale.value;
-      localY.value = savedY.value + e.translationY / imageScale.value;
+      let nx = savedX.value + e.translationX / imageScale.value;
+      let ny = savedY.value + e.translationY / imageScale.value;
+
+      // Aimantation au centre : offset écran du texte par rapport au centre.
+      const offX = nx * imageScale.value + imageTX.value;
+      const offY = ny * imageScale.value + imageTY.value;
+      if (Math.abs(offX) < SNAP_PX) {
+        nx = -imageTX.value / imageScale.value; // colle au centre horizontal
+        showVGuide.value = true;
+      } else {
+        showVGuide.value = false;
+      }
+      if (Math.abs(offY) < SNAP_PX) {
+        ny = -imageTY.value / imageScale.value; // colle au centre vertical
+        showHGuide.value = true;
+      } else {
+        showHGuide.value = false;
+      }
+      localX.value = nx;
+      localY.value = ny;
+
       // Suppression selon la position du DOIGT (et non du texte). Comme ce pan
       // ne suit que le 1er doigt, le 2e doigt n'a aucun effet sur la poubelle.
       const dx = e.absoluteX - trashCenterX;
@@ -142,6 +173,8 @@ function TextOverlay({
       if (!owns.value) return;
       owns.value = false;
       isDraggingAnyText.value = false;
+      showVGuide.value = false;
+      showHGuide.value = false;
       // Récupère l'échelle / rotation éventuellement modifiées par le conteneur
       localScale.value = activeScale.value;
       localRotation.value = activeRotation.value;
@@ -258,6 +291,12 @@ export default function CreateStoryScreen() {
   const activeRotation = useSharedValue(0);
   const activeSavedRotation = useSharedValue(0);
 
+  // Guides d'alignement (centre X / Y) + repère de rotation
+  const showVGuide = useSharedValue(false);
+  const showHGuide = useSharedValue(false);
+  const showRotGuide = useSharedValue(false);
+  const rotGuideAngle = useSharedValue(0);
+
   const clampTranslation = (s: number) => {
     'worklet';
     const maxX = Math.max(0, (containerW.value * (s - 1)) / 2);
@@ -306,12 +345,22 @@ export default function CreateStoryScreen() {
       if (activeTextId.value !== '') activeSavedRotation.value = activeRotation.value;
     })
     .onUpdate((e) => {
-      if (activeTextId.value !== '') {
-        activeRotation.value = activeSavedRotation.value + e.rotation;
+      if (activeTextId.value === '') return;
+      let r = activeSavedRotation.value + e.rotation;
+      // Aimantation aux multiples de 45°
+      const nearest = Math.round(r / ROT_STEP) * ROT_STEP;
+      if (Math.abs(r - nearest) < ROT_SNAP) {
+        r = nearest;
+        rotGuideAngle.value = nearest;
+        showRotGuide.value = true;
+      } else {
+        showRotGuide.value = false;
       }
+      activeRotation.value = r;
     })
     .onEnd(() => {
       if (activeTextId.value !== '') activeSavedRotation.value = activeRotation.value;
+      showRotGuide.value = false;
     });
 
   const panGesture = Gesture.Pan()
@@ -383,6 +432,17 @@ export default function CreateStoryScreen() {
     transform: [{ scale: withSpring(isOverTrash.value ? 1.3 : 1) }],
   }));
 
+  const vGuideStyle = useAnimatedStyle(() => ({
+    opacity: withTiming(showVGuide.value ? 1 : 0, { duration: 120 }),
+  }));
+  const hGuideStyle = useAnimatedStyle(() => ({
+    opacity: withTiming(showHGuide.value ? 1 : 0, { duration: 120 }),
+  }));
+  const rotGuideStyle = useAnimatedStyle(() => ({
+    opacity: withTiming(showRotGuide.value ? 1 : 0, { duration: 120 }),
+    transform: [{ rotate: `${rotGuideAngle.value}rad` }],
+  }));
+
   const onContainerLayout = (e: LayoutChangeEvent) => {
     containerW.value = e.nativeEvent.layout.width;
     containerH.value = e.nativeEvent.layout.height;
@@ -394,6 +454,9 @@ export default function CreateStoryScreen() {
     activeTextId.value = '';
     isDraggingAnyText.value = false;
     isOverTrash.value = false;
+    showVGuide.value = false;
+    showHGuide.value = false;
+    showRotGuide.value = false;
   };
 
   const confirmTextEdit = () => {
@@ -577,10 +640,14 @@ export default function CreateStoryScreen() {
                     key={item.id}
                     item={item}
                     imageScale={scale}
+                    imageTX={translateX}
+                    imageTY={translateY}
                     trashCenterX={trashCenterX}
                     trashCenterY={trashCenterY}
                     isDraggingAnyText={isDraggingAnyText}
                     isOverTrash={isOverTrash}
+                    showVGuide={showVGuide}
+                    showHGuide={showHGuide}
                     activeTextId={activeTextId}
                     activeScale={activeScale}
                     activeRotation={activeRotation}
@@ -604,6 +671,11 @@ export default function CreateStoryScreen() {
                 ))}
               </Reanimated.View>
             </GestureDetector>
+
+            {/* Guides d'alignement (espace écran, au-dessus de l'image) */}
+            <Reanimated.View pointerEvents="none" style={[styles.guideV, vGuideStyle]} />
+            <Reanimated.View pointerEvents="none" style={[styles.guideH, hGuideStyle]} />
+            <Reanimated.View pointerEvents="none" style={[styles.guideRot, rotGuideStyle]} />
           </View>
 
           {texts.length > 0 && (
@@ -742,6 +814,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   trashLabel: { color: 'rgba(255,255,255,0.65)', fontSize: 12 },
+  guideV: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: 2,
+    marginLeft: -1,
+    backgroundColor: GUIDE_COLOR,
+  },
+  guideH: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '50%',
+    height: 2,
+    marginTop: -1,
+    backgroundColor: GUIDE_COLOR,
+  },
+  guideRot: {
+    position: 'absolute',
+    // étendu au-delà des bords pour couvrir l'écran à n'importe quel angle
+    left: -200,
+    right: -200,
+    top: '50%',
+    height: 2,
+    marginTop: -1,
+    backgroundColor: GUIDE_COLOR,
+  },
   controls: {
     position: 'absolute',
     bottom: 32,
