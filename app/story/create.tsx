@@ -29,10 +29,12 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { EmojiPicker } from '../../components/EmojiPicker';
 import { StoryBackground } from '../../components/StoryBackground';
 import { StoryCamera } from '../../components/StoryCamera';
 import { VideoTrimmer } from '../../components/VideoTrimmer';
 import { apiRequest } from '../../lib/api';
+import { STICKER_FONT_SIZE } from '../../lib/storyStickers';
 import { DEFAULT_BACKGROUND_ID, STORY_BACKGROUNDS } from '../../lib/storyBackgrounds';
 import {
   DEFAULT_BG_MODE,
@@ -55,6 +57,7 @@ type TextItem   = {
   x: number; y: number; scale: number; rotation: number;
   color: string; bgMode: BgMode;
   bold: boolean; italic: boolean; underline: boolean;
+  kind?: 'text' | 'sticker';
 };
 
 // ─── Composant TextOverlay ────────────────────────────────────────────────────
@@ -226,13 +229,17 @@ function TextOverlay({
         <GestureDetector gesture={panGesture}>
           <Reanimated.View style={[overlay.hitArea, translateStyle]}>
             <Reanimated.View style={contentStyle}>
-              <TouchableOpacity onPress={onEdit} activeOpacity={0.85}>
-                <View style={dyn.bubble}>
-                  <Text style={[TEXT_TYPOGRAPHY, getTextFontStyle(item.bold, item.italic, item.underline), dyn.text]}>
-                    {item.content}
-                  </Text>
-                </View>
-              </TouchableOpacity>
+              {item.kind === 'sticker' ? (
+                <Text style={{ fontSize: STICKER_FONT_SIZE }}>{item.content}</Text>
+              ) : (
+                <TouchableOpacity onPress={onEdit} activeOpacity={0.85}>
+                  <View style={dyn.bubble}>
+                    <Text style={[TEXT_TYPOGRAPHY, getTextFontStyle(item.bold, item.italic, item.underline), dyn.text]}>
+                      {item.content}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
             </Reanimated.View>
           </Reanimated.View>
         </GestureDetector>
@@ -264,6 +271,8 @@ export default function CreateStoryScreen() {
   const [cameraMode, setCameraMode] = useState(false);
   // Vidéo brute en attente de rognage (ouvre le VideoTrimmer)
   const [trimUri, setTrimUri] = useState<string | null>(null);
+  // Sélecteur d'emojis (stickers)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Textes multiples
@@ -568,6 +577,19 @@ export default function CreateStoryScreen() {
     openNewTextEditor();
   };
 
+  // Ajoute un emoji comme sticker déplaçable (réutilise le système TextOverlay)
+  const addSticker = (emoji: string) => {
+    setShowEmojiPicker(false);
+    setTexts(prev => [...prev, {
+      id: Date.now().toString(),
+      content: emoji,
+      x: 0, y: 0, scale: 1, rotation: 0,
+      color: DEFAULT_TEXT_COLOR, bgMode: DEFAULT_BG_MODE,
+      bold: false, italic: false, underline: false,
+      kind: 'sticker',
+    }]);
+  };
+
   // Capture caméra → vidéo via le trimmer, photo directement dans l'éditeur
   const handleCameraCapture = (m: PickedMedia) => {
     setCameraMode(false);
@@ -595,6 +617,7 @@ export default function CreateStoryScreen() {
           .filter((t) => t.content.trim())
           .map((t) => ({
             content: t.content,
+            kind: t.kind ?? 'text',
             normX: (W / 2 + t.x) / W,
             normY: (H / 2 + t.y) / H,
             scale: t.scale,
@@ -669,6 +692,7 @@ export default function CreateStoryScreen() {
         .filter(t => t.content.trim())
         .map(t => ({
           content: t.content,
+          kind: t.kind ?? 'text',
           normX: (W / 2 + t.x * s + tx) / W,
           normY: (H / 2 + t.y * s + ty) / H,
           scale: t.scale,
@@ -708,6 +732,11 @@ export default function CreateStoryScreen() {
           <Ionicons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
         <Text className="text-white text-lg font-semibold flex-1">Nouvelle story</Text>
+        {(media || bgId) && (
+          <TouchableOpacity onPress={() => setShowEmojiPicker(true)} className="mr-4">
+            <Ionicons name="happy-outline" size={26} color="white" />
+          </TouchableOpacity>
+        )}
         {(media || bgId) && (
           <TouchableOpacity onPress={handlePublish} disabled={loading}>
             {loading ? (
@@ -872,6 +901,12 @@ export default function CreateStoryScreen() {
           />
         </View>
       )}
+
+      <EmojiPicker
+        visible={showEmojiPicker}
+        onPick={addSticker}
+        onClose={() => setShowEmojiPicker(false)}
+      />
 
       {isEditingText && (
         <KeyboardAvoidingView

@@ -32,6 +32,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StoryBackground } from "../../components/StoryBackground";
 import { apiRequest } from "../../lib/api";
 import { connectSocket } from "../../lib/socket";
+import { STICKER_FONT_SIZE } from "../../lib/storyStickers";
 import { getUserId } from "../../lib/storage";
 import {
   getTextFontStyle,
@@ -63,6 +64,7 @@ type StoryText = {
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
+  kind?: "text" | "sticker";
 };
 type Story = {
   id: string;
@@ -152,6 +154,9 @@ export default function StoryViewScreen() {
   const sheetProgress = useSharedValue(0);
   const savedSheet = useSharedValue(0);
 
+  // Swipe-down pour fermer le viewer
+  const swipeY = useSharedValue(0);
+
   const updateZoomed = (zoomed: boolean) => setIsZoomed(zoomed);
 
   const pinchGesture = Gesture.Pinch()
@@ -211,6 +216,14 @@ export default function StoryViewScreen() {
   const chevronStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${sheetProgress.value * 180}deg` }],
   }));
+  const swipeStyle = useAnimatedStyle(() => {
+    const s = 1 - Math.min(swipeY.value / 1400, 0.16);
+    return {
+      transform: [{ translateY: swipeY.value }, { scale: s }],
+      borderRadius: swipeY.value > 1 ? 22 : 0,
+      overflow: "hidden",
+    };
+  });
 
   useEffect(() => {
     const init = async () => {
@@ -531,9 +544,32 @@ export default function StoryViewScreen() {
       ? videoReady
       : loadedIds.has(current.id);
 
+  // Glisser vers le bas pour fermer (désactivé si zoom / drawer / clavier ouverts)
+  const closeViewer = () => router.back();
+  const swipeDown = Gesture.Pan()
+    .enabled(!isZoomed && !sheetOpen && !keyboardVisible)
+    .maxPointers(1)
+    .activeOffsetY(16)
+    .failOffsetX([-24, 24])
+    .onStart(() => runOnJS(pauseStory)())
+    .onUpdate((e) => {
+      swipeY.value = Math.max(0, e.translationY);
+    })
+    .onEnd((e) => {
+      if (swipeY.value > 130 || e.velocityY > 900) {
+        runOnJS(closeViewer)();
+      } else {
+        swipeY.value = withSpring(0);
+        runOnJS(resumeStory)();
+      }
+    });
+
   return (
     <View style={{ flex: 1, backgroundColor: "black" }}>
       <StatusBar hidden />
+
+      <GestureDetector gesture={swipeDown}>
+        <Reanimated.View style={[{ flex: 1 }, swipeStyle]}>
 
       <View
         className="absolute top-0 left-0 right-0 z-10 px-2"
@@ -636,31 +672,32 @@ export default function StoryViewScreen() {
                 }}
               >
                 {current.texts.map((t, i) => {
+                  const transform = [
+                    { translateX: (t.normX - 0.5) * width },
+                    {
+                      translateY:
+                        (t.normY - 0.5) * Dimensions.get("window").height,
+                    },
+                    { scale: t.scale ?? 1 },
+                    {
+                      rotate: t.rotation != null ? `${t.rotation}rad` : "0rad",
+                    },
+                  ];
+                  // Sticker emoji : pas de bulle, taille de base partagée
+                  if (t.kind === "sticker") {
+                    return (
+                      <View key={i} style={{ position: "absolute", transform }}>
+                        <Text style={{ fontSize: STICKER_FONT_SIZE }}>
+                          {t.content}
+                        </Text>
+                      </View>
+                    );
+                  }
                   const ts = getTextRenderStyle(t.color, t.bgMode);
                   return (
                     <View
                       key={i}
-                      style={[
-                        ts.bubble,
-                        {
-                          position: "absolute",
-                          transform: [
-                            { translateX: (t.normX - 0.5) * width },
-                            {
-                              translateY:
-                                (t.normY - 0.5) *
-                                Dimensions.get("window").height,
-                            },
-                            { scale: t.scale ?? 1 },
-                            {
-                              rotate:
-                                t.rotation != null
-                                  ? `${t.rotation}rad`
-                                  : "0rad",
-                            },
-                          ],
-                        },
-                      ]}
+                      style={[ts.bubble, { position: "absolute", transform }]}
                     >
                       <Text
                         style={[
@@ -918,6 +955,9 @@ export default function StoryViewScreen() {
           </View>
         </KeyboardAvoidingView>
       )}
+
+        </Reanimated.View>
+      </GestureDetector>
     </View>
   );
 }

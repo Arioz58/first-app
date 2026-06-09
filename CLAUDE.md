@@ -123,6 +123,7 @@ components/
 ├── StoryBackground.tsx  # Fond de story texte (uni / dégradé via expo-linear-gradient)
 ├── StoryCamera.tsx      # Caméra in-app (photo tap / vidéo maintien, flash, switch)
 ├── VideoTrimmer.tsx     # Rognage vidéo : preview + timeline à miniatures (trim headless)
+├── EmojiPicker.tsx      # Sélecteur d'emojis (grille) pour les stickers de story
 └── CountryPicker.tsx    # Sélecteur pays avec indicatif téléphonique (modal + recherche)
 lib/
 ├── api.ts               # Fetch wrapper — JWT Bearer + auto-refresh + handler SESSION_EXPIRED global
@@ -132,6 +133,7 @@ lib/
 ├── countries.ts         # Liste pays avec drapeau, nom et indicatif téléphonique
 ├── storyText.ts         # Styles texte stories (couleur, fond none/translucent/solid, gras/italique/souligné) — partagé create + viewer
 ├── storyBackgrounds.ts  # Presets de fond stories texte (id → couleurs unies/dégradés)
+├── storyStickers.ts     # Liste d'emojis stickers + STICKER_FONT_SIZE (partagé create + viewer)
 └── i18n.ts              # Config i18next (tr/fr/en)
 locales/
 ├── tr.json
@@ -243,6 +245,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
   - **poubelle** d'aimantation basée sur la **position du doigt** (pas du texte)
   - **guides d'alignement verts** (centre X/Y) avec aimantation, et aimantation **rotation** aux multiples de 45°
 - **Styles de texte** (module partagé `lib/storyText.ts`) : couleur (palette), fond `none` / `translucent` / `solid` (contraste auto noir/blanc), **gras / italique / souligné**
+- **Stickers emojis** : bouton emoji (header) → `EmojiPicker` (bottom sheet **à onglets par catégorie** + **glisser-pour-fermer** via Gesture.Pan/reanimated ; emojis groupés dans `STICKER_CATEGORIES` de `lib/storyStickers.ts`) → sticker = `TextItem` avec `kind:'sticker'`, rendu **emoji nu** (`STICKER_FONT_SIZE`, pas de bulle ni édition) ; réutilise le **même système de gestes** (drag/pinch/rotate/poubelle) que les textes. `kind` en colonne `Json` → aucune migration
 - Éditeur « live » : rendu direct (pas de cadre de formulaire), curseur seul (pas de placeholder), `scrollEnabled={false}` + padding (évite le retour à la ligne en italique), boutons OK + A(fond) + B/I/U
 
 ### Viewer (`app/story/[id].tsx`)
@@ -253,6 +256,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 - **Vidéo** (expo-video) : durée de progression = durée réelle de la vidéo, mute/unmute, lecture auto une fois bufferisée
 - **Gating média** : texte + timer ne démarrent qu'une fois l'image chargée (`onLoadEnd`) / la vidéo prête (`statusChange`) → pas de texte/timer avant l'affichage ; `loadedIds` (cache des stories vues, retour instantané) + `Image.prefetch`
 - Temps depuis publication (min si < 1h, sinon h) ; suppression (propriétaire)
+- **Swipe-down pour fermer** : `Gesture.Pan` (1 doigt, `activeOffsetY(16)`, `failOffsetX`) enveloppant tout le contenu ; suit le doigt (translateY + scale + coins arrondis), ferme si seuil/vélocité dépassés, sinon `withSpring(0)` ; désactivé si zoom / drawer / clavier ouverts ; pause pendant le geste
 - **« Vu par »** : vue enregistrée (`POST /stories/:id/view`) dès que le média est affiché (1× par story via `viewedSentRef`, jamais sur ses propres stories) ; côté propriétaire, **drawer sombre repliable** toujours visible en bas (poignée + avatars empilés des 3 derniers viewers + compteur), **draggable** (Gesture.Pan + reanimated, aimantation ouvert/fermé selon position/vélocité) ou tap pour ouvrir → liste détaillée des viewers (`GET /stories/:id/views`, owner-only, pré-fetch au chargement). Ouverture = pause de la story + backdrop assombrissant cliquable pour fermer
 - **Répondre à une story** (non-propriétaire) : barre en bas — **champ texte sur fond noir** (`bg-black/60`) avec smiley intégré ouvrant un **popover flottant de réactions** (`QUICK_EMOJIS`, animé `FadeInDown/FadeOutDown`, tap = envoi + fermeture, pause de la story tant qu'ouvert) ; bouton d'envoi vert qui apparaît dès qu'on tape. `KeyboardAvoidingView`, pause de la story au focus ; un tap navigation ferme d'abord le popover. Envoi = `POST /conversations/direct` `{ targetUserId }` puis `socket.emit('send_message', { type: 'story_reply', storyId, storyMediaUrl })` ; feedback « Envoyé ✓ », pas de navigation (on reste dans la story). Affichage **contextualisé** dans `chat/[id].tsx` : icône `↩` + libellé « a répondu / a **réagi** à votre story » (nuance selon emoji-only), **vignette verticale** `storyMediaUrl` (50×84), puis bulle de texte — ou **réaction emoji en grand hors bulle** (~50px) détectée via `isEmojiOnly` (`\p{Extended_Pictographic}`). Bulles alignées au contenu (`items-end/start` sur le conteneur, plus de bulle pleine largeur)
 
