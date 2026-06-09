@@ -10,7 +10,13 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.arzwebconcept.first-app"
+      "bundleIdentifier": "com.berke.nexa2",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Nexa utilise la caméra pour prendre des photos et vidéos de vos stories.",
+        "NSMicrophoneUsageDescription": "Nexa utilise le micro pour enregistrer le son de vos vidéos.",
+        "NSPhotoLibraryUsageDescription": "Nexa accède à votre galerie pour choisir des photos et vidéos à publier en story.",
+        "NSPhotoLibraryAddUsageDescription": "Nexa peut enregistrer des médias dans votre galerie."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -43,7 +49,15 @@
         }
       ],
       "expo-secure-store",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Nexa utilise la caméra pour prendre des photos et vidéos de vos stories.",
+          "microphonePermission": "Nexa utilise le micro pour enregistrer le son de vos vidéos.",
+          "recordAudioAndroid": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

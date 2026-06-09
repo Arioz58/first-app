@@ -44,7 +44,15 @@ export const registerForPushNotifications = async (): Promise<
     });
   }
 
-  const token = (await Notifications.getDevicePushTokenAsync()).data;
+  let token: string;
+  try {
+    token = (await Notifications.getDevicePushTokenAsync()).data;
+  } catch (e) {
+    // Pas d'entitlement aps-environment (compte Apple gratuit) / push indisponible →
+    // on ignore proprement : l'app fonctionne sans notifications push.
+    console.warn("[FCM] Token push indisponible :", e);
+    return null;
+  }
 
   try {
     await apiRequest("/users/me/fcm-token", {

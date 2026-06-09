@@ -60,6 +60,10 @@ first-app-web/       → Next.js — à créer au Mois 3
 - **expo-notifications + expo-device** — notifications push FCM
 - **react-native-gesture-handler + react-native-reanimated** — gestes (pinch/pan/rotation) + animations (éditeur de stories, zoom viewer)
 - **expo-image-picker + expo-image-manipulator** — sélection + crop des médias stories
+- **expo-camera** — caméra in-app (photo/vidéo) pour les stories ⚠️ **module natif** (rebuild requis après install) ; permissions caméra/micro déclarées dans `app.json`
+- **react-native-video-trim** — rognage temporel des vidéos (API **headless** `trim(uri, { startTime, endTime })` en ms → vrai fichier découpé) ⚠️ **module natif** (rebuild requis, pas de config plugin : autolinking via `expo run:ios`)
+- **expo-video-thumbnails** — miniatures de la timeline de rognage ⚠️ **module natif** (rebuild requis)
+- **expo-linear-gradient** — fonds dégradés des stories texte ⚠️ **module natif** (rebuild requis)
 - **expo-image** — affichage d'images
 - **expo-video** — lecture vidéo dans le viewer stories ⚠️ **module natif** (rebuild requis après install : `npx expo run:ios`)
 - TypeScript strict
@@ -116,6 +120,9 @@ app/
     └── create.tsx       # Éditeur de story (photo/vidéo, textes stylables multiples, guides d'alignement, upload S3)
 components/
 ├── StoriesBar.tsx       # Barre stories horizontale (style WhatsApp, useFocusEffect refresh)
+├── StoryBackground.tsx  # Fond de story texte (uni / dégradé via expo-linear-gradient)
+├── StoryCamera.tsx      # Caméra in-app (photo tap / vidéo maintien, flash, switch)
+├── VideoTrimmer.tsx     # Rognage vidéo : preview + timeline à miniatures (trim headless)
 └── CountryPicker.tsx    # Sélecteur pays avec indicatif téléphonique (modal + recherche)
 lib/
 ├── api.ts               # Fetch wrapper — JWT Bearer + auto-refresh + handler SESSION_EXPIRED global
@@ -124,6 +131,7 @@ lib/
 ├── notifications.ts     # Demande permission + enregistre token FCM au backend
 ├── countries.ts         # Liste pays avec drapeau, nom et indicatif téléphonique
 ├── storyText.ts         # Styles texte stories (couleur, fond none/translucent/solid, gras/italique/souligné) — partagé create + viewer
+├── storyBackgrounds.ts  # Presets de fond stories texte (id → couleurs unies/dégradés)
 └── i18n.ts              # Config i18next (tr/fr/en)
 locales/
 ├── tr.json
@@ -207,7 +215,23 @@ error({ message })
 
 ## Stories (Mois 3) — détail
 
-Pipeline média : sélection (expo-image-picker) → crop selon zoom (expo-image-manipulator) → upload S3 via **presigned URL** (`POST /upload/presigned-url`) → `POST /stories` avec `mediaUrl` + `texts[]`. Médias jamais en BDD (URL CloudFront uniquement).
+Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** expo-camera / **texte seul** fond coloré) → crop selon zoom (expo-image-manipulator, photos) → upload S3 via **presigned URL** (`POST /upload/presigned-url`) → `POST /stories` avec `mediaUrl`/`background` + `texts[]`. Médias jamais en BDD (URL CloudFront uniquement).
+
+### Caméra in-app (`components/StoryCamera.tsx`)
+- `CameraView` (expo-camera) plein écran, permissions caméra + micro (`useCameraPermissions`/`useMicrophonePermissions`, écran de repli + `Linking.openSettings()` si refus)
+- **Geste capture** : `Gesture.Exclusive(pan, tap)` → **tap = photo** (`takePictureAsync`), **maintien = vidéo** via `Gesture.Pan().activateAfterLongPress(250)` (le Pan suit le doigt sans s'annuler au mouvement) ; **glisser vers le haut = verrouiller** (`LOCK_THRESHOLD`, cadenas animé) → l'enregistrement continue sans maintenir, bouton **Stop** dédié. Caméra en **`mode="video"` permanent** (pas de switch de mode → pas de race `recordAsync`) ; `recordAsync` max 30 s, garde `cameraReady` (`onCameraReady`)
+- **Geste stabilisé** (`useMemo` + handlers via ref) : indispensable, sinon le re-render du chrono recrée le geste et coupe l'enregistrement en cours
+- Anneau/bouton animé (reanimated) + barre de progression + chrono REC ; flash (off/on/auto, `enableTorch` en vidéo), switch avant/arrière
+- Après capture : **photo** → éditeur direct ; **vidéo** → `VideoTrimmer` avant l'éditeur
+
+### Rognage vidéo (`components/VideoTrimmer.tsx`)
+- Toute vidéo (galerie **ou** caméra) passe par le trimmer avant l'éditeur (`create.tsx` : `trimUri`)
+- Preview `expo-video` en **boucle sur la sélection** (`timeUpdate` → seek au début) ; durée via `isValidFile()` (ms)
+- **Timeline à miniatures** (`expo-video-thumbnails`, ~8 vignettes) + **2 poignées** draggables (reanimated/gesture, gestes `useMemo` + callbacks stables, seek live, aucun `setState` pendant le drag → poignées non interrompues)
+- Validation → **vrai découpage** `trim(uri, { startTime, endTime, enablePreciseTrimming: true })` (ms) → `outputPath` → `setMedia` ; raccourci si sélection = vidéo entière. ⚠️ **`enablePreciseTrimming: true` obligatoire** : sinon `-c copy` (défaut) ne coupe qu'aux keyframes → la **coupe de début dérive** (souvent jusqu'à 0)
+- ⚠️ Ne **pas lire de `ref` (`.current`) dans un worklet** de geste (warning Worklets + valeur figée) : calculer les temps depuis les shared values (`startX`/`endX`)
+- Éditeur : **preview vidéo** (`VideoView`, boucle) au lieu de l'icône statique ; zoom/pan spatial neutralisé pour la vidéo (garde `isTextOnly`)
+- **Backend inchangé** : le fichier trimmé s'upload comme n'importe quelle vidéo
 
 ### Création (`app/story/create.tsx`)
 - Photo **ou vidéo** ; zoom/pan sur l'image (double-tap = reset) ; le crop est appliqué à la publication selon le zoom/pan

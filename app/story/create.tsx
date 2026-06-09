@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useRef, useState } from 'react';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, {
@@ -29,6 +30,8 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StoryBackground } from '../../components/StoryBackground';
+import { StoryCamera } from '../../components/StoryCamera';
+import { VideoTrimmer } from '../../components/VideoTrimmer';
 import { apiRequest } from '../../lib/api';
 import { DEFAULT_BACKGROUND_ID, STORY_BACKGROUNDS } from '../../lib/storyBackgrounds';
 import {
@@ -257,6 +260,10 @@ export default function CreateStoryScreen() {
   const [media, setMedia] = useState<PickedMedia | null>(null);
   // Mode « story texte seul » : id du preset de fond (null = mode média)
   const [bgId, setBgId] = useState<string | null>(null);
+  // Mode caméra in-app (avant l'éditeur)
+  const [cameraMode, setCameraMode] = useState(false);
+  // Vidéo brute en attente de rognage (ouvre le VideoTrimmer)
+  const [trimUri, setTrimUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Textes multiples
@@ -283,11 +290,29 @@ export default function CreateStoryScreen() {
   const containerW = useSharedValue(0);
   const containerH = useSharedValue(0);
 
-  // Mode texte seul (fond coloré, pas de média) → neutralise le zoom/pan image
+  // Neutralise le zoom/pan image quand il n'y a pas d'image à recadrer :
+  // mode texte seul (fond coloré) OU vidéo (pas de crop spatial).
   const isTextOnly = useSharedValue(false);
   useEffect(() => {
-    isTextOnly.value = !!bgId && !media;
+    const isVid = !!media && media.mimeType.startsWith('video/');
+    isTextOnly.value = (!!bgId && !media) || isVid;
   }, [bgId, media, isTextOnly]);
+
+  // Player de preview vidéo dans l'éditeur (lecture en boucle)
+  const editorPlayer = useVideoPlayer(null, (p) => {
+    p.loop = true;
+  });
+  useEffect(() => {
+    if (media && media.mimeType.startsWith('video/')) {
+      // replaceAsync : charge la vidéo hors du thread principal (pas de micro-gel)
+      editorPlayer
+        .replaceAsync({ uri: media.uri })
+        .then(() => editorPlayer.play())
+        .catch(() => {});
+    } else {
+      editorPlayer.pause();
+    }
+  }, [media, editorPlayer]);
 
   // Poubelle partagée entre tous les textes
   const isDraggingAnyText = useSharedValue(false);
@@ -508,6 +533,11 @@ export default function CreateStoryScreen() {
     });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
+      // Vidéo → on passe par le trimmer avant l'éditeur
+      if (asset.type === 'video' || (asset.mimeType ?? '').startsWith('video')) {
+        setTrimUri(asset.uri);
+        return;
+      }
       resetTransform();
       setTexts([]);
       setBgId(null);
@@ -520,6 +550,15 @@ export default function CreateStoryScreen() {
     }
   };
 
+  // Vidéo trimmée → bascule dans l'éditeur média
+  const handleTrimmed = (trimmedUri: string) => {
+    setTrimUri(null);
+    resetTransform();
+    setTexts([]);
+    setBgId(null);
+    setMedia({ uri: trimmedUri, mimeType: 'video/mp4', width: 0, height: 0 });
+  };
+
   // Entre en mode « story texte seul » : fond coloré par défaut + éditeur de texte ouvert
   const enterTextMode = () => {
     resetTransform();
@@ -527,6 +566,19 @@ export default function CreateStoryScreen() {
     setMedia(null);
     setBgId(DEFAULT_BACKGROUND_ID);
     openNewTextEditor();
+  };
+
+  // Capture caméra → vidéo via le trimmer, photo directement dans l'éditeur
+  const handleCameraCapture = (m: PickedMedia) => {
+    setCameraMode(false);
+    if (m.mimeType.startsWith('video/')) {
+      setTrimUri(m.uri);
+      return;
+    }
+    resetTransform();
+    setTexts([]);
+    setBgId(null);
+    setMedia(m);
   };
 
   const handlePublish = async () => {
@@ -675,14 +727,16 @@ export default function CreateStoryScreen() {
             <GestureDetector gesture={composed}>
               <Reanimated.View style={[{ flex: 1 }, animatedStyle]}>
                 {media ? (
-                  <>
+                  isVideo ? (
+                    <VideoView
+                      player={editorPlayer}
+                      style={{ flex: 1 }}
+                      contentFit="contain"
+                      nativeControls={false}
+                    />
+                  ) : (
                     <Image source={{ uri: media.uri }} style={{ flex: 1 }} resizeMode="contain" />
-                    {isVideo && (
-                      <View className="absolute inset-0 items-center justify-center">
-                        <Ionicons name="videocam" size={48} color="white" />
-                      </View>
-                    )}
-                  </>
+                  )
                 ) : (
                   <StoryBackground id={bgId} style={{ flex: 1 }} />
                 )}
@@ -776,24 +830,46 @@ export default function CreateStoryScreen() {
           </View>
         </View>
       ) : (
-        <View className="flex-1 items-center justify-center gap-6">
-          <TouchableOpacity className="items-center gap-3" onPress={pickMedia} activeOpacity={0.8}>
-            <View className="w-24 h-24 rounded-full bg-white/10 items-center justify-center">
-              <Ionicons name="image-outline" size={40} color="white" />
-            </View>
-            <Text className="text-white text-lg font-medium">Photo ou vidéo</Text>
-          </TouchableOpacity>
+        <View className="flex-1 items-center justify-center">
+          <View className="flex-row items-start justify-center gap-7">
+            <TouchableOpacity className="items-center gap-2" onPress={() => setCameraMode(true)} activeOpacity={0.8}>
+              <View className="w-20 h-20 rounded-full bg-white/10 items-center justify-center">
+                <Ionicons name="camera" size={34} color="white" />
+              </View>
+              <Text className="text-white text-sm font-medium">Caméra</Text>
+            </TouchableOpacity>
 
-          <Text className="text-white/30 text-sm">ou</Text>
+            <TouchableOpacity className="items-center gap-2" onPress={pickMedia} activeOpacity={0.8}>
+              <View className="w-20 h-20 rounded-full bg-white/10 items-center justify-center">
+                <Ionicons name="images" size={32} color="white" />
+              </View>
+              <Text className="text-white text-sm font-medium">Galerie</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity className="items-center gap-3" onPress={enterTextMode} activeOpacity={0.8}>
-            <View className="w-24 h-24 rounded-full bg-white/10 items-center justify-center">
-              <Text className="text-white" style={{ fontSize: 34, fontWeight: 'bold' }}>Aa</Text>
-            </View>
-            <Text className="text-white text-lg font-medium">Story texte</Text>
-          </TouchableOpacity>
+            <TouchableOpacity className="items-center gap-2" onPress={enterTextMode} activeOpacity={0.8}>
+              <View className="w-20 h-20 rounded-full bg-white/10 items-center justify-center">
+                <Text className="text-white" style={{ fontSize: 30, fontWeight: 'bold' }}>Aa</Text>
+              </View>
+              <Text className="text-white text-sm font-medium">Texte</Text>
+            </TouchableOpacity>
+          </View>
+          <Text className="text-white/50 text-sm mt-8">Visible pendant 24h</Text>
+        </View>
+      )}
 
-          <Text className="text-white/50 text-sm">Visible pendant 24h</Text>
+      {cameraMode && (
+        <View style={StyleSheet.absoluteFill}>
+          <StoryCamera onClose={() => setCameraMode(false)} onCapture={handleCameraCapture} />
+        </View>
+      )}
+
+      {trimUri && (
+        <View style={StyleSheet.absoluteFill}>
+          <VideoTrimmer
+            uri={trimUri}
+            onConfirm={handleTrimmed}
+            onCancel={() => setTrimUri(null)}
+          />
         </View>
       )}
 
