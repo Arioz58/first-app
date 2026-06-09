@@ -29,6 +29,7 @@ import Reanimated, {
   ZoomOut,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StoryBackground } from "../../components/StoryBackground";
 import { apiRequest } from "../../lib/api";
 import { connectSocket } from "../../lib/socket";
 import { getUserId } from "../../lib/storage";
@@ -65,7 +66,8 @@ type StoryText = {
 };
 type Story = {
   id: string;
-  mediaUrl: string;
+  mediaUrl?: string | null;
+  background?: string | null;
   expiresAt: string;
   createdAt: string;
   texts?: StoryText[] | null;
@@ -233,7 +235,8 @@ export default function StoryViewScreen() {
   // Précharge toutes les images en cache pour accélérer la navigation.
   useEffect(() => {
     stories.forEach((s) => {
-      if (!isVideoUrl(s.mediaUrl)) Image.prefetch(s.mediaUrl).catch(() => {});
+      if (s.mediaUrl && !isVideoUrl(s.mediaUrl))
+        Image.prefetch(s.mediaUrl).catch(() => {});
     });
   }, [stories]);
 
@@ -241,7 +244,7 @@ export default function StoryViewScreen() {
   useEffect(() => {
     const cur = stories[currentIndex];
     if (!cur) return;
-    if (isVideoUrl(cur.mediaUrl)) {
+    if (cur.mediaUrl && isVideoUrl(cur.mediaUrl)) {
       videoReadyRef.current = false;
       setVideoReady(false);
       player.muted = mutedRef.current;
@@ -270,10 +273,15 @@ export default function StoryViewScreen() {
     if (!stories.length || isZoomed) return;
     const currentStory = stories[currentIndex];
     if (!currentStory) return;
-    const isVid = isVideoUrl(currentStory.mediaUrl);
+    const hasMedia = !!currentStory.mediaUrl;
+    const isVid = isVideoUrl(currentStory.mediaUrl ?? "");
     // On attend que le média soit prêt (image chargée / vidéo bufferisée) avant
-    // de démarrer la barre et le timer.
-    const ready = isVid ? videoReady : loadedIds.has(currentStory.id);
+    // de démarrer la barre et le timer. Un fond coloré est prêt immédiatement.
+    const ready = !hasMedia
+      ? true
+      : isVid
+        ? videoReady
+        : loadedIds.has(currentStory.id);
     if (!ready) {
       progress.setValue(0);
       return;
@@ -291,9 +299,11 @@ export default function StoryViewScreen() {
   useEffect(() => {
     const cur = stories[currentIndex];
     if (!cur || !currentUserId || currentUserId === userId) return;
-    const ready = isVideoUrl(cur.mediaUrl)
-      ? videoReady
-      : loadedIds.has(cur.id);
+    const ready = !cur.mediaUrl
+      ? true
+      : isVideoUrl(cur.mediaUrl)
+        ? videoReady
+        : loadedIds.has(cur.id);
     if (!ready || viewedSentRef.current.has(cur.id)) return;
     viewedSentRef.current.add(cur.id);
     apiRequest(`/stories/${cur.id}/view`, { method: "POST" }).catch(() => {
@@ -513,10 +523,13 @@ export default function StoryViewScreen() {
   const current = stories[currentIndex];
   const isOwner = currentUserId === userId;
   const viewerCount = viewers.length || current.viewCount || 0;
-  const currentIsVideo = isVideoUrl(current.mediaUrl);
-  const mediaReady = currentIsVideo
-    ? videoReady
-    : loadedIds.has(current.id);
+  const hasMedia = !!current.mediaUrl;
+  const currentIsVideo = isVideoUrl(current.mediaUrl ?? "");
+  const mediaReady = !hasMedia
+    ? true
+    : currentIsVideo
+      ? videoReady
+      : loadedIds.has(current.id);
 
   return (
     <View style={{ flex: 1, backgroundColor: "black" }}>
@@ -586,7 +599,12 @@ export default function StoryViewScreen() {
 
       <GestureDetector gesture={composed}>
         <Reanimated.View style={[{ flex: 1 }, animatedStyle]}>
-          {currentIsVideo ? (
+          {!hasMedia ? (
+            <StoryBackground
+              id={current.background}
+              style={{ flex: 1 }}
+            />
+          ) : currentIsVideo ? (
             <VideoView
               player={player}
               style={{ flex: 1 }}
@@ -595,7 +613,7 @@ export default function StoryViewScreen() {
             />
           ) : (
             <Image
-              source={{ uri: current.mediaUrl }}
+              source={{ uri: current.mediaUrl ?? undefined }}
               style={{ flex: 1 }}
               resizeMode="contain"
               onLoadEnd={() =>

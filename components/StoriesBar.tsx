@@ -8,9 +8,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../lib/api';
 import { getUserId } from '../lib/storage';
+import { StoryBackground } from './StoryBackground';
 
 type StoryUser = { id: string; name: string; photoUrl: string | null };
-type Story = { id: string; mediaUrl: string; expiresAt: string };
+type Story = { id: string; mediaUrl?: string | null; background?: string | null; expiresAt: string };
 type StoryGroup = { user: StoryUser; stories: Story[]; hasUnviewed: boolean };
 
 export default function StoriesBar({ onRefresh }: { onRefresh?: () => void }) {
@@ -62,7 +63,11 @@ export default function StoriesBar({ onRefresh }: { onRefresh?: () => void }) {
           <View className="w-14 h-14 rounded-full bg-gray-100 items-center justify-center border-2 border-dashed border-gray-300">
             {hasMyStory ? (
               <View className="w-full h-full rounded-full border-2 border-blue-800 overflow-hidden">
-                <Image source={{ uri: myStories[0].mediaUrl }} className="w-full h-full" />
+                {myStories[0].mediaUrl ? (
+                  <Image source={{ uri: myStories[0].mediaUrl }} className="w-full h-full" />
+                ) : (
+                  <StoryBackground id={myStories[0].background} style={{ width: '100%', height: '100%' }} />
+                )}
               </View>
             ) : (
               <Ionicons name="add" size={24} color="#9CA3AF" />

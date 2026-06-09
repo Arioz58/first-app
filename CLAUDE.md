@@ -241,8 +241,12 @@ Pipeline média : sélection (expo-image-picker) → crop selon zoom (expo-image
 - Détection vidéo côté viewer via l'**extension de l'URL** (`.mp4` garanti par `upload.controller.ts`)
 - **`StoryView`** (modèle Prisma, unique `[storyId, viewerId]`, cascade) : `recordStoryView` upsert idempotent (pas d'auto-vue), `getStoryViewers` owner-only ; `getActiveStories(viewerId)` tague `viewed`/`hasUnviewed`, `getMyStories` expose `viewCount` via `_count`
 
+### Story fond coloré (texte seul) ✅
+- Éditeur (`create.tsx`) : écran de choix à 2 boutons (**Photo/vidéo** ou **Story texte**) ; en mode texte, `bgId` (preset) + fond `StoryBackground` au lieu de l'image, **zoom/pan image neutralisés** via shared value `isTextOnly` (le pinch/rotation ne pilotent que le texte actif), sélecteur de fond (pastilles en bas). Publication **sans upload S3** : `POST /stories { background, texts }` (transform identité `s=1, tx=0, ty=0`).
+- Presets dans `lib/storyBackgrounds.ts` (id → `colors[]`, 1 = uni / 2+ = dégradé) ; rendu partagé `components/StoryBackground.tsx` (`View` ou `expo-linear-gradient`). **Stocké = l'id du preset** → aucune migration pour ajouter un fond.
+- Viewer + StoriesBar : si pas de `mediaUrl`, rendent `StoryBackground` ; le viewer démarre texte+timer **immédiatement** (pas de gating média).
+
 ### Reste à faire (features stories) 🔜
-- **Story fond coloré** (texte seul, sans photo) — fond uni/dégradé
 - Idées : stickers/emojis (réutilise le système de drag/pinch/rotate), mentions `@`, swipe-down pour fermer, audience (amis proches), highlights/archive au-delà de 24h
 
 ---

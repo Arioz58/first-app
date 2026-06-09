@@ -28,7 +28,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StoryBackground } from '../../components/StoryBackground';
 import { apiRequest } from '../../lib/api';
+import { DEFAULT_BACKGROUND_ID, STORY_BACKGROUNDS } from '../../lib/storyBackgrounds';
 import {
   DEFAULT_BG_MODE,
   DEFAULT_BOLD,
@@ -253,6 +255,8 @@ export default function CreateStoryScreen() {
   const trashCenterY = winH - insets.bottom - 131;
 
   const [media, setMedia] = useState<PickedMedia | null>(null);
+  // Mode « story texte seul » : id du preset de fond (null = mode média)
+  const [bgId, setBgId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Textes multiples
@@ -278,6 +282,12 @@ export default function CreateStoryScreen() {
   const savedTranslateY = useSharedValue(0);
   const containerW = useSharedValue(0);
   const containerH = useSharedValue(0);
+
+  // Mode texte seul (fond coloré, pas de média) → neutralise le zoom/pan image
+  const isTextOnly = useSharedValue(false);
+  useEffect(() => {
+    isTextOnly.value = !!bgId && !media;
+  }, [bgId, media, isTextOnly]);
 
   // Poubelle partagée entre tous les textes
   const isDraggingAnyText = useSharedValue(false);
@@ -321,19 +331,19 @@ export default function CreateStoryScreen() {
   const pinchGesture = Gesture.Pinch()
     .onBegin(() => {
       if (activeTextId.value !== '') activeSavedScale.value = activeScale.value;
-      else savedScale.value = scale.value;
+      else if (!isTextOnly.value) savedScale.value = scale.value;
     })
     .onUpdate((e) => {
       if (activeTextId.value !== '') {
         activeScale.value = Math.max(0.3, activeSavedScale.value * e.scale);
-      } else {
+      } else if (!isTextOnly.value) {
         scale.value = Math.max(1, savedScale.value * e.scale);
       }
     })
     .onEnd(() => {
       if (activeTextId.value !== '') {
         activeSavedScale.value = activeScale.value;
-      } else {
+      } else if (!isTextOnly.value) {
         savedScale.value = scale.value;
         clampTranslation(scale.value);
       }
@@ -371,8 +381,8 @@ export default function CreateStoryScreen() {
       savedTranslateY.value = translateY.value;
     })
     .onUpdate((e) => {
-      // Si un texte est en cours de manipulation, on ne translate pas l'image
-      if (activeTextId.value !== '') return;
+      // Si un texte est en cours de manipulation (ou mode texte seul), pas de pan image
+      if (activeTextId.value !== '' || isTextOnly.value) return;
       const maxX = Math.max(0, (containerW.value * (scale.value - 1)) / 2);
       const maxY = Math.max(0, (containerH.value * (scale.value - 1)) / 2);
       translateX.value = Math.max(-maxX, Math.min(maxX, savedTranslateX.value + e.translationX));
@@ -500,6 +510,7 @@ export default function CreateStoryScreen() {
       const asset = result.assets[0];
       resetTransform();
       setTexts([]);
+      setBgId(null);
       setMedia({
         uri: asset.uri,
         mimeType: asset.mimeType ?? 'image/jpeg',
@@ -509,16 +520,50 @@ export default function CreateStoryScreen() {
     }
   };
 
+  // Entre en mode « story texte seul » : fond coloré par défaut + éditeur de texte ouvert
+  const enterTextMode = () => {
+    resetTransform();
+    setTexts([]);
+    setMedia(null);
+    setBgId(DEFAULT_BACKGROUND_ID);
+    openNewTextEditor();
+  };
+
   const handlePublish = async () => {
-    if (!media) return;
+    if (!media && !bgId) return;
     setLoading(true);
     try {
-      const isVideo = media.mimeType.startsWith('video/');
-      let finalUri = media.uri;
-
       // Lire les valeurs Reanimated une seule fois
       const W = containerW.value;
       const H = containerH.value;
+
+      // ── Story « fond coloré » (texte seul) : pas d'upload, transform identité ──
+      if (!media) {
+        const storyTexts = texts
+          .filter((t) => t.content.trim())
+          .map((t) => ({
+            content: t.content,
+            normX: (W / 2 + t.x) / W,
+            normY: (H / 2 + t.y) / H,
+            scale: t.scale,
+            rotation: t.rotation,
+            color: t.color,
+            bgMode: t.bgMode,
+            bold: t.bold,
+            italic: t.italic,
+            underline: t.underline,
+          }));
+        await apiRequest('/stories', {
+          method: 'POST',
+          body: { background: bgId, ...(storyTexts.length > 0 && { texts: storyTexts }) },
+        });
+        router.replace('/(tabs)');
+        return;
+      }
+
+      const isVideo = media.mimeType.startsWith('video/');
+      let finalUri = media.uri;
+
       const s = scale.value;
       const tx = translateX.value;
       const ty = translateY.value;
@@ -611,7 +656,7 @@ export default function CreateStoryScreen() {
           <Ionicons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
         <Text className="text-white text-lg font-semibold flex-1">Nouvelle story</Text>
-        {media && (
+        {(media || bgId) && (
           <TouchableOpacity onPress={handlePublish} disabled={loading}>
             {loading ? (
               <ActivityIndicator color="white" />
@@ -624,16 +669,22 @@ export default function CreateStoryScreen() {
         )}
       </View>
 
-      {media ? (
+      {media || bgId ? (
         <View style={{ flex: 1 }}>
           <View style={{ flex: 1, overflow: 'hidden' }} onLayout={onContainerLayout}>
             <GestureDetector gesture={composed}>
               <Reanimated.View style={[{ flex: 1 }, animatedStyle]}>
-                <Image source={{ uri: media.uri }} style={{ flex: 1 }} resizeMode="contain" />
-                {isVideo && (
-                  <View className="absolute inset-0 items-center justify-center">
-                    <Ionicons name="videocam" size={48} color="white" />
-                  </View>
+                {media ? (
+                  <>
+                    <Image source={{ uri: media.uri }} style={{ flex: 1 }} resizeMode="contain" />
+                    {isVideo && (
+                      <View className="absolute inset-0 items-center justify-center">
+                        <Ionicons name="videocam" size={48} color="white" />
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  <StoryBackground id={bgId} style={{ flex: 1 }} />
                 )}
                 {texts.map(item => (
                   <TextOverlay
@@ -688,31 +739,62 @@ export default function CreateStoryScreen() {
           )}
 
           <View style={styles.controls} pointerEvents="box-none">
+            {/* Sélecteur de fond (mode texte seul uniquement) */}
+            {!media && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                style={{ flexGrow: 0 }}
+                contentContainerStyle={styles.bgRow}
+              >
+                {STORY_BACKGROUNDS.map((b) => (
+                  <TouchableOpacity key={b.id} onPress={() => setBgId(b.id)} activeOpacity={0.8}>
+                    <StoryBackground
+                      id={b.id}
+                      style={[styles.bgSwatch, bgId === b.id && styles.bgSwatchActive]}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
             <Text className="text-white/40 text-xs">
               {texts.length > 0
                 ? 'Tape pour ajouter · Glisse un texte pour déplacer'
-                : 'Tape pour ajouter du texte · Pince pour zoomer'}
+                : media
+                  ? 'Tape pour ajouter du texte · Pince pour zoomer'
+                  : 'Tape pour ajouter du texte'}
             </Text>
             <TouchableOpacity
               className="bg-white/20 border border-white/40 rounded-full px-8 py-3"
               onPress={pickMedia}
             >
-              <Text className="text-white font-medium">Changer</Text>
+              <Text className="text-white font-medium">
+                {media ? 'Changer' : 'Photo / vidéo'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
       ) : (
-        <TouchableOpacity
-          className="flex-1 items-center justify-center gap-4"
-          onPress={pickMedia}
-          activeOpacity={0.8}
-        >
-          <View className="w-24 h-24 rounded-full bg-white/10 items-center justify-center">
-            <Ionicons name="image-outline" size={40} color="white" />
-          </View>
-          <Text className="text-white text-lg font-medium">Choisir une photo ou vidéo</Text>
-          <Text className="text-white/50 text-sm">Elle sera visible pendant 24h</Text>
-        </TouchableOpacity>
+        <View className="flex-1 items-center justify-center gap-6">
+          <TouchableOpacity className="items-center gap-3" onPress={pickMedia} activeOpacity={0.8}>
+            <View className="w-24 h-24 rounded-full bg-white/10 items-center justify-center">
+              <Ionicons name="image-outline" size={40} color="white" />
+            </View>
+            <Text className="text-white text-lg font-medium">Photo ou vidéo</Text>
+          </TouchableOpacity>
+
+          <Text className="text-white/30 text-sm">ou</Text>
+
+          <TouchableOpacity className="items-center gap-3" onPress={enterTextMode} activeOpacity={0.8}>
+            <View className="w-24 h-24 rounded-full bg-white/10 items-center justify-center">
+              <Text className="text-white" style={{ fontSize: 34, fontWeight: 'bold' }}>Aa</Text>
+            </View>
+            <Text className="text-white text-lg font-medium">Story texte</Text>
+          </TouchableOpacity>
+
+          <Text className="text-white/50 text-sm">Visible pendant 24h</Text>
+        </View>
       )}
 
       {isEditingText && (
@@ -919,5 +1001,24 @@ const styles = StyleSheet.create({
     borderColor: 'white',
     borderWidth: 3,
     transform: [{ scale: 1.18 }],
+  },
+  bgRow: {
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+    alignItems: 'center',
+  },
+  bgSwatch: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.5)',
+    overflow: 'hidden',
+  },
+  bgSwatchActive: {
+    borderColor: 'white',
+    borderWidth: 3,
+    transform: [{ scale: 1.15 }],
   },
 });
