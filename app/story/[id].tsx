@@ -19,10 +19,14 @@ import {
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, {
+  FadeInDown,
+  FadeOutDown,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  ZoomIn,
+  ZoomOut,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../../lib/api";
@@ -113,6 +117,8 @@ export default function StoryViewScreen() {
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
   const [sentFlash, setSentFlash] = useState(false);
+  const [showReactions, setShowReactions] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   // ids des stories dont la vue a déjà été enregistrée (1 POST par story max)
   const viewedSentRef = useRef<Set<string>>(new Set());
   // ids des stories dont l'image a déjà été chargée (et donc en cache) →
@@ -370,6 +376,8 @@ export default function StoryViewScreen() {
 
   const goNext = () => {
     if (isZoomed) return;
+    if (keyboardVisible) return Keyboard.dismiss();
+    if (showReactions) return closeReactions();
     if (timer.current) clearTimeout(timer.current);
     if (currentIndex < stories.length - 1) setCurrentIndex((i) => i + 1);
     else router.back();
@@ -377,6 +385,8 @@ export default function StoryViewScreen() {
 
   const goPrev = () => {
     if (isZoomed) return;
+    if (keyboardVisible) return Keyboard.dismiss();
+    if (showReactions) return closeReactions();
     if (timer.current) clearTimeout(timer.current);
     if (currentIndex > 0) setCurrentIndex((i) => i - 1);
   };
@@ -452,6 +462,39 @@ export default function StoryViewScreen() {
       setSending(false);
     }
   };
+
+  // Popover de réactions : pause la story tant qu'il est ouvert
+  const openReactions = () => {
+    pauseStory();
+    setShowReactions(true);
+  };
+  const closeReactions = () => {
+    setShowReactions(false);
+    resumeStory();
+  };
+  const toggleReactions = () => {
+    if (showReactions) closeReactions();
+    else openReactions();
+  };
+
+  // Le clavier est la source de vérité : pause tant qu'il est ouvert, reprise à sa fermeture
+  useEffect(() => {
+    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const sub1 = Keyboard.addListener(showEvt, () => {
+      setKeyboardVisible(true);
+      pauseStory();
+    });
+    const sub2 = Keyboard.addListener(hideEvt, () => {
+      setKeyboardVisible(false);
+      resumeStory();
+    });
+    return () => {
+      sub1.remove();
+      sub2.remove();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stories, currentIndex]);
 
   const handleDelete = async () => {
     const story = stories[currentIndex];
@@ -787,40 +830,71 @@ export default function StoryViewScreen() {
               </View>
             )}
 
-            <View className="flex-row justify-around mb-2 px-2">
-              {QUICK_EMOJIS.map((e) => (
-                <TouchableOpacity
-                  key={e}
-                  onPress={() => sendReply(e)}
-                  disabled={sending}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={{ fontSize: 30 }}>{e}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {/* Popover flottant de réactions (ouvert via le smiley) */}
+            {showReactions && (
+              <Reanimated.View
+                entering={FadeInDown.duration(150)}
+                exiting={FadeOutDown.duration(120)}
+                className="self-end mr-1 mb-2 bg-black/70 rounded-full px-4 py-2"
+              >
+                <View className="flex-row gap-4">
+                  {QUICK_EMOJIS.map((e) => (
+                    <TouchableOpacity
+                      key={e}
+                      onPress={() => {
+                        sendReply(e);
+                        closeReactions();
+                      }}
+                      disabled={sending}
+                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                    >
+                      <Text style={{ fontSize: 28 }}>{e}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </Reanimated.View>
+            )}
 
             <View className="flex-row items-center gap-2">
-              <TextInput
-                className="flex-1 border border-white/40 rounded-full px-4 py-2.5 text-white text-base"
-                placeholder="Envoyer un message…"
-                placeholderTextColor="rgba(255,255,255,0.6)"
-                value={replyText}
-                onChangeText={setReplyText}
-                onFocus={pauseStory}
-                onBlur={resumeStory}
-                returnKeyType="send"
-                onSubmitEditing={() => sendReply(replyText)}
-                multiline
-              />
-              {replyText.trim().length > 0 && (
+              <View className="flex-1 flex-row items-center bg-black/60 rounded-full px-4">
+                <TextInput
+                  className="flex-1 py-2.5 text-white text-base"
+                  placeholder="Envoyer un message…"
+                  placeholderTextColor="rgba(255,255,255,0.55)"
+                  value={replyText}
+                  onChangeText={setReplyText}
+                  onFocus={() => {
+                    if (showReactions) setShowReactions(false);
+                  }}
+                  returnKeyType="send"
+                  onSubmitEditing={() => sendReply(replyText)}
+                  multiline
+                />
                 <TouchableOpacity
-                  onPress={() => sendReply(replyText)}
-                  disabled={sending}
-                  className="w-10 h-10 rounded-full bg-nexa items-center justify-center"
+                  onPress={toggleReactions}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  className="pl-2"
                 >
-                  <Ionicons name="paper-plane" size={18} color="white" />
+                  <Ionicons
+                    name={showReactions ? "happy" : "happy-outline"}
+                    size={24}
+                    color="rgba(255,255,255,0.85)"
+                  />
                 </TouchableOpacity>
+              </View>
+              {replyText.trim().length > 0 && (
+                <Reanimated.View
+                  entering={ZoomIn.duration(180)}
+                  exiting={ZoomOut.duration(150)}
+                >
+                  <TouchableOpacity
+                    onPress={() => sendReply(replyText)}
+                    disabled={sending}
+                    className="w-10 h-10 rounded-full bg-nexa items-center justify-center"
+                  >
+                    <Ionicons name="paper-plane" size={18} color="white" />
+                  </TouchableOpacity>
+                </Reanimated.View>
               )}
             </View>
           </View>
