@@ -178,7 +178,9 @@ PATCH /conversations/:id                          → renommer groupe (admin req
 POST /upload/presigned-url                        → URL S3 presignée (contentType → ext/folder) + publicUrl CloudFront
 POST /stories                                     → créer story (mediaUrl + texts[] JSON, expire dans 24h)
 GET  /stories                                     → toutes stories actives groupées par user
-GET  /stories/me                                  → mes stories actives
+GET  /stories/me                                  → mes stories actives (+ viewCount)
+POST /stories/:storyId/view                       → enregistrer une vue (upsert idempotent, pas d'auto-vue)
+GET  /stories/:storyId/views                      → liste des viewers (propriétaire uniquement)
 DELETE /stories/:storyId                          → supprimer (propriétaire uniquement)
 ```
 
@@ -227,18 +229,20 @@ Pipeline média : sélection (expo-image-picker) → crop selon zoom (expo-image
 - **Vidéo** (expo-video) : durée de progression = durée réelle de la vidéo, mute/unmute, lecture auto une fois bufferisée
 - **Gating média** : texte + timer ne démarrent qu'une fois l'image chargée (`onLoadEnd`) / la vidéo prête (`statusChange`) → pas de texte/timer avant l'affichage ; `loadedIds` (cache des stories vues, retour instantané) + `Image.prefetch`
 - Temps depuis publication (min si < 1h, sinon h) ; suppression (propriétaire)
+- **« Vu par »** : vue enregistrée (`POST /stories/:id/view`) dès que le média est affiché (1× par story via `viewedSentRef`, jamais sur ses propres stories) ; côté propriétaire, **drawer sombre repliable** toujours visible en bas (poignée + avatars empilés des 3 derniers viewers + compteur), **draggable** (Gesture.Pan + reanimated, aimantation ouvert/fermé selon position/vélocité) ou tap pour ouvrir → liste détaillée des viewers (`GET /stories/:id/views`, owner-only, pré-fetch au chargement). Ouverture = pause de la story + backdrop assombrissant cliquable pour fermer
+- **Répondre à une story** (non-propriétaire) : barre en bas avec **emojis rapides** (`QUICK_EMOJIS`, envoi en un tap) + champ « Envoyer un message… » (`KeyboardAvoidingView`, pause de la story au focus). Envoi = `POST /conversations/direct` `{ targetUserId }` puis `socket.emit('send_message', { type: 'story_reply', storyId, storyMediaUrl })` ; feedback « Envoyé ✓ », pas de navigation (on reste dans la story). Affichage **contextualisé** dans `chat/[id].tsx` : icône `↩` + libellé « a répondu / a **réagi** à votre story » (nuance selon emoji-only), **vignette verticale** `storyMediaUrl` (50×84), puis bulle de texte — ou **réaction emoji en grand hors bulle** (~50px) détectée via `isEmojiOnly` (`\p{Extended_Pictographic}`). Bulles alignées au contenu (`items-end/start` sur le conteneur, plus de bulle pleine largeur)
 
 ### StoriesBar (`components/StoriesBar.tsx`)
 - Bouton **+** (coin de l'avatar) pour ajouter une story supplémentaire quand on en a déjà une — le tap sur l'avatar reste « visionner ma story »
+- **Anneau « non vu »** : bordure `border-nexa` (vert) si le groupe a au moins une story non vue, sinon `border-gray-300` (basé sur `hasUnviewed` renvoyé par `GET /stories`)
 
 ### Données / backend
 - `texts` stocké en colonne **`Json`** → champs libres persistés tels quels (`content, normX, normY, scale, rotation, color, bgMode, bold, italic, underline`), **aucune validation backend** (le type étroit du service est cosmétique)
 - Détection vidéo côté viewer via l'**extension de l'URL** (`.mp4` garanti par `upload.controller.ts`)
+- **`StoryView`** (modèle Prisma, unique `[storyId, viewerId]`, cascade) : `recordStoryView` upsert idempotent (pas d'auto-vue), `getStoryViewers` owner-only ; `getActiveStories(viewerId)` tague `viewed`/`hasUnviewed`, `getMyStories` expose `viewCount` via `_count`
 
 ### Reste à faire (features stories) 🔜
 - **Story fond coloré** (texte seul, sans photo) — fond uni/dégradé
-- **Répondre à une story** — barre « Envoyer un message » dans le viewer → message dans la conversation directe (réutilise la messagerie existante)
-- **« Vu par »** — modèle `StoryView` (backend) + endpoint d'enregistrement de vue + compteur/liste des viewers + **anneau « non vu »** dans StoriesBar
 - Idées : stickers/emojis (réutilise le système de drag/pinch/rotate), mentions `@`, swipe-down pour fermer, audience (amis proches), highlights/archive au-delà de 24h
 
 ---

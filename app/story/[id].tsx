@@ -5,10 +5,15 @@ import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
+  FlatList,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -21,6 +26,7 @@ import Reanimated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../../lib/api";
+import { connectSocket } from "../../lib/socket";
 import { getUserId } from "../../lib/storage";
 import {
   getTextFontStyle,
@@ -31,6 +37,15 @@ import {
 
 const { width } = Dimensions.get("window");
 const STORY_DURATION = 5000;
+// Réactions rapides au-dessus du champ de réponse (style Instagram)
+const QUICK_EMOJIS = ["❤️", "😂", "😮", "😢", "👏", "🔥"];
+// Ressort du drawer « Vu par » : rapide et sans rebond (overshootClamping)
+const SHEET_SPRING = {
+  damping: 24,
+  stiffness: 220,
+  mass: 0.7,
+  overshootClamping: true,
+};
 
 type StoryText = {
   content: string;
@@ -50,6 +65,12 @@ type Story = {
   expiresAt: string;
   createdAt: string;
   texts?: StoryText[] | null;
+  viewCount?: number;
+};
+type ViewerRow = {
+  id: string;
+  createdAt: string;
+  viewer: { id: string; name: string; photoUrl: string | null };
 };
 type StoryGroup = {
   user: { id: string; name: string; photoUrl: string | null };
@@ -85,6 +106,15 @@ export default function StoryViewScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState("");
   const [isZoomed, setIsZoomed] = useState(false);
+  // Drawer « Vu par » (propriétaire) : barre repliée + détail au drag/tap
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [viewers, setViewers] = useState<ViewerRow[]>([]);
+  // Réponse à une story (non-propriétaire)
+  const [replyText, setReplyText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sentFlash, setSentFlash] = useState(false);
+  // ids des stories dont la vue a déjà été enregistrée (1 POST par story max)
+  const viewedSentRef = useRef<Set<string>>(new Set());
   // ids des stories dont l'image a déjà été chargée (et donc en cache) →
   // évite d'afficher le texte avant l'image, mais réaffiche instantanément
   // une story déjà vue (retour en arrière).
@@ -109,6 +139,10 @@ export default function StoryViewScreen() {
   const savedScale = useSharedValue(1);
   const rotation = useSharedValue(0);
   const savedRotation = useSharedValue(0);
+
+  // Drawer « Vu par » : 0 = replié, 1 = ouvert
+  const sheetProgress = useSharedValue(0);
+  const savedSheet = useSharedValue(0);
 
   const updateZoomed = (zoomed: boolean) => setIsZoomed(zoomed);
 
@@ -153,6 +187,21 @@ export default function StoryViewScreen() {
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }, { rotate: `${rotation.value}rad` }],
+  }));
+
+  // Hauteurs du drawer (barre repliée visible vs panneau ouvert)
+  const COLLAPSED_VISIBLE = 60 + insets.bottom;
+  const OPEN_HEIGHT = Dimensions.get("window").height * 0.55;
+  const SHEET_RANGE = OPEN_HEIGHT - COLLAPSED_VISIBLE;
+
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: (1 - sheetProgress.value) * SHEET_RANGE }],
+  }));
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: sheetProgress.value * 0.55,
+  }));
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${sheetProgress.value * 180}deg` }],
   }));
 
   useEffect(() => {
@@ -231,6 +280,37 @@ export default function StoryViewScreen() {
     };
   }, [stories, currentIndex, isZoomed, loadedIds, videoReady]);
 
+  // Enregistre la vue dès que le média de la story courante est affiché
+  // (une seule fois par story, et jamais sur ses propres stories).
+  useEffect(() => {
+    const cur = stories[currentIndex];
+    if (!cur || !currentUserId || currentUserId === userId) return;
+    const ready = isVideoUrl(cur.mediaUrl)
+      ? videoReady
+      : loadedIds.has(cur.id);
+    if (!ready || viewedSentRef.current.has(cur.id)) return;
+    viewedSentRef.current.add(cur.id);
+    apiRequest(`/stories/${cur.id}/view`, { method: "POST" }).catch(() => {
+      viewedSentRef.current.delete(cur.id); // réessai possible si échec
+    });
+  }, [stories, currentIndex, currentUserId, userId, videoReady, loadedIds]);
+
+  // Pré-charge les viewers de la story courante (propriétaire) → alimente les
+  // avatars empilés et rend le détail disponible instantanément.
+  useEffect(() => {
+    const owner = !!currentUserId && currentUserId === userId;
+    const cur = stories[currentIndex];
+    if (!owner || !cur) return;
+    let active = true;
+    setViewers([]);
+    apiRequest<ViewerRow[]>(`/stories/${cur.id}/views`)
+      .then((rows) => active && setViewers(rows))
+      .catch(() => active && setViewers([]));
+    return () => {
+      active = false;
+    };
+  }, [currentUserId, userId, stories, currentIndex]);
+
   const startProgress = () => {
     pausedRef.current = false;
     remaining.current = durationRef.current;
@@ -301,6 +381,78 @@ export default function StoryViewScreen() {
     if (currentIndex > 0) setCurrentIndex((i) => i - 1);
   };
 
+  const openSheet = () => {
+    pauseStory();
+    setSheetOpen(true);
+    savedSheet.value = 1;
+    sheetProgress.value = withSpring(1, SHEET_SPRING);
+  };
+
+  const closeSheet = () => {
+    setSheetOpen(false);
+    savedSheet.value = 0;
+    sheetProgress.value = withSpring(0, SHEET_SPRING);
+    resumeStory();
+  };
+
+  // Drag interactif : le drawer suit le doigt, aimantation ouvert/fermé au relâcher
+  const sheetPan = Gesture.Pan()
+    .onStart(() => {
+      runOnJS(pauseStory)();
+    })
+    .onUpdate((e) => {
+      const next = savedSheet.value - e.translationY / SHEET_RANGE;
+      sheetProgress.value = Math.min(1, Math.max(0, next));
+    })
+    .onEnd((e) => {
+      const open =
+        e.velocityY < -300
+          ? true
+          : e.velocityY > 300
+            ? false
+            : sheetProgress.value > 0.5;
+      sheetProgress.value = withSpring(open ? 1 : 0, SHEET_SPRING);
+      savedSheet.value = open ? 1 : 0;
+      runOnJS(setSheetOpen)(open);
+      if (!open) runOnJS(resumeStory)();
+    });
+
+  const sheetTap = Gesture.Tap().onEnd(() => {
+    runOnJS(openSheet)();
+  });
+
+  const sheetGesture = Gesture.Exclusive(sheetPan, sheetTap);
+
+  // Répond à la story courante → message dans la conversation directe avec l'auteur
+  const sendReply = async (raw: string) => {
+    const content = raw.trim();
+    const story = stories[currentIndex];
+    if (!content || sending || !story) return;
+    setSending(true);
+    try {
+      const conv = await apiRequest<{ id: string }>("/conversations/direct", {
+        method: "POST",
+        body: { targetUserId: userId },
+      });
+      const socket = await connectSocket();
+      socket.emit("send_message", {
+        conversationId: conv.id,
+        content,
+        type: "story_reply",
+        storyId: story.id,
+        storyMediaUrl: story.mediaUrl,
+      });
+      setReplyText("");
+      Keyboard.dismiss();
+      setSentFlash(true);
+      setTimeout(() => setSentFlash(false), 1500);
+    } catch {
+      // échec silencieux (réseau) — l'utilisateur peut réessayer
+    } finally {
+      setSending(false);
+    }
+  };
+
   const handleDelete = async () => {
     const story = stories[currentIndex];
     await apiRequest(`/stories/${story.id}`, { method: "DELETE" });
@@ -317,6 +469,7 @@ export default function StoryViewScreen() {
 
   const current = stories[currentIndex];
   const isOwner = currentUserId === userId;
+  const viewerCount = viewers.length || current.viewCount || 0;
   const currentIsVideo = isVideoUrl(current.mediaUrl);
   const mediaReady = currentIsVideo
     ? videoReady
@@ -495,6 +648,183 @@ export default function StoryViewScreen() {
             </Text>
           </View>
         </View>
+      )}
+
+      {isOwner && !isZoomed && (
+        <>
+          {/* Fond assombrissant cliquable (actif uniquement drawer ouvert) */}
+          <Reanimated.View
+            pointerEvents={sheetOpen ? "auto" : "none"}
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: "black" },
+              backdropStyle,
+            ]}
+          >
+            <TouchableOpacity
+              style={{ flex: 1 }}
+              activeOpacity={1}
+              onPress={closeSheet}
+            />
+          </Reanimated.View>
+
+          {/* Drawer sombre : barre repliée (poignée + avatars + compteur) + liste */}
+          <Reanimated.View
+            style={[
+              {
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: OPEN_HEIGHT,
+                backgroundColor: "#171717",
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+              },
+              sheetStyle,
+            ]}
+          >
+            <GestureDetector gesture={sheetGesture}>
+              <View style={{ paddingTop: 8 }}>
+                <View className="items-center pb-2">
+                  <View className="w-10 h-1 rounded-full bg-white/30" />
+                </View>
+                <View
+                  className="flex-row items-center justify-between px-5"
+                  style={{ height: COLLAPSED_VISIBLE - 28 }}
+                >
+                  <View className="flex-row items-center">
+                    {viewers.slice(0, 3).map((v, i) => (
+                      <View
+                        key={v.id}
+                        style={{ marginLeft: i === 0 ? 0 : -10 }}
+                        className="w-8 h-8 rounded-full overflow-hidden border-2 border-neutral-900 bg-blue-200 items-center justify-center"
+                      >
+                        {v.viewer.photoUrl ? (
+                          <Image
+                            source={{ uri: v.viewer.photoUrl }}
+                            className="w-full h-full"
+                          />
+                        ) : (
+                          <Text className="text-blue-900 text-xs font-bold">
+                            {v.viewer.name[0]?.toUpperCase()}
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                    <View className="flex-row items-center gap-1.5 ml-2">
+                      <Ionicons name="eye-outline" size={18} color="white" />
+                      <Text className="text-white text-sm font-semibold">
+                        {viewerCount} {viewerCount > 1 ? "vues" : "vue"}
+                      </Text>
+                    </View>
+                  </View>
+                  <Reanimated.View style={chevronStyle}>
+                    <Ionicons
+                      name="chevron-up"
+                      size={22}
+                      color="rgba(255,255,255,0.6)"
+                    />
+                  </Reanimated.View>
+                </View>
+              </View>
+            </GestureDetector>
+
+            {viewers.length === 0 ? (
+              <View className="flex-1 items-center justify-center">
+                <Text className="text-white/40 text-sm">
+                  {"Personne n'a encore vu cette story"}
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={viewers}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{
+                  paddingTop: 4,
+                  paddingBottom: insets.bottom + 16,
+                }}
+                renderItem={({ item }) => (
+                  <View className="flex-row items-center gap-3 px-5 py-2.5">
+                    <View className="w-11 h-11 rounded-full overflow-hidden bg-blue-200 items-center justify-center">
+                      {item.viewer.photoUrl ? (
+                        <Image
+                          source={{ uri: item.viewer.photoUrl }}
+                          className="w-full h-full"
+                        />
+                      ) : (
+                        <Text className="text-blue-900 font-bold">
+                          {item.viewer.name[0]?.toUpperCase()}
+                        </Text>
+                      )}
+                    </View>
+                    <Text className="flex-1 text-white text-sm font-medium">
+                      {item.viewer.name}
+                    </Text>
+                    <Text className="text-white/40 text-xs">
+                      {formatStoryTime(item.createdAt)}
+                    </Text>
+                  </View>
+                )}
+              />
+            )}
+          </Reanimated.View>
+        </>
+      )}
+
+      {!isOwner && !isZoomed && (
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}
+        >
+          <View className="px-3 pt-2" style={{ paddingBottom: insets.bottom + 8 }}>
+            {sentFlash && (
+              <View className="items-center mb-2">
+                <View className="flex-row items-center gap-1 bg-white/15 px-4 py-1.5 rounded-full">
+                  <Ionicons name="checkmark" size={14} color="white" />
+                  <Text className="text-white text-xs">Envoyé</Text>
+                </View>
+              </View>
+            )}
+
+            <View className="flex-row justify-around mb-2 px-2">
+              {QUICK_EMOJIS.map((e) => (
+                <TouchableOpacity
+                  key={e}
+                  onPress={() => sendReply(e)}
+                  disabled={sending}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={{ fontSize: 30 }}>{e}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View className="flex-row items-center gap-2">
+              <TextInput
+                className="flex-1 border border-white/40 rounded-full px-4 py-2.5 text-white text-base"
+                placeholder="Envoyer un message…"
+                placeholderTextColor="rgba(255,255,255,0.6)"
+                value={replyText}
+                onChangeText={setReplyText}
+                onFocus={pauseStory}
+                onBlur={resumeStory}
+                returnKeyType="send"
+                onSubmitEditing={() => sendReply(replyText)}
+                multiline
+              />
+              {replyText.trim().length > 0 && (
+                <TouchableOpacity
+                  onPress={() => sendReply(replyText)}
+                  disabled={sending}
+                  className="w-10 h-10 rounded-full bg-nexa items-center justify-center"
+                >
+                  <Ionicons name="paper-plane" size={18} color="white" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       )}
     </View>
   );

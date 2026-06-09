@@ -11,7 +11,7 @@ import { getUserId } from '../lib/storage';
 
 type StoryUser = { id: string; name: string; photoUrl: string | null };
 type Story = { id: string; mediaUrl: string; expiresAt: string };
-type StoryGroup = { user: StoryUser; stories: Story[] };
+type StoryGroup = { user: StoryUser; stories: Story[]; hasUnviewed: boolean };
 
 export default function StoriesBar({ onRefresh }: { onRefresh?: () => void }) {
   const router = useRouter();
@@ -112,7 +112,11 @@ export default function StoriesBar({ onRefresh }: { onRefresh?: () => void }) {
               router.push({ pathname: '/story/[id]' as any, params: { id: item.stories[0].id, userId: item.user.id } })
             }
           >
-            <View className="w-14 h-14 rounded-full border-2 border-blue-800 overflow-hidden">
+            <View
+              className={`w-14 h-14 rounded-full border-2 overflow-hidden ${
+                item.hasUnviewed ? 'border-nexa' : 'border-gray-300'
+              }`}
+            >
               {item.user.photoUrl ? (
                 <Image source={{ uri: item.user.photoUrl }} className="w-full h-full" />
               ) : (
