@@ -225,7 +225,8 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 - **Geste stabilisé** (`useMemo` + handlers via ref) : indispensable, sinon le re-render du chrono recrée le geste et coupe l'enregistrement en cours
 - Anneau/bouton animé (reanimated) + barre de progression + chrono REC ; flash (off/on/auto, `enableTorch` en vidéo), switch avant/arrière
 - **Pinch-to-zoom** : `Gesture.Pinch` (stabilisé `useMemo`) → prop `zoom` du `CameraView` (0 = 1x, 1 = max) ; remis à 0 au switch d'objectif
-- **Crans de zoom 0.5× / 1×** (style iOS, indicateur + sélecteur) : `getAvailableLensesAsync()` détecte l'ultra grand angle (`/ultra/i`), `selectedLens` bascule d'objectif ; re-fetch via effet sur `facing` (⚠️ **ne pas utiliser `onAvailableLensesChanged`** : son type tire les sources web cassées d'expo-camera et casse `tsc`). Pastille active surlignée + facteur live pendant le pinch
+- **Zoom continu façon iOS** : un **facteur global** (`factor`) piloté par le pinch ; en dézoomant sous 1× on bascule sur l'**ultra grand angle** (`selectedLens`), en zoomant on revient — `getAvailableLensesAsync()` détecte l'ultra-wide (`/ultra/i`), re-fetch via effet sur `facing` (⚠️ **pas `onAvailableLensesChanged`** : son type tire les sources web cassées d'expo-camera → casse `tsc`). Crans 0.5×/1× (indicateur + sélecteur, pastille active = facteur live). **`camZoom`/`selectedLens` dérivés du facteur** (approx `UW_ZOOM_AT_1X` car expo-camera ne donne pas les vrais facteurs)
+- **Objectif figé pendant l'enregistrement** (`lockedUltra`) : changer `selectedLens` pendant un `recordAsync` **coupe la vidéo** → on fige l'objectif au début et le zoom reste numérique (seul le `zoom` varie, pas l'objectif)
 - Après capture : **photo** → éditeur direct ; **vidéo** → `VideoTrimmer` avant l'éditeur
 
 ### Rognage vidéo (`components/VideoTrimmer.tsx`)
@@ -257,6 +258,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 - Pinch/rotation pour zoomer, double-tap reset
 - **Vidéo** (expo-video) : durée de progression = durée réelle de la vidéo, mute/unmute, lecture auto une fois bufferisée
 - **Gating média** : texte + timer ne démarrent qu'une fois l'image chargée (`onLoadEnd`) / la vidéo prête (`statusChange`) → pas de texte/timer avant l'affichage ; `loadedIds` (cache des stories vues, retour instantané) + `Image.prefetch`
+- **Loading state** : tant que `!mediaReady`, overlay **`BlurView`** (expo-blur ⚠️ module natif, rebuild) + `ActivityIndicator` → masque/floute l'image **encore figée sur la story précédente** (RN garde l'ancienne image jusqu'au chargement de la nouvelle). Écran de chargement plein (spinner) pendant le fetch initial (`!stories.length`)
 - Temps depuis publication (min si < 1h, sinon h) ; suppression (propriétaire)
 - **Swipe-down pour fermer** : `Gesture.Pan` (1 doigt, `activeOffsetY(16)`, `failOffsetX`) enveloppant tout le contenu ; suit le doigt (translateY + scale + coins arrondis), ferme si seuil/vélocité dépassés, sinon `withSpring(0)` ; désactivé si zoom / drawer / clavier ouverts ; pause pendant le geste
 - **« Vu par »** : vue enregistrée (`POST /stories/:id/view`) dès que le média est affiché (1× par story via `viewedSentRef`, jamais sur ses propres stories) ; côté propriétaire, **drawer sombre repliable** toujours visible en bas (poignée + avatars empilés des 3 derniers viewers + compteur), **draggable** (Gesture.Pan + reanimated, aimantation ouvert/fermé selon position/vélocité) ou tap pour ouvrir → liste détaillée des viewers (`GET /stories/:id/views`, owner-only, pré-fetch au chargement). Ouverture = pause de la story + backdrop assombrissant cliquable pour fermer
@@ -265,6 +267,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 ### StoriesBar (`components/StoriesBar.tsx`)
 - Bouton **+** (coin de l'avatar) pour ajouter une story supplémentaire quand on en a déjà une — le tap sur l'avatar reste « visionner ma story »
 - Rafraîchissement : `useFocusEffect` (au focus) **+** `forwardRef`/`useImperativeHandle` exposant `refresh()` → le **pull-to-refresh** de l'écran Messages (`(tabs)/index.tsx`) recharge aussi les stories (`storiesRef.current?.refresh()`)
+- UI : `StoryRing` (anneau **dégradé vert nexa** `expo-linear-gradient` si non vu / **gris** si vu) + `Avatar` (photo de profil ou initiale) ; **« Ma story »** affiche **ta photo de profil** (via `/users/me`) + badge `+` nexa toujours visible. Tout harmonisé sur le vert nexa (plus de bleu)
 - **Anneau « non vu »** : bordure `border-nexa` (vert) si le groupe a au moins une story non vue, sinon `border-gray-300` (basé sur `hasUnviewed` renvoyé par `GET /stories`)
 
 ### Données / backend

@@ -83,6 +83,9 @@ export function StoryCamera({
   const factorSV = useSharedValue(1);
   const savedFactor = useSharedValue(1);
   const minFactorSV = useSharedValue(1);
+  // Objectif figé pendant l'enregistrement (null = libre) : changer d'objectif
+  // pendant un recordAsync couperait la vidéo.
+  const [lockedUltra, setLockedUltra] = useState<boolean | null>(null);
 
   // Objectifs disponibles (pour passer en ultra grand angle 0.5×)
   const [lenses, setLenses] = useState<string[]>([]);
@@ -91,8 +94,10 @@ export function StoryCamera({
   // Dérive l'objectif + le zoom (0-1) du CameraView depuis le facteur global.
   // En dézoomant sous 1× on bascule sur l'ultra grand angle, en zoomant on revient.
   const useUltra = !!ultraWideLens && factor < 1;
-  const selectedLens = useUltra ? ultraWideLens : undefined;
-  const camZoom = useUltra
+  // Pendant l'enregistrement, l'objectif est figé (sinon la vidéo se coupe)
+  const effectiveUltra = lockedUltra !== null ? lockedUltra : useUltra;
+  const selectedLens = effectiveUltra ? ultraWideLens : undefined;
+  const camZoom = effectiveUltra
     ? Math.min(1, Math.max(0, ((factor - 0.5) / 0.5) * UW_ZOOM_AT_1X))
     : Math.min(1, Math.max(0, (factor - 1) / (MAX_FACTOR - 1)));
 
@@ -156,6 +161,8 @@ export function StoryCamera({
     setLocked(false);
     lockedSV.value = false;
     lockDrag.value = 0;
+    // Fige l'objectif courant pour toute la durée de l'enregistrement
+    setLockedUltra(useUltra);
     startRecording();
   };
 
@@ -205,6 +212,7 @@ export function StoryCamera({
   const cleanupRecording = () => {
     isRecordingRef.current = false;
     setIsRecording(false);
+    setLockedUltra(null);
     lockedRef.current = false;
     setLocked(false);
     lockedSV.value = false;

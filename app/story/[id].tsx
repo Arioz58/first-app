@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
@@ -18,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { BlurView } from "expo-blur";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, {
   FadeInDown,
@@ -546,7 +548,17 @@ export default function StoryViewScreen() {
     }
   };
 
-  if (!stories.length) return null;
+  // Chargement initial (fetch des stories) → écran de chargement
+  if (!stories.length)
+    return (
+      <View
+        style={{ flex: 1, backgroundColor: "black" }}
+        className="items-center justify-center"
+      >
+        <StatusBar hidden />
+        <ActivityIndicator size="large" color="white" />
+      </View>
+    );
 
   const current = stories[currentIndex];
   const isOwner = currentUserId === userId;
@@ -731,6 +743,21 @@ export default function StoryViewScreen() {
           )}
         </Reanimated.View>
       </GestureDetector>
+
+      {/* Loading state : floute l'image (encore figée sur la story précédente) */}
+      {!mediaReady && (
+        <View
+          style={StyleSheet.absoluteFill}
+          className="items-center justify-center"
+        >
+          <BlurView
+            intensity={60}
+            tint="dark"
+            style={StyleSheet.absoluteFill}
+          />
+          <ActivityIndicator size="large" color="white" />
+        </View>
+      )}
 
       {!isZoomed && (
         <View className="absolute inset-0 flex-row">
