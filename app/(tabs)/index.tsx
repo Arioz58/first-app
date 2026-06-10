@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../../lib/api';
 import { getSocket } from '../../lib/socket';
 import { getUserId } from '../../lib/storage';
-import StoriesBar from '../../components/StoriesBar';
+import StoriesBar, { type StoriesBarHandle } from '../../components/StoriesBar';
 
 type Message = { id: string; content: string; createdAt: string; conversationId: string };
 type Member = { userId: string; user: { name: string } };
@@ -25,6 +25,7 @@ export default function ConversationsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const storiesRef = useRef<StoriesBarHandle>(null);
 
   const fetchConversations = async () => {
     try {
@@ -96,12 +97,16 @@ export default function ConversationsScreen() {
       <FlatList
         data={conversations}
         keyExtractor={(item) => item.id}
-        ListHeaderComponent={<StoriesBar />}
+        ListHeaderComponent={<StoriesBar ref={storiesRef} />}
         alwaysBounceVertical
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); fetchConversations(); }}
+            onRefresh={() => {
+              setRefreshing(true);
+              fetchConversations();
+              storiesRef.current?.refresh();
+            }}
           />
         }
         ListEmptyComponent={

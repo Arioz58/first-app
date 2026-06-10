@@ -224,6 +224,8 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 - **Geste capture** : `Gesture.Exclusive(pan, tap)` → **tap = photo** (`takePictureAsync`), **maintien = vidéo** via `Gesture.Pan().activateAfterLongPress(250)` (le Pan suit le doigt sans s'annuler au mouvement) ; **glisser vers le haut = verrouiller** (`LOCK_THRESHOLD`, cadenas animé) → l'enregistrement continue sans maintenir, bouton **Stop** dédié. Caméra en **`mode="video"` permanent** (pas de switch de mode → pas de race `recordAsync`) ; `recordAsync` max 30 s, garde `cameraReady` (`onCameraReady`)
 - **Geste stabilisé** (`useMemo` + handlers via ref) : indispensable, sinon le re-render du chrono recrée le geste et coupe l'enregistrement en cours
 - Anneau/bouton animé (reanimated) + barre de progression + chrono REC ; flash (off/on/auto, `enableTorch` en vidéo), switch avant/arrière
+- **Pinch-to-zoom** : `Gesture.Pinch` (stabilisé `useMemo`) → prop `zoom` du `CameraView` (0 = 1x, 1 = max) ; remis à 0 au switch d'objectif
+- **Crans de zoom 0.5× / 1×** (style iOS, indicateur + sélecteur) : `getAvailableLensesAsync()` détecte l'ultra grand angle (`/ultra/i`), `selectedLens` bascule d'objectif ; re-fetch via effet sur `facing` (⚠️ **ne pas utiliser `onAvailableLensesChanged`** : son type tire les sources web cassées d'expo-camera et casse `tsc`). Pastille active surlignée + facteur live pendant le pinch
 - Après capture : **photo** → éditeur direct ; **vidéo** → `VideoTrimmer` avant l'éditeur
 
 ### Rognage vidéo (`components/VideoTrimmer.tsx`)
@@ -262,6 +264,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 
 ### StoriesBar (`components/StoriesBar.tsx`)
 - Bouton **+** (coin de l'avatar) pour ajouter une story supplémentaire quand on en a déjà une — le tap sur l'avatar reste « visionner ma story »
+- Rafraîchissement : `useFocusEffect` (au focus) **+** `forwardRef`/`useImperativeHandle` exposant `refresh()` → le **pull-to-refresh** de l'écran Messages (`(tabs)/index.tsx`) recharge aussi les stories (`storiesRef.current?.refresh()`)
 - **Anneau « non vu »** : bordure `border-nexa` (vert) si le groupe a au moins une story non vue, sinon `border-gray-300` (basé sur `hasUnviewed` renvoyé par `GET /stories`)
 
 ### Données / backend

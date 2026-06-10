@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
   Image, ActivityIndicator,
@@ -14,7 +14,9 @@ type StoryUser = { id: string; name: string; photoUrl: string | null };
 type Story = { id: string; mediaUrl?: string | null; background?: string | null; expiresAt: string };
 type StoryGroup = { user: StoryUser; stories: Story[]; hasUnviewed: boolean };
 
-export default function StoriesBar({ onRefresh }: { onRefresh?: () => void }) {
+export type StoriesBarHandle = { refresh: () => void };
+
+const StoriesBar = forwardRef<StoriesBarHandle>((_props, ref) => {
   const router = useRouter();
   const [groups, setGroups] = useState<StoryGroup[]>([]);
   const [myStories, setMyStories] = useState<Story[]>([]);
@@ -38,6 +40,9 @@ export default function StoriesBar({ onRefresh }: { onRefresh?: () => void }) {
   }, []);
 
   useFocusEffect(useCallback(() => { fetchStories(); }, []));
+
+  // Permet à l'écran parent (pull-to-refresh) de recharger les stories
+  useImperativeHandle(ref, () => ({ refresh: fetchStories }), [fetchStories]);
 
   if (loading) return (
     <View className="h-20 items-center justify-center">
@@ -140,4 +145,8 @@ export default function StoriesBar({ onRefresh }: { onRefresh?: () => void }) {
       />
     </View>
   );
-}
+});
+
+StoriesBar.displayName = 'StoriesBar';
+
+export default StoriesBar;

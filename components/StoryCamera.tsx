@@ -37,6 +37,9 @@ type Flash = "off" | "on" | "auto";
 const MAX_VIDEO_SEC = 30;
 // Distance (px) à glisser vers le haut pour verrouiller l'enregistrement
 const LOCK_THRESHOLD = 90;
+// Zoom : facteur max affiché, et zoom interne ultra grand angle ≈ 1× (à ajuster)
+const MAX_FACTOR = 6;
+const UW_ZOOM_AT_1X = 0.4;
 
 const flashIcon: Record<Flash, keyof typeof Ionicons.glyphMap> = {
   off: "flash-off",
@@ -75,6 +78,24 @@ export function StoryCamera({
   const lockDrag = useSharedValue(0);
   const lockedSV = useSharedValue(false);
 
+  // Facteur de zoom global continu : <1 = ultra grand angle (0.5×), ≥1 = grand angle
+  const [factor, setFactor] = useState(1);
+  const factorSV = useSharedValue(1);
+  const savedFactor = useSharedValue(1);
+  const minFactorSV = useSharedValue(1);
+
+  // Objectifs disponibles (pour passer en ultra grand angle 0.5×)
+  const [lenses, setLenses] = useState<string[]>([]);
+  const ultraWideLens = lenses.find((l) => /ultra/i.test(l));
+
+  // Dérive l'objectif + le zoom (0-1) du CameraView depuis le facteur global.
+  // En dézoomant sous 1× on bascule sur l'ultra grand angle, en zoomant on revient.
+  const useUltra = !!ultraWideLens && factor < 1;
+  const selectedLens = useUltra ? ultraWideLens : undefined;
+  const camZoom = useUltra
+    ? Math.min(1, Math.max(0, ((factor - 0.5) / 0.5) * UW_ZOOM_AT_1X))
+    : Math.min(1, Math.max(0, (factor - 1) / (MAX_FACTOR - 1)));
+
   // Demande les permissions au montage
   useEffect(() => {
     if (camPerm && !camPerm.granted) requestCamPerm();
@@ -87,6 +108,25 @@ export function StoryCamera({
       if (chronoRef.current) clearInterval(chronoRef.current);
     };
   }, []);
+
+  // Re-récupère les objectifs au changement de face (avant/arrière diffèrent :
+  // la caméra avant n'a pas d'ultra grand angle)
+  useEffect(() => {
+    if (!cameraReady) return;
+    let active = true;
+    const t = setTimeout(async () => {
+      try {
+        const ls = await cameraRef.current?.getAvailableLensesAsync();
+        if (active && ls) setLenses(ls);
+      } catch {
+        // indisponible → seul le zoom pinch reste
+      }
+    }, 300);
+    return () => {
+      active = false;
+      clearTimeout(t);
+    };
+  }, [facing, cameraReady]);
 
   // ── Photo ────────────────────────────────────────────────────────────────
   const takePhoto = async () => {
@@ -177,8 +217,66 @@ export function StoryCamera({
 
   const cycleFlash = () =>
     setFlash((f) => (f === "off" ? "on" : f === "on" ? "auto" : "off"));
-  const flipCamera = () =>
+  const flipCamera = () => {
+    // On repart à 1× en changeant de face
+    setFactor(1);
+    factorSV.value = 1;
     setFacing((f) => (f === "back" ? "front" : "back"));
+  };
+
+  // Synchronise le facteur min (0.5 si ultra grand angle dispo, sinon 1)
+  useEffect(() => {
+    minFactorSV.value = ultraWideLens ? 0.5 : 1;
+    if (!ultraWideLens && factor < 1) {
+      setFactor(1);
+      factorSV.value = 1;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ultraWideLens]);
+
+  // Récupère les objectifs disponibles une fois la caméra prête
+  const handleCameraReady = async () => {
+    setCameraReady(true);
+    try {
+      const ls = await cameraRef.current?.getAvailableLensesAsync();
+      if (ls) setLenses(ls);
+    } catch {
+      // pas de liste d'objectifs (Android / indispo) → seul le zoom pinch reste
+    }
+  };
+
+  // Fixe directement un facteur de zoom (tap sur une pastille)
+  const selectFactor = (f: number) => {
+    setFactor(f);
+    factorSV.value = f;
+  };
+
+  // Crans de zoom proposés (0.5× seulement si l'ultra grand angle existe)
+  const zoomStops = ultraWideLens
+    ? [
+        { key: "uw", label: "0.5×", value: 0.5, active: factor < 1 },
+        { key: "w", label: "1×", value: 1, active: factor >= 1 },
+      ]
+    : [];
+
+  // Pincer pour zoomer (geste stable → non recréé par les re-renders)
+  const pinchZoom = useMemo(
+    () =>
+      Gesture.Pinch()
+        .onStart(() => {
+          savedFactor.value = factorSV.value;
+        })
+        .onUpdate((e) => {
+          const f = Math.min(
+            MAX_FACTOR,
+            Math.max(minFactorSV.value, savedFactor.value * e.scale),
+          );
+          factorSV.value = f;
+          runOnJS(setFactor)(f);
+        }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   // Geste : tap = photo, maintien = vidéo (priorité au maintien).
   // Le geste est créé UNE SEULE FOIS (useMemo) et appelle les handlers via une
@@ -280,15 +378,21 @@ export function StoryCamera({
   return (
     <View style={{ flex: 1, backgroundColor: "black" }}>
       <StatusBar hidden />
-      <CameraView
-        ref={cameraRef}
-        style={StyleSheet.absoluteFill}
-        facing={facing}
-        flash={flash}
-        mode="video"
-        enableTorch={isRecording && flash === "on"}
-        onCameraReady={() => setCameraReady(true)}
-      />
+      <GestureDetector gesture={pinchZoom}>
+        <View style={StyleSheet.absoluteFill}>
+          <CameraView
+            ref={cameraRef}
+            style={StyleSheet.absoluteFill}
+            facing={facing}
+            flash={flash}
+            mode="video"
+            zoom={camZoom}
+            selectedLens={selectedLens}
+            enableTorch={isRecording && flash === "on"}
+            onCameraReady={handleCameraReady}
+          />
+        </View>
+      </GestureDetector>
 
       {/* Barre de progression d'enregistrement */}
       {isRecording && (
@@ -417,10 +521,42 @@ export function StoryCamera({
         )}
       </View>
 
+      {/* Crans de zoom (0.5× / 1×) — sert d'indicateur + sélecteur d'objectif */}
+      {!isRecording && zoomStops.length > 0 && (
+        <View
+          className="absolute left-0 right-0 items-center"
+          style={{ bottom: insets.bottom + 112 }}
+        >
+          <View className="flex-row items-center bg-black/40 rounded-full p-1">
+            {zoomStops.map((s) => {
+              const txt = s.active ? `${factor.toFixed(1)}×` : s.label;
+              return (
+                <TouchableOpacity
+                  key={s.key}
+                  onPress={() => selectFactor(s.value)}
+                  className={`px-3 h-8 rounded-full items-center justify-center ${s.active ? "bg-white/25" : ""}`}
+                  style={{ minWidth: 44 }}
+                >
+                  <Text
+                    style={{
+                      color: s.active ? "#FFD60A" : "white",
+                      fontSize: s.active ? 13 : 12,
+                      fontWeight: s.active ? "700" : "500",
+                    }}
+                  >
+                    {txt}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       {/* Indice d'usage */}
       <View
         className="absolute left-0 right-0 items-center"
-        style={{ bottom: insets.bottom + 116 }}
+        style={{ bottom: insets.bottom + 158 }}
       >
         <Text className="text-white/60 text-xs">
           {locked

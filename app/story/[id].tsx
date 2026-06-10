@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   FlatList,
@@ -261,7 +262,8 @@ export default function StoryViewScreen() {
       videoReadyRef.current = false;
       setVideoReady(false);
       player.muted = mutedRef.current;
-      player.replace({ uri: cur.mediaUrl });
+      // replaceAsync : charge la vidéo hors du thread principal (pas de gel UI)
+      player.replaceAsync({ uri: cur.mediaUrl }).catch(() => {});
     } else {
       videoReadyRef.current = false;
       setVideoReady(false);
@@ -519,6 +521,19 @@ export default function StoryViewScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stories, currentIndex]);
 
+  // Demande confirmation avant suppression (pause la story le temps de l'alerte)
+  const confirmDelete = () => {
+    pauseStory();
+    Alert.alert(
+      "Supprimer la story",
+      "Cette story sera définitivement supprimée.",
+      [
+        { text: "Annuler", style: "cancel", onPress: resumeStory },
+        { text: "Supprimer", style: "destructive", onPress: handleDelete },
+      ],
+    );
+  };
+
   const handleDelete = async () => {
     const story = stories[currentIndex];
     await apiRequest(`/stories/${story.id}`, { method: "DELETE" });
@@ -622,7 +637,7 @@ export default function StoryViewScreen() {
               </TouchableOpacity>
             )}
             {isOwner && (
-              <TouchableOpacity onPress={handleDelete}>
+              <TouchableOpacity onPress={confirmDelete}>
                 <Ionicons name="trash-outline" size={26} color="white" />
               </TouchableOpacity>
             )}
