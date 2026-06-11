@@ -1,7 +1,6 @@
 import { io, Socket } from "socket.io-client";
+import { BASE_URL } from "./config";
 import { getAccessToken } from "./storage";
-
-const BASE_URL = "http://192.168.1.3:3000";
 
 let socket: Socket | null = null;
 

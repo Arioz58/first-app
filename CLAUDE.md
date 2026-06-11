@@ -331,7 +331,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 - **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'`.
 - En local : PostgreSQL + Redis tournent via `docker-compose up -d` dans `first-app-backend/`.
 - **FCM iOS** : nécessite compte Apple Developer payant (99€/an) + clés APNs dans Firebase Console.
-- **IP locale** : mettre à jour `lib/api.ts` et `lib/socket.ts` à chaque changement de réseau.
+- **URL backend** : centralisée dans `lib/config.ts` (`BASE_URL = __DEV__ ? LOCAL_URL : CLOUD_URL`). En dev (Metro) → backend **local** (mettre à jour `LOCAL_URL` à chaque changement de réseau Wi-Fi) ; en build release/EAS → backend **Railway** (`CLOUD_URL`). `api.ts` et `socket.ts` importent `BASE_URL` depuis `config.ts`.
 - **Native tabs** : import depuis `expo-router/unstable-native-tabs` — API peut changer (alpha).
 - **Bundle ID iOS** : `com.berke.firstapp` (changé de `org.name.firstapp` pour signing perso).
 - **expo-video** : module natif (plugin config) — après son install, **rebuild requis** (`npx expo run:ios`), un reload Metro ne suffit pas.

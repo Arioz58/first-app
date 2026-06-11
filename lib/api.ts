@@ -1,11 +1,10 @@
+import { BASE_URL } from "./config";
 import {
   clearTokens,
   getAccessToken,
   getRefreshToken,
   saveTokens,
 } from "./storage";
-
-const BASE_URL = "http://192.168.1.3:3000";
 
 let sessionExpiredHandler: (() => void) | null = null;
 
