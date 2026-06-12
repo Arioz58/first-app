@@ -167,7 +167,7 @@ prisma/
 
 ```
 GET  /health
-POST /auth/send-code                              → OTP simulé (log console) → Twilio en prod
+POST /auth/send-code                              → envoie l'OTP (Twilio ou simulation console) ; `{ phone, mode? }` — `mode:'login'` refuse si compte inexistant, `mode:'signup'` refuse si déjà existant
 POST /auth/verify-code                            → vérifie OTP, crée user si nouveau, retourne JWT
 POST /auth/refresh                                → renouvelle access token
 

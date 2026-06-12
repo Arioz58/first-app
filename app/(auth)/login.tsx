@@ -140,7 +140,10 @@ export default function LoginScreen() {
     try {
       await apiRequest("/auth/send-code", {
         method: "POST",
-        body: { phone: country.dialCode + phone },
+        body: {
+          phone: country.dialCode + phone,
+          mode: isNewUser ? "signup" : "login",
+        },
         auth: false,
       });
       router.push({
