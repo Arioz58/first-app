@@ -11,6 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.berke.nexa2",
+      "icon": "./assets/images/Nexa-icon-comp.icon",
       "infoPlist": {
         "NSCameraUsageDescription": "Nexa utilise la caméra pour prendre des photos et vidéos de vos stories.",
         "NSMicrophoneUsageDescription": "Nexa utilise le micro pour enregistrer le son de vos vidéos.",

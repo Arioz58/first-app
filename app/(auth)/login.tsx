@@ -137,18 +137,21 @@ export default function LoginScreen() {
     }
 
     setLoading(true);
+    // Normalise au format E.164 : indicatif + numéro sans espaces ni 0 de tête
+    const fullPhone =
+      country.dialCode + phone.replace(/\s/g, "").replace(/^0+/, "");
     try {
       await apiRequest("/auth/send-code", {
         method: "POST",
         body: {
-          phone: country.dialCode + phone,
+          phone: fullPhone,
           mode: isNewUser ? "signup" : "login",
         },
         auth: false,
       });
       router.push({
         pathname: "/(auth)/verify" as any,
-        params: { phone: country.dialCode + phone, name },
+        params: { phone: fullPhone, name },
       });
     } catch (e: any) {
       setServerError(e.message || "Une erreur est survenue");
