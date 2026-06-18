@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { MotiView } from "moti";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Animated,
@@ -21,6 +22,7 @@ import { COUNTRIES, Country } from "../../lib/countries";
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { isNew } = useLocalSearchParams<{ isNew: string }>();
   const isNewUser = isNew === "1";
 
@@ -111,18 +113,18 @@ export default function LoginScreen() {
     setServerError("");
 
     if (isNewUser && !name.trim()) {
-      setNameError("Veuillez entrer votre prénom");
+      setNameError(t("auth.name_required"));
       valid = false;
     } else if (isNewUser && name.trim().length < 2) {
-      setNameError("Le prénom doit contenir au moins 2 caractères");
+      setNameError(t("auth.name_too_short"));
       valid = false;
     }
 
     if (!phone.trim()) {
-      setPhoneError("Veuillez entrer votre numéro de téléphone");
+      setPhoneError(t("auth.phone_required"));
       valid = false;
     } else if (phone.replace(/\s/g, "").length < 5) {
-      setPhoneError("Numéro trop court");
+      setPhoneError(t("auth.phone_too_short"));
       valid = false;
     }
 
@@ -154,7 +156,7 @@ export default function LoginScreen() {
         params: { phone: fullPhone, name },
       });
     } catch (e: any) {
-      setServerError(e.message || "Une erreur est survenue");
+      setServerError(e.message || t("auth.generic_error"));
       triggerError();
     } finally {
       setLoading(false);
@@ -230,12 +232,10 @@ export default function LoginScreen() {
             }}
           >
             <Text className="text-4xl font-black text-nexa italic">
-              {isNewUser ? "Créer un compte" : "Connexion"}
+              {isNewUser ? t("auth.create_account") : t("auth.connection")}
             </Text>
             <Text className="text-2xl font-medium italic text-nexa mb-4">
-              {isNewUser
-                ? "Entrez vos informations pour commencer"
-                : "Entrez votre numéro de téléphone"}
+              {isNewUser ? t("auth.enter_info") : t("auth.enter_phone")}
             </Text>
           </MotiView>
 
@@ -243,7 +243,7 @@ export default function LoginScreen() {
             <View className="mb-4 mt-4">
               <TextInput
                 className={`border rounded-xl px-4 py-3 text-xl ${nameError ? "border-red-400" : "border-gray-300"}`}
-                placeholder="Votre prénom"
+                placeholder={t("auth.first_name_placeholder")}
                 placeholderTextColor="#6B7280"
                 value={name}
                 onChangeText={(v) => {
@@ -300,7 +300,7 @@ export default function LoginScreen() {
                 <ActivityIndicator color="white" />
               ) : (
                 <Text className="text-white font-semibold text-2xl italic">
-                  Recevoir le code →
+                  {t("auth.receive_code")} →
                 </Text>
               )}
             </TouchableOpacity>

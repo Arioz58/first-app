@@ -99,10 +99,11 @@ first-app-web/       → Next.js — à créer au Mois 3
 app/
 ├── _layout.tsx          # Layout racine — vérif JWT expiry + handler SESSION_EXPIRED global + socket + FCM
 ├── globals.css
-├── (auth)/
+├── (auth)/              # Flux : welcome → security → intro → login → verify
 │   ├── _layout.tsx
-│   ├── welcome.tsx      # Écran d'accueil NEXA (slogan + image + Continuer)
-│   ├── intro.tsx        # Présentation chiffrement (Commencer / J'ai déjà un compte)
+│   ├── welcome.tsx      # Écran d'accueil NEXA (slogan + image + Continuer) → security
+│   ├── security.tsx    # Argument sécurité/confidentialité (Moti) → intro
+│   ├── intro.tsx        # « Discutez librement » (Commencer / J'ai déjà un compte → login isNew=1/0)
 │   ├── login.tsx        # Saisie numéro + indicatif pays (CountryPicker) — prénom si nouveau compte
 │   └── verify.tsx       # Saisie OTP (6 champs individuels, auto-avance, coller) → JWT + socket + FCM
 ├── (tabs)/
@@ -110,7 +111,7 @@ app/
 │   ├── index.tsx        # Liste conversations + StoriesBar en header
 │   ├── search.tsx       # Recherche (à implémenter)
 │   ├── saved.tsx        # Appels (à implémenter Mois 4)
-│   └── profile.tsx      # Profil utilisateur + déconnexion → welcome
+│   └── profile.tsx      # Profil (thème vert nexa) : avatar+photo (upload S3), édition du nom, sélecteur de langue i18n (PATCH + persistance), statut KVKK, déconnexion → welcome
 ├── chat/
 │   └── [id].tsx         # Écran chat temps réel (Socket.io)
 ├── group/
@@ -124,17 +125,17 @@ components/
 ├── StoryCamera.tsx      # Caméra in-app (photo tap / vidéo maintien, flash, switch)
 ├── VideoTrimmer.tsx     # Rognage vidéo : preview + timeline à miniatures (trim headless)
 ├── EmojiPicker.tsx      # Sélecteur d'emojis (grille) pour les stickers de story
-└── CountryPicker.tsx    # Sélecteur pays avec indicatif téléphonique (modal + recherche)
+└── CountryPicker.tsx    # Sélecteur pays + indicatif (bottom-sheet drawer animé — même ressort SHEET_SPRING que les stories : drag + backdrop + recherche)
 lib/
 ├── api.ts               # Fetch wrapper — JWT Bearer + auto-refresh + handler SESSION_EXPIRED global
 ├── socket.ts            # Client Socket.io singleton
-├── storage.ts           # SecureStore : accessToken, refreshToken, userId
+├── storage.ts           # SecureStore : accessToken, refreshToken, userId, language
 ├── notifications.ts     # Demande permission + enregistre token FCM au backend
 ├── countries.ts         # Liste pays avec drapeau, nom et indicatif téléphonique
 ├── storyText.ts         # Styles texte stories (couleur, fond none/translucent/solid, gras/italique/souligné) — partagé create + viewer
 ├── storyBackgrounds.ts  # Presets de fond stories texte (id → couleurs unies/dégradés)
 ├── storyStickers.ts     # Liste d'emojis stickers + STICKER_FONT_SIZE (partagé create + viewer)
-└── i18n.ts              # Config i18next (tr/fr/en)
+└── i18n.ts              # Config i18next (tr/fr/en) + SUPPORTED_LANGUAGES + setAppLanguage (changeLanguage + persistance SecureStore) ; restaure la langue sauvegardée au démarrage
 locales/
 ├── tr.json
 ├── fr.json
@@ -328,7 +329,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 
 - **Prisma v5** — ne pas upgrader en v7 (breaking changes majeurs sur la config datasource).
 - **OTP** simulé en local (log console). Remplacer par Twilio avant la mise en prod.
-- **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'`.
+- **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'` ; langue restaurée au démarrage depuis SecureStore, modifiable via le profil (`setAppLanguage` + `PATCH /users/me`). Clés organisées par groupes imbriqués (`onboarding`, `auth`, `country_picker`, …) — **garder les 3 fichiers `locales/*.json` strictement alignés** (mêmes clés). Écrans déjà branchés sur `t()` : onboarding (welcome/security/intro/login/verify), profil, CountryPicker. **Pas encore traduits** : messages/chat, groupes, stories.
 - En local : PostgreSQL + Redis tournent via `docker-compose up -d` dans `first-app-backend/`.
 - **FCM iOS** : nécessite compte Apple Developer payant (99€/an) + clés APNs dans Firebase Console.
 - **URL backend** : centralisée dans `lib/config.ts` (`BASE_URL = __DEV__ ? LOCAL_URL : CLOUD_URL`). En dev (Metro) → backend **local** (mettre à jour `LOCAL_URL` à chaque changement de réseau Wi-Fi) ; en build release/EAS → backend **Railway** (`CLOUD_URL`). `api.ts` et `socket.ts` importent `BASE_URL` depuis `config.ts`.

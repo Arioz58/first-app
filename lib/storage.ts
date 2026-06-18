@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 const ACCESS_KEY = 'accessToken';
 const REFRESH_KEY = 'refreshToken';
 const USER_ID_KEY = 'userId';
+const LANGUAGE_KEY = 'language';
 
 export const saveTokens = async (accessToken: string, refreshToken: string, userId: string) => {
   await SecureStore.setItemAsync(ACCESS_KEY, accessToken);
@@ -13,6 +14,9 @@ export const saveTokens = async (accessToken: string, refreshToken: string, user
 export const getAccessToken = () => SecureStore.getItemAsync(ACCESS_KEY);
 export const getRefreshToken = () => SecureStore.getItemAsync(REFRESH_KEY);
 export const getUserId = () => SecureStore.getItemAsync(USER_ID_KEY);
+
+export const saveLanguage = (lang: string) => SecureStore.setItemAsync(LANGUAGE_KEY, lang);
+export const getLanguage = () => SecureStore.getItemAsync(LANGUAGE_KEY);
 
 export const clearTokens = async () => {
   await SecureStore.deleteItemAsync(ACCESS_KEY);

@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { MotiImage, MotiText, MotiView } from "moti";
+import { useTranslation } from "react-i18next";
 import { Image, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function IntroScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   return (
     <SafeAreaView
@@ -47,7 +49,7 @@ export default function IntroScreen() {
             opacity: { type: "timing", duration: 400, delay: 120 },
           }}
         >
-          Discutez librement !
+          {t("onboarding.intro_title")}
         </MotiText>
 
         <MotiText
@@ -62,8 +64,7 @@ export default function IntroScreen() {
             opacity: { type: "timing", duration: 400, delay: 230 },
           }}
         >
-          Discute avec tes amis, ta famille, tes groupes — Partout dans le
-          monde.
+          {t("onboarding.intro_subtitle")}
         </MotiText>
       </MotiView>
 
@@ -116,7 +117,7 @@ export default function IntroScreen() {
             animate={{ opacity: 1 }}
             transition={{ type: "timing", duration: 300, delay: 560 }}
           >
-            Commencer →
+            {t("onboarding.start")} →
           </MotiText>
         </TouchableOpacity>
 
@@ -135,7 +136,7 @@ export default function IntroScreen() {
             animate={{ opacity: 1 }}
             transition={{ type: "timing", duration: 300, delay: 630 }}
           >
-            J'ai déjà un compte →
+            {t("onboarding.have_account")} →
           </MotiText>
         </TouchableOpacity>
       </MotiView>

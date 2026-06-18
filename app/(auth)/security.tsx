@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { MotiImage, MotiText, MotiView } from "moti";
+import { useTranslation } from "react-i18next";
 import { Image, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SecurityScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   return (
     <SafeAreaView
@@ -47,7 +49,7 @@ export default function SecurityScreen() {
             opacity: { type: "timing", duration: 400, delay: 120 },
           }}
         >
-          Privé, Sécurisé, Instantané
+          {t("onboarding.security_title")}
         </MotiText>
 
         <MotiText
@@ -62,7 +64,7 @@ export default function SecurityScreen() {
             opacity: { type: "timing", duration: 400, delay: 230 },
           }}
         >
-          Vos messages sont protégés, vos conversations restent les votres.
+          {t("onboarding.security_subtitle")}
         </MotiText>
       </MotiView>
 
@@ -110,7 +112,7 @@ export default function SecurityScreen() {
             animate={{ opacity: 1 }}
             transition={{ type: "timing", duration: 300, delay: 560 }}
           >
-            Continuer →
+            {t("onboarding.continue")} →
           </MotiText>
         </TouchableOpacity>
       </MotiView>

@@ -1,10 +1,12 @@
 import { useRouter } from "expo-router";
 import { MotiImage, MotiText, MotiView } from "moti";
+import { useTranslation } from "react-i18next";
 import { Image, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   return (
     <SafeAreaView
@@ -36,7 +38,7 @@ export default function WelcomeScreen() {
             opacity: { type: "timing", duration: 400, delay: 100 },
           }}
         >
-          <MotiText className="font-semibold">Bienvenue sur</MotiText> NEXA !
+          {t("onboarding.welcome_title")}
         </MotiText>
 
         <MotiText
@@ -51,7 +53,7 @@ export default function WelcomeScreen() {
             opacity: { type: "timing", duration: 400, delay: 220 },
           }}
         >
-          La messagerie qui te récompense !
+          {t("onboarding.welcome_subtitle")}
         </MotiText>
 
         <MotiImage
@@ -92,7 +94,7 @@ export default function WelcomeScreen() {
             animate={{ opacity: 1 }}
             transition={{ type: "timing", duration: 300, delay: 600 }}
           >
-            Continuer →
+            {t("onboarding.continue")} →
           </MotiText>
         </TouchableOpacity>
       </MotiView>

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { MotiView } from "moti";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Animated,
@@ -30,6 +31,7 @@ function formatTime(seconds: number) {
 
 export default function VerifyScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { phone, name } = useLocalSearchParams<{
     phone: string;
     name: string;
@@ -152,7 +154,7 @@ export default function VerifyScreen() {
       await registerForPushNotifications();
       router.replace("/(tabs)");
     } catch (e: any) {
-      setError("Code incorrect. Vérifie le SMS et réessaie.");
+      setError(t("auth.wrong_code"));
       setDigits(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
     } finally {
@@ -172,7 +174,7 @@ export default function VerifyScreen() {
       inputRefs.current[0]?.focus();
       startTimer();
     } catch (e: any) {
-      setError("Impossible de renvoyer le code. Réessaie.");
+      setError(t("auth.resend_failed"));
     } finally {
       setResending(false);
     }
@@ -224,10 +226,10 @@ export default function VerifyScreen() {
             }}
           >
             <Text className="text-5xl font-black text-nexa italic">
-              Vérification
+              {t("auth.verification")}
             </Text>
             <Text className="text-2xl font-medium italic text-nexa mb-6">
-              Code envoyé au {phone}
+              {t("auth.code_sent_to", { phone })}
             </Text>
           </MotiView>
 
@@ -312,7 +314,7 @@ export default function VerifyScreen() {
                   <ActivityIndicator color="#128C7E" />
                 ) : (
                   <Text className="text-nexa font-semibold text-base">
-                    Renvoyer le code
+                    {t("auth.resend_code")}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -320,7 +322,7 @@ export default function VerifyScreen() {
               <Text
                 className={`text-base font-medium ${timeLeft <= 30 ? "text-red-400" : "text-gray-400"}`}
               >
-                Code valide pendant{" "}
+                {t("auth.code_valid_for")}{" "}
                 <Text className="font-bold">{formatTime(timeLeft)}</Text>
               </Text>
             )}
@@ -342,7 +344,7 @@ export default function VerifyScreen() {
                 <Text
                   className={`font-semibold text-2xl italic ${code.length === 6 && !expired ? "text-white" : "text-gray-400"}`}
                 >
-                  Confirmer →
+                  {t("auth.confirm")} →
                 </Text>
               )}
             </TouchableOpacity>
