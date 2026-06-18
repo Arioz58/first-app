@@ -55,6 +55,7 @@ first-app-web/       → Next.js — à créer au Mois 3
 - **NativeWind v4** — Tailwind CSS via prop `className`
 - **Native tabs** — `expo-router/unstable-native-tabs` (SF Symbols iOS, statut alpha SDK 54)
 - **i18next + react-i18next** — 3 langues : turc (`tr`), français (`fr`), anglais (`en`)
+- **expo-localization** — détection de la langue de l'appareil (i18n auto au 1er lancement) ⚠️ **module natif** (config plugin → rebuild requis après install)
 - **expo-secure-store** — stockage JWT chiffré (pas AsyncStorage)
 - **socket.io-client** — messagerie temps réel
 - **expo-notifications + expo-device** — notifications push FCM
@@ -125,7 +126,8 @@ components/
 ├── StoryCamera.tsx      # Caméra in-app (photo tap / vidéo maintien, flash, switch)
 ├── VideoTrimmer.tsx     # Rognage vidéo : preview + timeline à miniatures (trim headless)
 ├── EmojiPicker.tsx      # Sélecteur d'emojis (grille) pour les stickers de story
-└── CountryPicker.tsx    # Sélecteur pays + indicatif (bottom-sheet drawer animé — même ressort SHEET_SPRING que les stories : drag + backdrop + recherche)
+├── BottomSheet.tsx      # Drawer bottom-sheet réutilisable (SHEET_SPRING partagé : montage différé piloté par `visible`, drag-to-dismiss sur la poignée, backdrop en fondu) — hauteur fixe (liste) ou auto (contenu)
+└── CountryPicker.tsx    # Sélecteur pays + indicatif — utilise `BottomSheet` (hauteur fixe 85% + recherche + FlatList)
 lib/
 ├── api.ts               # Fetch wrapper — JWT Bearer + auto-refresh + handler SESSION_EXPIRED global
 ├── socket.ts            # Client Socket.io singleton
@@ -329,7 +331,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 
 - **Prisma v5** — ne pas upgrader en v7 (breaking changes majeurs sur la config datasource).
 - **OTP** simulé en local (log console). Remplacer par Twilio avant la mise en prod.
-- **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'` ; langue restaurée au démarrage depuis SecureStore, modifiable via le profil (`setAppLanguage` + `PATCH /users/me`). Clés organisées par groupes imbriqués (`onboarding`, `auth`, `country_picker`, …) — **garder les 3 fichiers `locales/*.json` strictement alignés** (mêmes clés). Écrans déjà branchés sur `t()` : onboarding (welcome/security/intro/login/verify), profil, CountryPicker. **Pas encore traduits** : messages/chat, groupes, stories.
+- **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'`. **Langue détectée automatiquement au 1er lancement** depuis la langue de l'appareil (`expo-localization`, mappée sur tr/fr/en sinon turc) ; un choix explicite sauvegardé (SecureStore) prime ensuite. Modifiable via le profil (`setAppLanguage` + `PATCH /users/me`). Clés organisées par groupes imbriqués (`onboarding`, `auth`, `country_picker`, …) — **garder les 3 fichiers `locales/*.json` strictement alignés** (mêmes clés). Écrans déjà branchés sur `t()` : onboarding (welcome/security/intro/login/verify), profil, CountryPicker. **Pas encore traduits** : messages/chat, groupes, stories.
 - En local : PostgreSQL + Redis tournent via `docker-compose up -d` dans `first-app-backend/`.
 - **FCM iOS** : nécessite compte Apple Developer payant (99€/an) + clés APNs dans Firebase Console.
 - **URL backend** : centralisée dans `lib/config.ts` (`BASE_URL = __DEV__ ? LOCAL_URL : CLOUD_URL`). En dev (Metro) → backend **local** (mettre à jour `LOCAL_URL` à chaque changement de réseau Wi-Fi) ; en build release/EAS → backend **Railway** (`CLOUD_URL`). `api.ts` et `socket.ts` importent `BASE_URL` depuis `config.ts`.

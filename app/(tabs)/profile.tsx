@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -15,33 +15,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  Gesture,
-  GestureDetector,
-  GestureHandlerRootView,
-} from 'react-native-gesture-handler';
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import BottomSheet from '../../components/BottomSheet';
 import { apiRequest } from '../../lib/api';
 import { SUPPORTED_LANGUAGES, setAppLanguage } from '../../lib/i18n';
 import { clearTokens } from '../../lib/storage';
 import { disconnectSocket } from '../../lib/socket';
 
 const NEXA = '#128C7E';
-
-// Même ressort que le drawer « Vu par » des stories : rapide, sans rebond.
-const SHEET_SPRING = {
-  damping: 24,
-  stiffness: 220,
-  mass: 0.7,
-  overshootClamping: true,
-};
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type User = {
   id: string;
@@ -104,61 +84,7 @@ export default function ProfileScreen() {
   const [nameError, setNameError] = useState('');
   const [savingName, setSavingName] = useState(false);
 
-  const [langMounted, setLangMounted] = useState(false); // monte le Modal le temps de l'anim
-  const sheetY = useSharedValue(1000); // translateY du drawer (0 = ouvert, hauteur = caché)
-  const sheetH = useSharedValue(1000); // hauteur mesurée du drawer
-  const openedRef = useRef(false);
-
-  const finalizeClose = () => {
-    setLangMounted(false);
-    openedRef.current = false;
-  };
-
-  const openLang = () => {
-    sheetY.value = 1000; // hors écran avant la mesure
-    openedRef.current = false;
-    setLangMounted(true);
-  };
-
-  // Mesure la hauteur réelle du drawer, puis l'anime du bas vers sa position ouverte.
-  const onSheetLayout = (e: { nativeEvent: { layout: { height: number } } }) => {
-    const h = e.nativeEvent.layout.height;
-    sheetH.value = h;
-    if (!openedRef.current) {
-      openedRef.current = true;
-      sheetY.value = h;
-      sheetY.value = withSpring(0, SHEET_SPRING);
-    }
-  };
-
-  const closeLang = () => {
-    sheetY.value = withSpring(sheetH.value, SHEET_SPRING, (finished) => {
-      if (finished) runOnJS(finalizeClose)();
-    });
-  };
-
-  const sheetStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: sheetY.value }],
-  }));
-  const backdropStyle = useAnimatedStyle(() => ({
-    opacity: Math.max(0, 1 - sheetY.value / sheetH.value) * 0.55,
-  }));
-
-  // Drag : le drawer suit le doigt vers le bas, aimantation fermé/ouvert au relâcher.
-  const sheetPan = Gesture.Pan()
-    .onUpdate((e) => {
-      sheetY.value = Math.max(0, e.translationY);
-    })
-    .onEnd((e) => {
-      const shouldClose = e.velocityY > 300 || sheetY.value > sheetH.value * 0.4;
-      if (shouldClose) {
-        sheetY.value = withSpring(sheetH.value, SHEET_SPRING, (finished) => {
-          if (finished) runOnJS(finalizeClose)();
-        });
-      } else {
-        sheetY.value = withSpring(0, SHEET_SPRING);
-      }
-    });
+  const [langVisible, setLangVisible] = useState(false);
 
   useEffect(() => {
     apiRequest<User>('/users/me')
@@ -254,7 +180,7 @@ export default function ProfileScreen() {
   };
 
   const selectLanguage = async (code: string) => {
-    closeLang();
+    setLangVisible(false);
     if (code === user?.language) return;
     await setAppLanguage(code);
     setUser((u) => (u ? { ...u, language: code } : u));
@@ -331,7 +257,7 @@ export default function ProfileScreen() {
           icon="language-outline"
           label={t('language')}
           value={currentLang ? `${currentLang.flag} ${currentLang.label}` : ''}
-          onPress={openLang}
+          onPress={() => setLangVisible(true)}
         />
         <View className="h-px bg-gray-100 ml-16" />
         <SettingRow
@@ -399,53 +325,34 @@ export default function ProfileScreen() {
         </Pressable>
       </Modal>
 
-      {/* Drawer sélection de langue — même animation que le drawer « Vu par » des stories */}
-      <Modal visible={langMounted} transparent animationType="none" onRequestClose={closeLang}>
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <View className="flex-1 justify-end">
-            <AnimatedPressable
-              className="absolute inset-0 bg-black"
-              style={backdropStyle}
-              onPress={closeLang}
-            />
-            <Animated.View
-              onLayout={onSheetLayout}
-              style={sheetStyle}
-              className="absolute left-0 right-0 bottom-0 bg-white rounded-t-3xl pb-8 pt-3"
+      {/* Drawer sélection de langue */}
+      <BottomSheet visible={langVisible} onClose={() => setLangVisible(false)}>
+        <Text className="text-lg font-bold text-gray-900 px-5 pt-1 pb-2">
+          {t('language')}
+        </Text>
+        {SUPPORTED_LANGUAGES.map((l) => {
+          const active = l.code === user?.language;
+          return (
+            <TouchableOpacity
+              key={l.code}
+              className="flex-row items-center px-5 py-4"
+              onPress={() => selectLanguage(l.code)}
             >
-              <GestureDetector gesture={sheetPan}>
-                <View className="pb-2">
-                  <View className="w-10 h-1 rounded-full bg-gray-300 self-center mb-3" />
-                  <Text className="text-lg font-bold text-gray-900 px-5">
-                    {t('language')}
-                  </Text>
-                </View>
-              </GestureDetector>
-              {SUPPORTED_LANGUAGES.map((l) => {
-                const active = l.code === user?.language;
-                return (
-                  <TouchableOpacity
-                    key={l.code}
-                    className="flex-row items-center px-5 py-4"
-                    onPress={() => selectLanguage(l.code)}
-                  >
-                    <Text className="text-2xl mr-3">{l.flag}</Text>
-                    <Text
-                      className={`flex-1 text-base ${active ? 'font-bold' : 'text-gray-900'}`}
-                      style={active ? { color: NEXA } : undefined}
-                    >
-                      {l.label}
-                    </Text>
-                    {active && (
-                      <Ionicons name="checkmark-circle" size={22} color={NEXA} />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </Animated.View>
-          </View>
-        </GestureHandlerRootView>
-      </Modal>
+              <Text className="text-2xl mr-3">{l.flag}</Text>
+              <Text
+                className={`flex-1 text-base ${active ? 'font-bold' : 'text-gray-900'}`}
+                style={active ? { color: NEXA } : undefined}
+              >
+                {l.label}
+              </Text>
+              {active && (
+                <Ionicons name="checkmark-circle" size={22} color={NEXA} />
+              )}
+            </TouchableOpacity>
+          );
+        })}
+        <View className="pb-8" />
+      </BottomSheet>
     </SafeAreaView>
   );
 }

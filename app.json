@@ -63,7 +63,8 @@
           "microphonePermission": "Nexa utilise le micro pour enregistrer le son de vos vidéos.",
           "recordAudioAndroid": true
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true,
