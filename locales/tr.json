@@ -24,9 +24,9 @@
   "language": "Dil",
   "account": "Hesap",
   "privacy": "Gizlilik",
-  "kvkk_title": "Kişisel veriler (KVKK)",
-  "kvkk_accepted": "Onay verildi",
-  "kvkk_not_accepted": "Onay verilmedi",
+  "privacy_title": "Gizlilik politikası",
+  "consent_granted": "Onay verildi",
+  "consent_not_granted": "Onay verilmedi",
   "logout_confirm_title": "Çıkış yap",
   "logout_confirm_message": "Çıkış yapmak istediğinize emin misiniz?",
   "name_required": "Ad boş olamaz",
@@ -62,7 +62,9 @@
     "resend_failed": "Kod tekrar gönderilemedi. Tekrar deneyin.",
     "resend_code": "Kodu tekrar gönder",
     "code_valid_for": "Kod şu süre geçerli:",
-    "confirm": "Onayla"
+    "confirm": "Onayla",
+    "consent": "{{link}} kabul ediyorum",
+    "privacy_link": "gizlilik politikasını"
   },
   "country_picker": {
     "title": "Ülke seçin",

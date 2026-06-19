@@ -24,9 +24,9 @@
   "language": "Langue",
   "account": "Compte",
   "privacy": "Confidentialité",
-  "kvkk_title": "Données personnelles (KVKK)",
-  "kvkk_accepted": "Consentement accordé",
-  "kvkk_not_accepted": "Consentement non accordé",
+  "privacy_title": "Politique de confidentialité",
+  "consent_granted": "Consentement accordé",
+  "consent_not_granted": "Consentement non accordé",
   "logout_confirm_title": "Déconnexion",
   "logout_confirm_message": "Voulez-vous vraiment vous déconnecter ?",
   "name_required": "Le nom ne peut pas être vide",
@@ -62,7 +62,9 @@
     "resend_failed": "Impossible de renvoyer le code. Réessaie.",
     "resend_code": "Renvoyer le code",
     "code_valid_for": "Code valide pendant",
-    "confirm": "Confirmer"
+    "confirm": "Confirmer",
+    "consent": "J'accepte la {{link}}",
+    "privacy_link": "politique de confidentialité"
   },
   "country_picker": {
     "title": "Choisir un pays",

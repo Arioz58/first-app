@@ -28,7 +28,7 @@ Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintena
 
 ### Planning
 
-- **Mois 1** ✅ — Architecture, BDD, auth (JWT + OTP), profils, KVKK, i18n (tr/fr/en)
+- **Mois 1** ✅ — Architecture, BDD, auth (JWT + OTP), profils, consentement politique de confidentialité, i18n (tr/fr/en)
 - **Mois 2** ✅ — Messagerie temps réel (Socket.io), groupes (API + rooms + gestion membres), FCM push, frontend mobile complet
 - **Mois 3** 🔄 — Stories 24h ✅ (éditeur texte riche + photo/vidéo, voir section dédiée), médias S3 ✅ (upload presigned + CloudFront), localisation 🔜, version web Next.js 🔜
 - **Mois 4** — Appels audio/vidéo (Agora.io)
@@ -105,14 +105,14 @@ app/
 │   ├── welcome.tsx      # Écran d'accueil NEXA (slogan + image + Continuer) → security
 │   ├── security.tsx    # Argument sécurité/confidentialité (Moti) → intro
 │   ├── intro.tsx        # « Discutez librement » (Commencer / J'ai déjà un compte → login isNew=1/0)
-│   ├── login.tsx        # Saisie numéro + indicatif pays (CountryPicker) — prénom si nouveau compte
-│   └── verify.tsx       # Saisie OTP (6 champs individuels, auto-avance, coller) → JWT + socket + FCM
+│   ├── login.tsx        # Saisie numéro + indicatif pays (CountryPicker) — prénom + case consentement politique de confidentialité (lien PRIVACY_URL) si nouveau compte ; bouton désactivé tant que non coché
+│   └── verify.tsx       # Saisie OTP (6 champs individuels, auto-avance, coller) → JWT + socket + FCM ; si `isNew=1` → POST /users/me/privacy-consent (consentement + version PRIVACY_POLICY_VERSION)
 ├── (tabs)/
 │   ├── _layout.tsx      # NativeTabs (SF Symbols) — 4 onglets
 │   ├── index.tsx        # Liste conversations + StoriesBar en header
 │   ├── search.tsx       # Recherche (à implémenter)
 │   ├── saved.tsx        # Appels (à implémenter Mois 4)
-│   └── profile.tsx      # Profil (thème vert nexa) : avatar+photo (upload S3), édition du nom, sélecteur de langue i18n (PATCH + persistance), statut KVKK, déconnexion → welcome
+│   └── profile.tsx      # Profil (thème vert nexa) : avatar+photo (upload S3), édition du nom, sélecteur de langue i18n (PATCH + persistance), statut consentement confidentialité, déconnexion → welcome
 ├── chat/
 │   └── [id].tsx         # Écran chat temps réel (Socket.io)
 ├── group/
@@ -158,7 +158,7 @@ src/
 │   └── auth.middleware.ts          # Middleware JWT → AuthRequest.userId
 └── modules/
     ├── auth/                       # send-code (OTP Redis 5min) + verify-code + refresh
-    ├── users/                      # Profil + KVKK + fcmToken
+    ├── users/                      # Profil + consentement confidentialité + fcmToken
     ├── messages/                   # Conversations direct/groupe + messages + gestion membres
     ├── stories/                    # Stories 24h : CRUD + groupées par user (texts en colonne Json)
     └── upload/                     # Presigned URL S3 (lib/s3.ts) — folder/ext selon contentType
@@ -176,7 +176,7 @@ POST /auth/refresh                                → renouvelle access token
 
 GET  /users/me                                    → profil complet
 PATCH /users/me                                   → mise à jour (name, photoUrl, language...)
-POST /users/me/kvkk                               → acceptation KVKK
+POST /users/me/privacy-consent                    → consentement politique de confidentialité (body `{ version }` → privacyConsent + privacyConsentAt + privacyPolicyVersion)
 POST /users/me/fcm-token                          → enregistrer/mettre à jour token FCM
 
 POST /conversations/direct                        → créer/récupérer conv directe
@@ -299,7 +299,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 - Autorisation groupes : admin only pour add/remove/rename
 - Stories : owner-only delete
 - SecureStore côté client (chiffré, pas AsyncStorage)
-- KVKK/RGPD consentement intégré
+- Consentement à la politique de confidentialité intégré — case opt-in **obligatoire à l'inscription** (`login.tsx`, signup uniquement), persisté via `POST /users/me/privacy-consent` après création du compte (stocke `privacyConsent` + `privacyConsentAt` + `privacyPolicyVersion`) ; lien vers la politique = `PRIVACY_URL`, version = `PRIVACY_POLICY_VERSION` (`lib/config.ts`, ⚠️ **URL placeholder à remplacer** par la vraie page web)
 - `firebase-service-account.json` dans `.gitignore`
 
 ### À faire en Mois 5 (avant prod) ⚠️

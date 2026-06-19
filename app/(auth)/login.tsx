@@ -8,6 +8,7 @@ import {
   Animated,
   Image,
   Keyboard,
+  Linking,
   Platform,
   Text,
   TextInput,
@@ -18,6 +19,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import CountryPicker from "../../components/CountryPicker";
 import { apiRequest } from "../../lib/api";
+import { PRIVACY_URL } from "../../lib/config";
 import { COUNTRIES, Country } from "../../lib/countries";
 
 export default function LoginScreen() {
@@ -28,6 +30,7 @@ export default function LoginScreen() {
 
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
+  const [accepted, setAccepted] = useState(false); // consentement politique de confidentialité (inscription)
   const [loading, setLoading] = useState(false);
   const [country, setCountry] = useState<Country>(COUNTRIES[0]);
   const [nameError, setNameError] = useState("");
@@ -153,7 +156,7 @@ export default function LoginScreen() {
       });
       router.push({
         pathname: "/(auth)/verify" as any,
-        params: { phone: fullPhone, name },
+        params: { phone: fullPhone, name, isNew: isNewUser ? "1" : "0" },
       });
     } catch (e: any) {
       setServerError(e.message || t("auth.generic_error"));
@@ -290,16 +293,57 @@ export default function LoginScreen() {
             </Text>
           ) : null}
 
+          {isNewUser && (
+            <TouchableOpacity
+              className="flex-row items-start mb-5 px-1"
+              activeOpacity={0.7}
+              onPress={() => setAccepted((v) => !v)}
+            >
+              <Ionicons
+                name={accepted ? "checkbox" : "square-outline"}
+                size={24}
+                color={accepted ? "#128C7E" : "#9CA3AF"}
+              />
+              <Text className="ml-2 flex-1 text-base text-gray-600 leading-6">
+                {(() => {
+                  const parts = t("auth.consent").split("{{link}}");
+                  return (
+                    <>
+                      {parts[0]}
+                      <Text
+                        className="text-nexa font-semibold underline"
+                        onPress={() => Linking.openURL(PRIVACY_URL)}
+                      >
+                        {t("auth.privacy_link")}
+                      </Text>
+                      {parts[1]}
+                    </>
+                  );
+                })()}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
             <TouchableOpacity
-              className={`rounded-[2rem] py-6 items-center ${buttonError ? "bg-red-500" : "bg-nexa"}`}
+              className={`rounded-[2rem] py-6 items-center ${
+                buttonError
+                  ? "bg-red-500"
+                  : isNewUser && !accepted
+                    ? "bg-gray-200"
+                    : "bg-nexa"
+              }`}
               onPress={handleSend}
-              disabled={loading}
+              disabled={loading || (isNewUser && !accepted)}
             >
               {loading ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <Text className="text-white font-semibold text-2xl italic">
+                <Text
+                  className={`font-semibold text-2xl italic ${
+                    isNewUser && !accepted ? "text-gray-400" : "text-white"
+                  }`}
+                >
                   {t("auth.receive_code")} →
                 </Text>
               )}

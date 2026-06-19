@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { apiRequest } from "../../lib/api";
+import { PRIVACY_POLICY_VERSION } from "../../lib/config";
 import { registerForPushNotifications } from "../../lib/notifications";
 import { connectSocket } from "../../lib/socket";
 import { saveTokens } from "../../lib/storage";
@@ -32,9 +33,10 @@ function formatTime(seconds: number) {
 export default function VerifyScreen() {
   const router = useRouter();
   const { t } = useTranslation();
-  const { phone, name } = useLocalSearchParams<{
+  const { phone, name, isNew } = useLocalSearchParams<{
     phone: string;
     name: string;
+    isNew: string;
   }>();
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
@@ -150,6 +152,13 @@ export default function VerifyScreen() {
         auth: false,
       });
       await saveTokens(data.accessToken, data.refreshToken, data.user.id);
+      // Nouveau compte : on enregistre le consentement à la politique de confidentialité.
+      if (isNew === "1") {
+        await apiRequest("/users/me/privacy-consent", {
+          method: "POST",
+          body: { version: PRIVACY_POLICY_VERSION },
+        }).catch(() => {});
+      }
       await connectSocket();
       await registerForPushNotifications();
       router.replace("/(tabs)");

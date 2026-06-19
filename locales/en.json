@@ -24,9 +24,9 @@
   "language": "Language",
   "account": "Account",
   "privacy": "Privacy",
-  "kvkk_title": "Personal data (KVKK)",
-  "kvkk_accepted": "Consent granted",
-  "kvkk_not_accepted": "Consent not granted",
+  "privacy_title": "Privacy policy",
+  "consent_granted": "Consent granted",
+  "consent_not_granted": "Consent not granted",
   "logout_confirm_title": "Log out",
   "logout_confirm_message": "Are you sure you want to log out?",
   "name_required": "Name cannot be empty",
@@ -62,7 +62,9 @@
     "resend_failed": "Couldn't resend the code. Try again.",
     "resend_code": "Resend code",
     "code_valid_for": "Code valid for",
-    "confirm": "Confirm"
+    "confirm": "Confirm",
+    "consent": "I accept the {{link}}",
+    "privacy_link": "privacy policy"
   },
   "country_picker": {
     "title": "Choose a country",

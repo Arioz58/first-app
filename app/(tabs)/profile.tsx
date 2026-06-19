@@ -28,7 +28,7 @@ type User = {
   name: string;
   phone: string;
   photoUrl: string | null;
-  kvkkConsent: boolean;
+  privacyConsent: boolean;
   language: string;
 };
 
@@ -262,8 +262,10 @@ export default function ProfileScreen() {
         <View className="h-px bg-gray-100 ml-16" />
         <SettingRow
           icon="shield-checkmark-outline"
-          label={t('kvkk_title')}
-          value={user?.kvkkConsent ? t('kvkk_accepted') : t('kvkk_not_accepted')}
+          label={t('privacy_title')}
+          value={
+            user?.privacyConsent ? t('consent_granted') : t('consent_not_granted')
+          }
         />
       </View>
 

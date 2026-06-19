@@ -8,3 +8,10 @@ const LOCAL_URL = "http://192.168.1.181:3000";
 const CLOUD_URL = "https://first-app-backend-production-c2db.up.railway.app";
 
 export const BASE_URL = __DEV__ ? LOCAL_URL : CLOUD_URL;
+
+// Politique de confidentialité — affichée au consentement à l'inscription.
+// ⚠️ Placeholder : remplacer par l'URL réelle (page first-app-web) dès qu'elle existe.
+export const PRIVACY_URL = "https://nexa.app/privacy";
+// Version de la politique acceptée (envoyée au backend pour tracer le consentement).
+// Incrémenter à chaque révision du texte légal.
+export const PRIVACY_POLICY_VERSION = "1.0";
