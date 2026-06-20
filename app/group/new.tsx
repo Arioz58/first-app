@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +8,7 @@ import { apiRequest } from '../../lib/api';
 
 export default function NewGroupScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [memberInput, setMemberInput] = useState('');
   const [memberIds, setMemberIds] = useState<string[]>([]);
@@ -21,7 +23,7 @@ export default function NewGroupScreen() {
 
   const handleCreate = async () => {
     if (!name.trim() || !memberIds.length) {
-      Alert.alert('Erreur', 'Nom et au moins un membre requis');
+      Alert.alert(t('error'), t('group.name_member_required'));
       return;
     }
     setLoading(true);
@@ -32,7 +34,7 @@ export default function NewGroupScreen() {
       });
       router.replace({ pathname: '/chat/[id]' as any, params: { id: conv.id, name: conv.name } });
     } catch (e: any) {
-      Alert.alert('Erreur', e.message);
+      Alert.alert(t('error'), e.message);
     } finally {
       setLoading(false);
     }
@@ -42,15 +44,15 @@ export default function NewGroupScreen() {
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-row items-center px-4 py-3 border-b border-gray-100">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
-          <Ionicons name="arrow-back" size={24} color="#1E40AF" />
+          <Ionicons name="arrow-back" size={24} color="#128C7E" />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900">Nouveau groupe</Text>
+        <Text className="text-lg font-semibold text-gray-900">{t('group.new_group')}</Text>
       </View>
 
       <View className="px-4 mt-6 gap-4">
         <TextInput
           className="border border-gray-300 rounded-xl px-4 py-3 text-base"
-          placeholder="Nom du groupe"
+          placeholder={t('group.group_name')}
           value={name}
           onChangeText={setName}
         />
@@ -58,12 +60,12 @@ export default function NewGroupScreen() {
         <View className="flex-row gap-2">
           <TextInput
             className="flex-1 border border-gray-300 rounded-xl px-4 py-3 text-base"
-            placeholder="ID d'un membre"
+            placeholder={t('group.member_id')}
             value={memberInput}
             onChangeText={setMemberInput}
           />
           <TouchableOpacity
-            className="bg-blue-800 rounded-xl px-4 items-center justify-center"
+            className="bg-nexa rounded-xl px-4 items-center justify-center"
             onPress={addMember}
           >
             <Ionicons name="add" size={22} color="white" />
@@ -80,14 +82,14 @@ export default function NewGroupScreen() {
         ))}
 
         <TouchableOpacity
-          className="bg-blue-800 rounded-xl py-4 items-center mt-4"
+          className="bg-nexa rounded-xl py-4 items-center mt-4"
           onPress={handleCreate}
           disabled={loading}
         >
           {loading ? (
             <ActivityIndicator color="white" />
           ) : (
-            <Text className="text-white font-semibold text-base">Créer le groupe</Text>
+            <Text className="text-white font-semibold text-base">{t('group.create')}</Text>
           )}
         </TouchableOpacity>
       </View>

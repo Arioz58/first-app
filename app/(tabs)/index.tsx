@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,6 +22,7 @@ type Conversation = {
 
 export default function ConversationsScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,20 +69,20 @@ export default function ConversationsScreen() {
   }, []);
 
   const getConvName = (conv: Conversation) => {
-    if (conv.type === 'group') return conv.name ?? 'Groupe';
+    if (conv.type === 'group') return conv.name ?? t('chat.group');
     const other = conv.members.find((m) => m.userId !== currentUserId);
-    return other?.user.name ?? 'Inconnu';
+    return other?.user.name ?? t('chat.unknown');
   };
 
   const getLastMessage = (conv: Conversation) => {
-    if (!conv.messages.length) return 'Aucun message';
-    return conv.messages[0].content ?? '📎 Média';
+    if (!conv.messages.length) return t('chat.no_messages');
+    return conv.messages[0].content ?? t('chat.media');
   };
 
   if (loading) {
     return (
       <View className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color="#1E40AF" />
+        <ActivityIndicator size="large" color="#128C7E" />
       </View>
     );
   }
@@ -88,9 +90,9 @@ export default function ConversationsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
-        <Text className="text-xl font-bold text-blue-800">Messages</Text>
+        <Text className="text-xl font-bold text-nexa">{t('messages')}</Text>
         <TouchableOpacity onPress={() => router.push('/group/new' as any)}>
-          <Ionicons name="create-outline" size={24} color="#1E40AF" />
+          <Ionicons name="create-outline" size={24} color="#128C7E" />
         </TouchableOpacity>
       </View>
 
@@ -111,7 +113,7 @@ export default function ConversationsScreen() {
         }
         ListEmptyComponent={
           <View className="items-center justify-center mt-20">
-            <Text className="text-gray-400">Aucune conversation</Text>
+            <Text className="text-gray-400">{t('chat.no_conversations')}</Text>
           </View>
         }
         renderItem={({ item }) => (
@@ -121,11 +123,11 @@ export default function ConversationsScreen() {
               router.push({ pathname: '/chat/[id]' as any, params: { id: item.id, name: getConvName(item) } })
             }
           >
-            <View className="w-12 h-12 rounded-full bg-blue-100 items-center justify-center mr-3">
+            <View className="w-12 h-12 rounded-full bg-emerald-50 items-center justify-center mr-3">
               <Ionicons
                 name={item.type === 'group' ? 'people' : 'person'}
                 size={22}
-                color="#1E40AF"
+                color="#128C7E"
               />
             </View>
             <View className="flex-1">

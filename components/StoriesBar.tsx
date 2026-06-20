@@ -3,6 +3,7 @@ import {
   View, Text, FlatList, TouchableOpacity,
   Image, ActivityIndicator,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -74,6 +75,7 @@ export type StoriesBarHandle = { refresh: () => void };
 
 const StoriesBar = forwardRef<StoriesBarHandle>((_props, ref) => {
   const router = useRouter();
+  const { t } = useTranslation();
   const [groups, setGroups] = useState<StoryGroup[]>([]);
   const [myStories, setMyStories] = useState<Story[]>([]);
   const [myProfile, setMyProfile] = useState<MyProfile | null>(null);
@@ -141,7 +143,7 @@ const StoriesBar = forwardRef<StoriesBarHandle>((_props, ref) => {
         </TouchableOpacity>
       </View>
       <Text className="text-xs text-gray-600 mt-1 text-center" style={{ width: RING }} numberOfLines={1}>
-        {hasMyStory ? 'Ma story' : 'Ajouter'}
+        {hasMyStory ? t('stories.my_story') : t('stories.add')}
       </Text>
     </View>
   );
@@ -158,7 +160,7 @@ const StoriesBar = forwardRef<StoriesBarHandle>((_props, ref) => {
         ListEmptyComponent={
           groups.length === 0 ? (
             <View className="items-center justify-center ml-4">
-              <Text className="text-gray-400 text-xs">Aucune story pour l&apos;instant</Text>
+              <Text className="text-gray-400 text-xs">{t('stories.empty')}</Text>
             </View>
           ) : null
         }

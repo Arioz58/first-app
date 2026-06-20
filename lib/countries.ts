@@ -3,11 +3,12 @@ export type Country = {
   name: string;
   dialCode: string;
   flag: string;
+  example?: string; // exemple de format national (placeholder du champ numéro)
 };
 
 export const COUNTRIES: Country[] = [
-  { code: 'TR', name: 'Türkiye', dialCode: '+90', flag: '🇹🇷' },
-  { code: 'FR', name: 'France', dialCode: '+33', flag: '🇫🇷' },
+  { code: 'TR', name: 'Türkiye', dialCode: '+90', flag: '🇹🇷', example: '5XX XXX XX XX' },
+  { code: 'FR', name: 'France', dialCode: '+33', flag: '🇫🇷', example: '6 12 34 56 78' },
   { code: 'DZ', name: 'Algérie', dialCode: '+213', flag: '🇩🇿' },
   { code: 'DE', name: 'Allemagne', dialCode: '+49', flag: '🇩🇪' },
   { code: 'SA', name: 'Arabie Saoudite', dialCode: '+966', flag: '🇸🇦' },

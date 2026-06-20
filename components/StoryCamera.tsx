@@ -5,6 +5,7 @@ import {
   useMicrophonePermissions,
 } from "expo-camera";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Linking,
   StatusBar,
@@ -54,6 +55,7 @@ export function StoryCamera({
   onCapture: (media: CapturedMedia) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraView>(null);
 
@@ -364,7 +366,7 @@ export function StoryCamera({
       >
         <Ionicons name="camera-outline" size={48} color="rgba(255,255,255,0.6)" />
         <Text className="text-white text-center text-base">
-          Autorise l&apos;accès à la caméra pour prendre des photos et vidéos.
+          {t("camera.permission_text")}
         </Text>
         <TouchableOpacity
           className="bg-nexa px-6 py-3 rounded-full"
@@ -373,11 +375,11 @@ export function StoryCamera({
           }
         >
           <Text className="text-white font-semibold">
-            {camPerm.canAskAgain ? "Autoriser" : "Ouvrir les réglages"}
+            {camPerm.canAskAgain ? t("camera.allow") : t("camera.open_settings")}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onClose} className="mt-2">
-          <Text className="text-white/60">Retour</Text>
+          <Text className="text-white/60">{t("camera.back")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -568,10 +570,10 @@ export function StoryCamera({
       >
         <Text className="text-white/60 text-xs">
           {locked
-            ? "Verrouillé · Appuyez sur le bouton pour arrêter"
+            ? t("camera.locked_hint")
             : isRecording
-              ? "Glissez vers le haut pour verrouiller"
-              : "Appuyez pour une photo · Maintenez pour une vidéo"}
+              ? t("camera.lock_hint")
+              : t("camera.capture_hint")}
         </Text>
       </View>
     </View>

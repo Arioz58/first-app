@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, {
   runOnJS,
@@ -257,6 +258,7 @@ const overlay = StyleSheet.create({
 
 export default function CreateStoryScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = Dimensions.get('window');
   // Centre visuel de la poubelle (styles.trashWrapper : bottom 100 + rayon ~31),
@@ -533,7 +535,7 @@ export default function CreateStoryScreen() {
   const pickMedia = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission refusée', "L'accès à la galerie est nécessaire.");
+      Alert.alert(t('stories.permission_denied'), t('stories.gallery_permission'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -685,7 +687,7 @@ export default function CreateStoryScreen() {
         body: fileBlob,
       });
 
-      if (!uploadRes.ok) throw new Error("Échec de l'upload S3");
+      if (!uploadRes.ok) throw new Error(t('stories.upload_failed'));
 
       // Position normalisée de chaque texte dans l'espace écran [0..1]
       const storyTexts = texts
@@ -714,7 +716,7 @@ export default function CreateStoryScreen() {
 
       router.replace('/(tabs)');
     } catch (e: any) {
-      Alert.alert('Erreur', e.message);
+      Alert.alert(t('error'), e.message);
     } finally {
       setLoading(false);
     }
@@ -731,7 +733,7 @@ export default function CreateStoryScreen() {
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
-        <Text className="text-white text-lg font-semibold flex-1">Nouvelle story</Text>
+        <Text className="text-white text-lg font-semibold flex-1">{t('stories.new_story')}</Text>
         {(media || bgId) && (
           <TouchableOpacity onPress={() => setShowEmojiPicker(true)} className="mr-4">
             <Ionicons name="happy-outline" size={26} color="white" />
@@ -743,7 +745,7 @@ export default function CreateStoryScreen() {
               <ActivityIndicator color="white" />
             ) : (
               <View className="bg-nexa px-4 py-2 rounded-full">
-                <Text className="text-white font-semibold">Publier</Text>
+                <Text className="text-white font-semibold">{t('stories.publish')}</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -843,17 +845,17 @@ export default function CreateStoryScreen() {
             )}
             <Text className="text-white/40 text-xs">
               {texts.length > 0
-                ? 'Tape pour ajouter · Glisse un texte pour déplacer'
+                ? t('stories.hint_with_texts')
                 : media
-                  ? 'Tape pour ajouter du texte · Pince pour zoomer'
-                  : 'Tape pour ajouter du texte'}
+                  ? t('stories.hint_media')
+                  : t('stories.hint_text')}
             </Text>
             <TouchableOpacity
               className="bg-white/20 border border-white/40 rounded-full px-8 py-3"
               onPress={pickMedia}
             >
               <Text className="text-white font-medium">
-                {media ? 'Changer' : 'Photo / vidéo'}
+                {media ? t('stories.change') : t('stories.photo_video')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -865,24 +867,24 @@ export default function CreateStoryScreen() {
               <View className="w-20 h-20 rounded-full bg-white/10 items-center justify-center">
                 <Ionicons name="camera" size={34} color="white" />
               </View>
-              <Text className="text-white text-sm font-medium">Caméra</Text>
+              <Text className="text-white text-sm font-medium">{t('stories.camera')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity className="items-center gap-2" onPress={pickMedia} activeOpacity={0.8}>
               <View className="w-20 h-20 rounded-full bg-white/10 items-center justify-center">
                 <Ionicons name="images" size={32} color="white" />
               </View>
-              <Text className="text-white text-sm font-medium">Galerie</Text>
+              <Text className="text-white text-sm font-medium">{t('stories.gallery')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity className="items-center gap-2" onPress={enterTextMode} activeOpacity={0.8}>
               <View className="w-20 h-20 rounded-full bg-white/10 items-center justify-center">
                 <Text className="text-white" style={{ fontSize: 30, fontWeight: 'bold' }}>Aa</Text>
               </View>
-              <Text className="text-white text-sm font-medium">Texte</Text>
+              <Text className="text-white text-sm font-medium">{t('stories.text')}</Text>
             </TouchableOpacity>
           </View>
-          <Text className="text-white/50 text-sm mt-8">Visible pendant 24h</Text>
+          <Text className="text-white/50 text-sm mt-8">{t('stories.visible_24h')}</Text>
         </View>
       )}
 

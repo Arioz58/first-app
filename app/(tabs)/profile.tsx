@@ -30,6 +30,7 @@ type User = {
   photoUrl: string | null;
   privacyConsent: boolean;
   language: string;
+  profile: { bio: string | null } | null;
 };
 
 // Ligne de réglage générique (icône + label + valeur/flèche)
@@ -79,8 +80,9 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
-  const [nameModal, setNameModal] = useState(false);
+  const [editModal, setEditModal] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
+  const [bioDraft, setBioDraft] = useState('');
   const [nameError, setNameError] = useState('');
   const [savingName, setSavingName] = useState(false);
 
@@ -151,13 +153,14 @@ export default function ProfileScreen() {
     }
   };
 
-  const openNameModal = () => {
+  const openEditModal = () => {
     setNameDraft(user?.name ?? '');
+    setBioDraft(user?.profile?.bio ?? '');
     setNameError('');
-    setNameModal(true);
+    setEditModal(true);
   };
 
-  const saveName = async () => {
+  const saveProfile = async () => {
     const trimmed = nameDraft.trim();
     if (!trimmed) {
       setNameError(t('name_required'));
@@ -167,11 +170,17 @@ export default function ProfileScreen() {
       setNameError(t('name_too_short'));
       return;
     }
+    const bio = bioDraft.trim();
     setSavingName(true);
     try {
-      await apiRequest('/users/me', { method: 'PATCH', body: { name: trimmed } });
-      setUser((u) => (u ? { ...u, name: trimmed } : u));
-      setNameModal(false);
+      await apiRequest('/users/me', {
+        method: 'PATCH',
+        body: { name: trimmed, bio },
+      });
+      setUser((u) =>
+        u ? { ...u, name: trimmed, profile: { ...u.profile, bio } } : u,
+      );
+      setEditModal(false);
     } catch (e: any) {
       setNameError(e.message || t('error'));
     } finally {
@@ -241,11 +250,19 @@ export default function ProfileScreen() {
 
         <View className="flex-row items-center mt-4">
           <Text className="text-2xl font-bold text-gray-900">{user?.name}</Text>
-          <TouchableOpacity className="ml-2 p-1" onPress={openNameModal}>
+          <TouchableOpacity className="ml-2 p-1" onPress={openEditModal}>
             <Ionicons name="pencil" size={18} color={NEXA} />
           </TouchableOpacity>
         </View>
         <Text className="text-gray-500 mt-1">{user?.phone}</Text>
+
+        <TouchableOpacity onPress={openEditModal} className="mt-2 px-8">
+          {user?.profile?.bio ? (
+            <Text className="text-gray-600 text-center">{user.profile.bio}</Text>
+          ) : (
+            <Text className="text-gray-400 italic text-center">{t('add_bio')}</Text>
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* Réglages */}
@@ -278,11 +295,11 @@ export default function ProfileScreen() {
         />
       </View>
 
-      {/* Modal édition du nom */}
-      <Modal visible={nameModal} transparent animationType="fade">
+      {/* Modal édition du profil (nom + bio) */}
+      <Modal visible={editModal} transparent animationType="fade">
         <Pressable
           className="flex-1 justify-center items-center bg-black/40 px-8"
-          onPress={() => setNameModal(false)}
+          onPress={() => setEditModal(false)}
         >
           <Pressable className="w-full bg-white rounded-2xl p-5" onPress={() => {}}>
             <Text className="text-lg font-bold text-gray-900 mb-3">
@@ -303,17 +320,32 @@ export default function ProfileScreen() {
             {nameError ? (
               <Text className="text-red-500 text-sm mt-1 ml-1">{nameError}</Text>
             ) : null}
-            <View className="flex-row justify-end gap-3 mt-4">
+
+            <TextInput
+              className="border border-gray-300 rounded-xl px-4 py-3 text-base mt-3 h-24"
+              placeholder={t('bio_placeholder')}
+              placeholderTextColor="#9CA3AF"
+              value={bioDraft}
+              onChangeText={setBioDraft}
+              multiline
+              textAlignVertical="top"
+              maxLength={140}
+            />
+            <Text className="text-gray-400 text-xs mt-1 ml-1 self-end">
+              {bioDraft.length}/140
+            </Text>
+
+            <View className="flex-row justify-end gap-3 mt-2">
               <TouchableOpacity
                 className="px-4 py-2"
-                onPress={() => setNameModal(false)}
+                onPress={() => setEditModal(false)}
               >
                 <Text className="text-gray-500 font-semibold">{t('cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 className="px-5 py-2 rounded-full"
                 style={{ backgroundColor: NEXA }}
-                onPress={saveName}
+                onPress={saveProfile}
                 disabled={savingName}
               >
                 {savingName ? (

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Alert,
@@ -101,15 +102,16 @@ function oldestFirst(arr: Story[]): Story[] {
 }
 
 // Temps écoulé depuis la publication : minutes si < 1h, sinon heures.
-function formatStoryTime(iso: string): string {
+function formatStoryTime(iso: string, t: (k: string) => string): string {
   const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (min < 1) return "À l'instant";
-  if (min < 60) return `${min} min`;
-  return `${Math.floor(min / 60)} h`;
+  if (min < 1) return t("stories.time_now");
+  if (min < 60) return `${min} ${t("stories.minutes_short")}`;
+  return `${Math.floor(min / 60)} ${t("stories.hours_short")}`;
 }
 
 export default function StoryViewScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const [stories, setStories] = useState<Story[]>([]);
@@ -235,7 +237,7 @@ export default function StoryViewScreen() {
       if (uid === userId) {
         const mine = await apiRequest<Story[]>("/stories/me");
         setStories(oldestFirst(mine));
-        setUserName("Ma story");
+        setUserName(t("stories.my_story"));
       } else {
         const all = await apiRequest<StoryGroup[]>("/stories");
         const group = all.find((g) => g.user.id === userId);
@@ -246,7 +248,7 @@ export default function StoryViewScreen() {
       }
     };
     init();
-  }, [userId]);
+  }, [userId, t]);
 
   // Précharge toutes les images en cache pour accélérer la navigation.
   useEffect(() => {
@@ -527,11 +529,11 @@ export default function StoryViewScreen() {
   const confirmDelete = () => {
     pauseStory();
     Alert.alert(
-      "Supprimer la story",
-      "Cette story sera définitivement supprimée.",
+      t("stories.delete_title"),
+      t("stories.delete_message"),
       [
-        { text: "Annuler", style: "cancel", onPress: resumeStory },
-        { text: "Supprimer", style: "destructive", onPress: handleDelete },
+        { text: t("cancel"), style: "cancel", onPress: resumeStory },
+        { text: t("stories.delete"), style: "destructive", onPress: handleDelete },
       ],
     );
   };
@@ -635,7 +637,7 @@ export default function StoryViewScreen() {
             </View>
             <Text className="text-white text-md font-semibold">{userName}</Text>
             <Text className="text-white/80 text-sm">
-              {formatStoryTime(current.createdAt)}
+              {formatStoryTime(current.createdAt, t)}
             </Text>
           </View>
           <View className="flex-row gap-3 items-center">
@@ -838,7 +840,7 @@ export default function StoryViewScreen() {
                       <View
                         key={v.id}
                         style={{ marginLeft: i === 0 ? 0 : -10 }}
-                        className="w-8 h-8 rounded-full overflow-hidden border-2 border-neutral-900 bg-blue-200 items-center justify-center"
+                        className="w-8 h-8 rounded-full overflow-hidden border-2 border-neutral-900 bg-emerald-100 items-center justify-center"
                       >
                         {v.viewer.photoUrl ? (
                           <Image
@@ -846,7 +848,7 @@ export default function StoryViewScreen() {
                             className="w-full h-full"
                           />
                         ) : (
-                          <Text className="text-blue-900 text-xs font-bold">
+                          <Text className="text-nexa text-xs font-bold">
                             {v.viewer.name[0]?.toUpperCase()}
                           </Text>
                         )}
@@ -855,7 +857,8 @@ export default function StoryViewScreen() {
                     <View className="flex-row items-center gap-1.5 ml-2">
                       <Ionicons name="eye-outline" size={18} color="white" />
                       <Text className="text-white text-sm font-semibold">
-                        {viewerCount} {viewerCount > 1 ? "vues" : "vue"}
+                        {viewerCount}{" "}
+                        {viewerCount > 1 ? t("stories.views") : t("stories.view")}
                       </Text>
                     </View>
                   </View>
@@ -873,7 +876,7 @@ export default function StoryViewScreen() {
             {viewers.length === 0 ? (
               <View className="flex-1 items-center justify-center">
                 <Text className="text-white/40 text-sm">
-                  {"Personne n'a encore vu cette story"}
+                  {t("stories.no_viewers")}
                 </Text>
               </View>
             ) : (
@@ -886,14 +889,14 @@ export default function StoryViewScreen() {
                 }}
                 renderItem={({ item }) => (
                   <View className="flex-row items-center gap-3 px-5 py-2.5">
-                    <View className="w-11 h-11 rounded-full overflow-hidden bg-blue-200 items-center justify-center">
+                    <View className="w-11 h-11 rounded-full overflow-hidden bg-emerald-100 items-center justify-center">
                       {item.viewer.photoUrl ? (
                         <Image
                           source={{ uri: item.viewer.photoUrl }}
                           className="w-full h-full"
                         />
                       ) : (
-                        <Text className="text-blue-900 font-bold">
+                        <Text className="text-nexa font-bold">
                           {item.viewer.name[0]?.toUpperCase()}
                         </Text>
                       )}
@@ -902,7 +905,7 @@ export default function StoryViewScreen() {
                       {item.viewer.name}
                     </Text>
                     <Text className="text-white/40 text-xs">
-                      {formatStoryTime(item.createdAt)}
+                      {formatStoryTime(item.createdAt, t)}
                     </Text>
                   </View>
                 )}
@@ -922,7 +925,7 @@ export default function StoryViewScreen() {
               <View className="items-center mb-2">
                 <View className="flex-row items-center gap-1 bg-white/15 px-4 py-1.5 rounded-full">
                   <Ionicons name="checkmark" size={14} color="white" />
-                  <Text className="text-white text-xs">Envoyé</Text>
+                  <Text className="text-white text-xs">{t("stories.sent")}</Text>
                 </View>
               </View>
             )}
@@ -956,7 +959,7 @@ export default function StoryViewScreen() {
               <View className="flex-1 flex-row items-center bg-black/60 rounded-full px-4">
                 <TextInput
                   className="flex-1 py-2.5 text-white text-base"
-                  placeholder="Envoyer un message…"
+                  placeholder={t("stories.reply_placeholder")}
                   placeholderTextColor="rgba(255,255,255,0.55)"
                   value={replyText}
                   onChangeText={setReplyText}

@@ -105,14 +105,14 @@ app/
 │   ├── welcome.tsx      # Écran d'accueil NEXA (slogan + image + Continuer) → security
 │   ├── security.tsx    # Argument sécurité/confidentialité (Moti) → intro
 │   ├── intro.tsx        # « Discutez librement » (Commencer / J'ai déjà un compte → login isNew=1/0)
-│   ├── login.tsx        # Saisie numéro + indicatif pays (CountryPicker) — prénom + case consentement politique de confidentialité (lien PRIVACY_URL) si nouveau compte ; bouton désactivé tant que non coché
-│   └── verify.tsx       # Saisie OTP (6 champs individuels, auto-avance, coller) → JWT + socket + FCM ; si `isNew=1` → POST /users/me/privacy-consent (consentement + version PRIVACY_POLICY_VERSION)
+│   ├── login.tsx        # Saisie numéro + indicatif pays (CountryPicker, placeholder adaptatif via `Country.example`) — prénom + case consentement politique de confidentialité (lien PRIVACY_URL) si nouveau compte ; bouton désactivé tant que non coché
+│   └── verify.tsx       # Saisie OTP (6 champs individuels, auto-avance, coller) → JWT + socket + FCM ; renvoi du code après cooldown `RESEND_COOLDOWN` (45s, compte à rebours) ; si `isNew=1` → POST /users/me/privacy-consent (consentement + version PRIVACY_POLICY_VERSION)
 ├── (tabs)/
 │   ├── _layout.tsx      # NativeTabs (SF Symbols) — 4 onglets
 │   ├── index.tsx        # Liste conversations + StoriesBar en header
 │   ├── search.tsx       # Recherche (à implémenter)
 │   ├── saved.tsx        # Appels (à implémenter Mois 4)
-│   └── profile.tsx      # Profil (thème vert nexa) : avatar+photo (upload S3), édition du nom, sélecteur de langue i18n (PATCH + persistance), statut consentement confidentialité, déconnexion → welcome
+│   └── profile.tsx      # Profil (thème vert nexa) : avatar+photo (upload S3), édition nom + bio (modale combinée, bio 140 car.), sélecteur de langue i18n (PATCH + persistance), statut consentement confidentialité, déconnexion → welcome
 ├── chat/
 │   └── [id].tsx         # Écran chat temps réel (Socket.io)
 ├── group/
@@ -175,7 +175,7 @@ POST /auth/verify-code                            → vérifie OTP, crée user s
 POST /auth/refresh                                → renouvelle access token
 
 GET  /users/me                                    → profil complet
-PATCH /users/me                                   → mise à jour (name, photoUrl, language...)
+PATCH /users/me                                   → mise à jour (name, photoUrl, language sur User ; bio/privacyPresence/privacyPhoto routés sur Profile — `bio` effaçable via chaîne vide)
 POST /users/me/privacy-consent                    → consentement politique de confidentialité (body `{ version }` → privacyConsent + privacyConsentAt + privacyPolicyVersion)
 POST /users/me/fcm-token                          → enregistrer/mettre à jour token FCM
 
@@ -331,7 +331,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 
 - **Prisma v5** — ne pas upgrader en v7 (breaking changes majeurs sur la config datasource).
 - **OTP** simulé en local (log console). Remplacer par Twilio avant la mise en prod.
-- **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'`. **Langue détectée automatiquement au 1er lancement** depuis la langue de l'appareil (`expo-localization`, mappée sur tr/fr/en sinon turc) ; un choix explicite sauvegardé (SecureStore) prime ensuite. Modifiable via le profil (`setAppLanguage` + `PATCH /users/me`). Clés organisées par groupes imbriqués (`onboarding`, `auth`, `country_picker`, …) — **garder les 3 fichiers `locales/*.json` strictement alignés** (mêmes clés). Écrans déjà branchés sur `t()` : onboarding (welcome/security/intro/login/verify), profil, CountryPicker. **Pas encore traduits** : messages/chat, groupes, stories.
+- **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'`. **Langue détectée automatiquement au 1er lancement** depuis la langue de l'appareil (`expo-localization`, mappée sur tr/fr/en sinon turc) ; un choix explicite sauvegardé (SecureStore) prime ensuite. Modifiable via le profil (`setAppLanguage` + `PATCH /users/me`). Clés organisées par groupes imbriqués (`onboarding`, `auth`, `country_picker`, …) — **garder les 3 fichiers `locales/*.json` strictement alignés** (mêmes clés). Écrans déjà branchés sur `t()` : onboarding (welcome/security/intro/login/verify), profil, CountryPicker, liste conversations (`(tabs)/index`), chat (`chat/[id]`), création de groupe (`group/new`), StoriesBar, viewer/éditeur de stories (`story/[id]`, `story/create`), caméra in-app (`StoryCamera`). Groupes de clés dédiés : `stories.*` (viewer + éditeur, ex. `time_now`/`minutes_short`/`views`), `camera.*`. **Pas encore traduits** : écrans stubs `search`/`saved` (à implémenter). `VideoTrimmer`/`EmojiPicker` n'ont pas de texte.
 - En local : PostgreSQL + Redis tournent via `docker-compose up -d` dans `first-app-backend/`.
 - **FCM iOS** : nécessite compte Apple Developer payant (99€/an) + clés APNs dans Firebase Console.
 - **URL backend** : centralisée dans `lib/config.ts` (`BASE_URL = __DEV__ ? LOCAL_URL : CLOUD_URL`). En dev (Metro) → backend **local** (mettre à jour `LOCAL_URL` à chaque changement de réseau Wi-Fi) ; en build release/EAS → backend **Railway** (`CLOUD_URL`). `api.ts` et `socket.ts` importent `BASE_URL` depuis `config.ts`.

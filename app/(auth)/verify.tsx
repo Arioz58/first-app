@@ -23,6 +23,7 @@ import { connectSocket } from "../../lib/socket";
 import { saveTokens } from "../../lib/storage";
 
 const OTP_DURATION = 5 * 60; // 5 minutes en secondes
+const RESEND_COOLDOWN = 45; // délai avant de pouvoir renvoyer un code (secondes)
 
 function formatTime(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -42,6 +43,7 @@ export default function VerifyScreen() {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [timeLeft, setTimeLeft] = useState(OTP_DURATION);
+  const [resendIn, setResendIn] = useState(RESEND_COOLDOWN);
   const [error, setError] = useState("");
   const inputRefs = useRef<Array<TextInput | null>>([
     null,
@@ -57,7 +59,9 @@ export default function VerifyScreen() {
   const startTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     setTimeLeft(OTP_DURATION);
+    setResendIn(RESEND_COOLDOWN);
     timerRef.current = setInterval(() => {
+      setResendIn((prev) => (prev <= 1 ? 0 : prev - 1));
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current!);
@@ -317,17 +321,7 @@ export default function VerifyScreen() {
             transition={{ type: "timing", duration: 400, delay: 400 }}
             className="items-center mb-6"
           >
-            {expired ? (
-              <TouchableOpacity onPress={handleResend} disabled={resending}>
-                {resending ? (
-                  <ActivityIndicator color="#128C7E" />
-                ) : (
-                  <Text className="text-nexa font-semibold text-base">
-                    {t("auth.resend_code")}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            ) : (
+            {!expired && (
               <Text
                 className={`text-base font-medium ${timeLeft <= 30 ? "text-red-400" : "text-gray-400"}`}
               >
@@ -335,6 +329,21 @@ export default function VerifyScreen() {
                 <Text className="font-bold">{formatTime(timeLeft)}</Text>
               </Text>
             )}
+            <View className="mt-2">
+              {resending ? (
+                <ActivityIndicator color="#128C7E" />
+              ) : resendIn > 0 ? (
+                <Text className="text-gray-400 text-base">
+                  {t("auth.resend_in", { time: formatTime(resendIn) })}
+                </Text>
+              ) : (
+                <TouchableOpacity onPress={handleResend}>
+                  <Text className="text-nexa font-semibold text-base">
+                    {t("auth.resend_code")}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </MotiView>
 
           <MotiView

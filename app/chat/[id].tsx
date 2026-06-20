@@ -3,6 +3,7 @@ import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, Image,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,6 +34,7 @@ const isEmojiOnly = (raw?: string | null): boolean => {
 
 export default function ChatScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
@@ -94,7 +96,7 @@ export default function ChatScreen() {
   if (loading) {
     return (
       <View className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color="#1E40AF" />
+        <ActivityIndicator size="large" color="#128C7E" />
       </View>
     );
   }
@@ -104,7 +106,7 @@ export default function ChatScreen() {
       {/* Header */}
       <View className="flex-row items-center px-4 py-3 border-b border-gray-100">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
-          <Ionicons name="arrow-back" size={24} color="#1E40AF" />
+          <Ionicons name="arrow-back" size={24} color="#128C7E" />
         </TouchableOpacity>
         <Text className="text-lg font-semibold text-gray-900 flex-1">{name}</Text>
       </View>
@@ -140,11 +142,11 @@ export default function ChatScreen() {
                       <Text className="text-[11px] text-gray-400">
                         {reaction
                           ? isMe
-                            ? 'Vous avez réagi à sa story'
-                            : `${item.sender?.name} a réagi à votre story`
+                            ? t('chat.you_reacted')
+                            : t('chat.reacted', { name: item.sender?.name })
                           : isMe
-                            ? 'Vous avez répondu à sa story'
-                            : `${item.sender?.name} a répondu à votre story`}
+                            ? t('chat.you_replied')
+                            : t('chat.replied', { name: item.sender?.name })}
                       </Text>
                     </View>
 
@@ -164,7 +166,7 @@ export default function ChatScreen() {
                       </Text>
                     ) : (
                       <View
-                        className={`rounded-2xl px-4 py-2 ${isMe ? 'bg-blue-800' : 'bg-gray-100'}`}
+                        className={`rounded-2xl px-4 py-2 ${isMe ? 'bg-nexa' : 'bg-gray-100'}`}
                       >
                         <Text className={isMe ? 'text-white' : 'text-gray-900'}>
                           {item.content}
@@ -178,7 +180,7 @@ export default function ChatScreen() {
                       <Text className="text-xs text-gray-400 mb-1 ml-1">{item.sender?.name}</Text>
                     )}
                     <View
-                      className={`rounded-2xl px-4 py-2 ${isMe ? 'bg-blue-800' : 'bg-gray-100'}`}
+                      className={`rounded-2xl px-4 py-2 ${isMe ? 'bg-nexa' : 'bg-gray-100'}`}
                     >
                       <Text className={isMe ? 'text-white' : 'text-gray-900'}>
                         {item.content}
@@ -195,7 +197,7 @@ export default function ChatScreen() {
         <View className="flex-row items-center px-3 py-2 border-t border-gray-100">
           <TextInput
             className="flex-1 bg-gray-100 rounded-full px-4 py-2 mr-2 text-base"
-            placeholder="Message..."
+            placeholder={t('chat.message_placeholder')}
             value={text}
             onChangeText={setText}
             multiline
@@ -203,7 +205,7 @@ export default function ChatScreen() {
             onSubmitEditing={sendMessage}
           />
           <TouchableOpacity
-            className="w-10 h-10 bg-blue-800 rounded-full items-center justify-center"
+            className="w-10 h-10 bg-nexa rounded-full items-center justify-center"
             onPress={sendMessage}
           >
             <Ionicons name="send" size={18} color="white" />

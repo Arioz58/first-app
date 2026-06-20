@@ -269,7 +269,7 @@ export default function LoginScreen() {
               <CountryPicker selected={country} onSelect={setCountry} />
               <TextInput
                 className={`flex-1 border rounded-xl px-4 py-3 text-xl ${phoneError ? "border-red-400" : "border-gray-300"}`}
-                placeholder="6 00 00 00 00"
+                placeholder={country.example ?? t("phone")}
                 placeholderTextColor="#6B7280"
                 keyboardType="phone-pad"
                 value={phone}
