@@ -24,7 +24,7 @@ Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintena
 - Couleurs finales : **nuances de verts style WhatsApp** — à appliquer en Mois 5/6
 - Couleur principale actuelle : `#1E40AF` (bleu) + `#128C7E` (nexa — vert WhatsApp, déjà en place sur les écrans auth)
 - Couleur Tailwind custom : `bg-nexa`, `text-nexa`, `border-nexa` → `#128C7E`
-- Tab bar : **native iOS** (`expo-router/unstable-native-tabs`) avec SF Symbols — pas de tab bar custom JS
+- Tab bar : **native iOS** (`expo-router/unstable-native-tabs`) avec SF Symbols — pas de tab bar custom JS ; onglet actif teinté en vert nexa via la prop `tintColor="#128C7E"` sur `<NativeTabs>`
 
 ### Planning
 
@@ -110,13 +110,13 @@ app/
 ├── (tabs)/
 │   ├── _layout.tsx      # NativeTabs (SF Symbols) — 4 onglets
 │   ├── index.tsx        # Liste conversations + StoriesBar en header
-│   ├── search.tsx       # Recherche (à implémenter)
+│   ├── search.tsx       # Recherche d'utilisateurs (useUserSearch debounce) → tap = conversation directe + navigation chat
 │   ├── saved.tsx        # Appels (à implémenter Mois 4)
-│   └── profile.tsx      # Profil (thème vert nexa) : avatar+photo (upload S3), édition nom + bio (modale combinée, bio 140 car.), sélecteur de langue i18n (PATCH + persistance), statut consentement confidentialité, déconnexion → welcome
+│   └── profile.tsx      # Profil (thème vert nexa) : avatar+photo (upload S3 ; appui = Changer/Supprimer → PATCH photoUrl:null = retour à l'initiale), édition nom + bio (modale combinée, bio 140 car.), sélecteur de langue i18n (PATCH + persistance), statut consentement confidentialité, déconnexion → welcome
 ├── chat/
 │   └── [id].tsx         # Écran chat temps réel (Socket.io)
 ├── group/
-│   └── new.tsx          # Création de groupe (saisie ID membres — améliorer avec recherche)
+│   └── new.tsx          # Création de groupe : nom + recherche de membres (useUserSearch, chips sélectionnés) — plus de saisie d'ID bruts
 └── story/
     ├── [id].tsx         # Viewer stories (photo/vidéo, progress bar, pause au maintien, zoom, ordre chrono) — voir section Stories
     └── create.tsx       # Éditeur de story (photo/vidéo, textes stylables multiples, guides d'alignement, upload S3)
@@ -127,11 +127,13 @@ components/
 ├── VideoTrimmer.tsx     # Rognage vidéo : preview + timeline à miniatures (trim headless)
 ├── EmojiPicker.tsx      # Sélecteur d'emojis (grille) pour les stickers de story
 ├── BottomSheet.tsx      # Drawer bottom-sheet réutilisable (SHEET_SPRING partagé : montage différé piloté par `visible`, drag-to-dismiss sur la poignée, backdrop en fondu) — hauteur fixe (liste) ou auto (contenu)
-└── CountryPicker.tsx    # Sélecteur pays + indicatif — utilise `BottomSheet` (hauteur fixe 85% + recherche + FlatList)
+├── CountryPicker.tsx    # Sélecteur pays + indicatif — utilise `BottomSheet` (hauteur fixe 85% + recherche + FlatList)
+└── UserAvatar.tsx       # Avatar circulaire réutilisable (photo ou initiale sur fond vert nexa, prop `size`)
 lib/
 ├── api.ts               # Fetch wrapper — JWT Bearer + auto-refresh + handler SESSION_EXPIRED global
 ├── socket.ts            # Client Socket.io singleton
 ├── storage.ts           # SecureStore : accessToken, refreshToken, userId, language
+├── useUserSearch.ts     # Hook recherche d'utilisateurs (debounce 300ms + anti-race) → GET /users/search
 ├── notifications.ts     # Demande permission + enregistre token FCM au backend
 ├── countries.ts         # Liste pays avec drapeau, nom et indicatif téléphonique
 ├── storyText.ts         # Styles texte stories (couleur, fond none/translucent/solid, gras/italique/souligné) — partagé create + viewer
@@ -158,7 +160,7 @@ src/
 │   └── auth.middleware.ts          # Middleware JWT → AuthRequest.userId
 └── modules/
     ├── auth/                       # send-code (OTP Redis 5min) + verify-code + refresh
-    ├── users/                      # Profil + consentement confidentialité + fcmToken
+    ├── users/                      # Profil + consentement confidentialité + fcmToken + recherche d'utilisateurs (GET /search)
     ├── messages/                   # Conversations direct/groupe + messages + gestion membres
     ├── stories/                    # Stories 24h : CRUD + groupées par user (texts en colonne Json)
     └── upload/                     # Presigned URL S3 (lib/s3.ts) — folder/ext selon contentType
@@ -174,6 +176,7 @@ POST /auth/send-code                              → envoie l'OTP (Twilio ou si
 POST /auth/verify-code                            → vérifie OTP, crée user si nouveau, retourne JWT
 POST /auth/refresh                                → renouvelle access token
 
+GET  /users/search?q=                             → recherche d'utilisateurs (nom/numéro, ≥2 car., exclut soi-même, max 20 → id/name/photoUrl)
 GET  /users/me                                    → profil complet
 PATCH /users/me                                   → mise à jour (name, photoUrl, language sur User ; bio/privacyPresence/privacyPhoto routés sur Profile — `bio` effaçable via chaîne vide)
 POST /users/me/privacy-consent                    → consentement politique de confidentialité (body `{ version }` → privacyConsent + privacyConsentAt + privacyPolicyVersion)

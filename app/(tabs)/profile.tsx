@@ -153,6 +153,38 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleRemovePhoto = async () => {
+    setUploading(true);
+    try {
+      await apiRequest('/users/me', {
+        method: 'PATCH',
+        body: { photoUrl: null },
+      });
+      setUser((u) => (u ? { ...u, photoUrl: null } : u));
+    } catch {
+      Alert.alert(t('error'), t('photo_error'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Appui sur l'avatar : choix Changer / Supprimer si une photo existe, sinon picker direct.
+  const handleAvatarPress = () => {
+    if (!user?.photoUrl) {
+      handleChangePhoto();
+      return;
+    }
+    Alert.alert('', '', [
+      { text: t('change_photo'), onPress: handleChangePhoto },
+      {
+        text: t('remove_photo'),
+        style: 'destructive',
+        onPress: handleRemovePhoto,
+      },
+      { text: t('cancel'), style: 'cancel' },
+    ]);
+  };
+
   const openEditModal = () => {
     setNameDraft(user?.name ?? '');
     setBioDraft(user?.profile?.bio ?? '');
@@ -219,7 +251,7 @@ export default function ProfileScreen() {
       {/* Carte profil */}
       <View className="items-center bg-white pt-6 pb-8 mb-3">
         <TouchableOpacity
-          onPress={handleChangePhoto}
+          onPress={handleAvatarPress}
           activeOpacity={0.8}
           disabled={uploading}
         >

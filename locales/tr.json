@@ -35,6 +35,12 @@
   "name_too_short": "Ad en az 2 karakter olmalıdır",
   "uploading": "Yükleniyor...",
   "photo_error": "Fotoğraf güncellenemedi",
+  "tabs": {
+    "messages": "Mesajlar",
+    "search": "Ara",
+    "calls": "Aramalar",
+    "profile": "Profil"
+  },
   "onboarding": {
     "welcome_title": "NEXA'ya hoş geldiniz!",
     "welcome_subtitle": "Seni ödüllendiren mesajlaşma!",
@@ -89,8 +95,14 @@
     "new_group": "Yeni grup",
     "group_name": "Grup adı",
     "member_id": "Üye kimliği",
+    "add_members": "Üye ekle",
     "create": "Grup oluştur",
     "name_member_required": "Ad ve en az bir üye gerekli"
+  },
+  "user_search": {
+    "placeholder": "Kişi ara",
+    "hint": "Sohbet başlatmak için isim veya numara ile arayın",
+    "no_results": "Sonuç yok"
   },
   "stories": {
     "my_story": "Hikayem",

@@ -35,6 +35,12 @@
   "name_too_short": "Le nom doit contenir au moins 2 caractères",
   "uploading": "Envoi en cours...",
   "photo_error": "Impossible de mettre à jour la photo",
+  "tabs": {
+    "messages": "Messages",
+    "search": "Recherche",
+    "calls": "Appels",
+    "profile": "Profil"
+  },
   "onboarding": {
     "welcome_title": "Bienvenue sur NEXA !",
     "welcome_subtitle": "La messagerie qui te récompense !",
@@ -89,8 +95,14 @@
     "new_group": "Nouveau groupe",
     "group_name": "Nom du groupe",
     "member_id": "ID d'un membre",
+    "add_members": "Ajouter des membres",
     "create": "Créer le groupe",
     "name_member_required": "Nom et au moins un membre requis"
+  },
+  "user_search": {
+    "placeholder": "Rechercher des personnes",
+    "hint": "Cherchez par nom ou numéro pour démarrer une conversation",
+    "no_results": "Aucun résultat"
   },
   "stories": {
     "my_story": "Ma story",
