@@ -110,11 +110,13 @@ app/
 ├── (tabs)/
 │   ├── _layout.tsx      # NativeTabs (SF Symbols) — 4 onglets
 │   ├── index.tsx        # Liste conversations + StoriesBar en header
-│   ├── search.tsx       # Recherche d'utilisateurs (useUserSearch debounce) → tap = conversation directe + navigation chat
+│   ├── search.tsx       # Onglet segmenté « Recherche / Amis ». Recherche = par NUMÉRO (CountryPicker, debounce, carte → profil, cas limites, historique récent). Amis = `<FriendsPanel>`
 │   ├── saved.tsx        # Appels (à implémenter Mois 4)
 │   └── profile.tsx      # Profil (thème vert nexa) : avatar+photo (upload S3 ; appui = Changer/Supprimer → PATCH photoUrl:null = retour à l'initiale), édition nom + bio (modale combinée, bio 140 car.), sélecteur de langue i18n (PATCH + persistance), statut consentement confidentialité, déconnexion → welcome
 ├── chat/
 │   └── [id].tsx         # Écran chat temps réel (Socket.io)
+├── user/
+│   └── [id].tsx         # Profil complet d'un autre utilisateur (gated) : skeleton, boutons dynamiques amis/message/appels, GET /users/:id/profile
 ├── group/
 │   └── new.tsx          # Création de groupe : nom + recherche de membres (useUserSearch, chips sélectionnés) — plus de saisie d'ID bruts
 └── story/
@@ -128,7 +130,8 @@ components/
 ├── EmojiPicker.tsx      # Sélecteur d'emojis (grille) pour les stickers de story
 ├── BottomSheet.tsx      # Drawer bottom-sheet réutilisable (SHEET_SPRING partagé : montage différé piloté par `visible`, drag-to-dismiss sur la poignée, backdrop en fondu) — hauteur fixe (liste) ou auto (contenu)
 ├── CountryPicker.tsx    # Sélecteur pays + indicatif — utilise `BottomSheet` (hauteur fixe 85% + recherche + FlatList)
-└── UserAvatar.tsx       # Avatar circulaire réutilisable (photo ou initiale sur fond vert nexa, prop `size`)
+├── UserAvatar.tsx       # Avatar circulaire réutilisable (photo ou initiale sur fond vert nexa, prop `size`)
+└── FriendsPanel.tsx     # Panneau Amis (sous-onglets mes amis / reçues / envoyées, actions inline, badge demandes) — segment de l'onglet Recherche
 lib/
 ├── api.ts               # Fetch wrapper — JWT Bearer + auto-refresh + handler SESSION_EXPIRED global
 ├── socket.ts            # Client Socket.io singleton
@@ -160,12 +163,13 @@ src/
 │   └── auth.middleware.ts          # Middleware JWT → AuthRequest.userId
 └── modules/
     ├── auth/                       # send-code (OTP Redis 5min) + verify-code + refresh
-    ├── users/                      # Profil + consentement confidentialité + fcmToken + recherche d'utilisateurs (GET /search)
+    ├── users/                      # Profil + consentement + fcmToken + recherche (GET /search nom + POST /search-by-phone numéro, rate-limité)
+    ├── social/                     # relation.service.ts (helpers amitié/blocage/relation : areFriends, blockExistsBetween, getRelationStatus, mutualFriendsCount, canSee) + friends.* (demandes d'amis, listes, suppression — routes montées sur /friends)
     ├── messages/                   # Conversations direct/groupe + messages + gestion membres
     ├── stories/                    # Stories 24h : CRUD + groupées par user (texts en colonne Json)
     └── upload/                     # Presigned URL S3 (lib/s3.ts) — folder/ext selon contentType
 prisma/
-└── schema.prisma                   # User, Profile, Conversation, ConversationMember, Message, Story, Call, Points...
+└── schema.prisma                   # User, Profile, Conversation, ConversationMember, Message, Story, Call, Points, FriendRequest, Friendship, Block, Report...
 ```
 
 ### Endpoints disponibles
@@ -176,7 +180,18 @@ POST /auth/send-code                              → envoie l'OTP (Twilio ou si
 POST /auth/verify-code                            → vérifie OTP, crée user si nouveau, retourne JWT
 POST /auth/refresh                                → renouvelle access token
 
-GET  /users/search?q=                             → recherche d'utilisateurs (nom/numéro, ≥2 car., exclut soi-même, max 20 → id/name/photoUrl)
+GET  /users/search?q=                             → recherche d'utilisateurs (nom/numéro, ≥2 car., exclut soi-même, max 20 → id/name/photoUrl) — usage interne (membres de groupe)
+POST /users/search-by-phone                       → recherche contact par numéro exact `{ phone }` (rate limit Redis 20/h, block-aware = compte masqué si bloqué, self-detection, photo gated) → `{ found, self?, user: { id, name, phone, photoUrl, relationStatus } }`
+GET  /users/:id/profile                           → profil complet gated (404 si bloqué) → champs filtrés selon la matrice de confidentialité + `relationStatus`, `requestId`, `isFriend`, `mutualFriendsCount`, `canMessage`, `canCall`, `canFriendRequest`
+
+POST /friends/requests                            → envoyer une demande `{ toUserId }` (respecte privacyFriendRequests everyone/friends_of_friends/nobody, cooldown 7j après refus, auto-accept si demande inverse en attente)
+POST /friends/requests/:id/accept                 → accepter (destinataire) → crée l'amitié
+POST /friends/requests/:id/refuse                 → refuser (destinataire) → status refused + date (cooldown), A non notifié
+DELETE /friends/requests/:id                      → annuler sa demande (émetteur)
+GET  /friends/requests/received                   → demandes reçues en attente (+ createdAt)
+GET  /friends/requests/sent                       → demandes envoyées en attente
+GET  /friends?q=                                  → mes amis (recherche par nom optionnelle)
+DELETE /friends/:userId                           → retirer un ami
 GET  /users/me                                    → profil complet
 PATCH /users/me                                   → mise à jour (name, photoUrl, language sur User ; bio/privacyPresence/privacyPhoto routés sur Profile — `bio` effaçable via chaîne vide)
 POST /users/me/privacy-consent                    → consentement politique de confidentialité (body `{ version }` → privacyConsent + privacyConsentAt + privacyPolicyVersion)
@@ -288,6 +303,30 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 
 ### Reste à faire (features stories) 🔜
 - Idées : stickers/emojis (réutilise le système de drag/pinch/rotate), mentions `@`, swipe-down pour fermer, audience (amis proches), highlights/archive au-delà de 24h
+
+---
+
+## Social : amis, confidentialité, blocage (épopée multi-phases) 🔄
+
+Construction **par phases livrables**, toutes les règles de confidentialité **vérifiées côté serveur**.
+
+### Modèle de données
+- **Profile** : matrice de confidentialité (chaque champ = `everyone` | `friends` | `nobody`) — `privacyPhoto`, `privacyBio`, `privacyLastSeen`, `privacyLocation` (défaut `friends`), `privacyPhone`, `privacyMessages`, `privacyCalls`, `privacyFriendRequests` + `locationEnabled` (bool, défaut false)
+- **User** : `lastSeenAt`
+- **FriendRequest** `{ fromUserId, toUserId, status: pending|refused, createdAt, respondedAt }` (refused + date = cooldown 7j) ; unique `[fromUserId, toUserId]`
+- **Friendship** `{ userAId, userBId }` symétrique, **ordre canonique userAId < userBId** (`orderPair`) ; unique `[userAId, userBId]`
+- **Block** `{ blockerId, blockedId }` ; **Report** `{ reporterId, reportedId, category }`
+- Helpers partagés : `src/modules/social/relation.service.ts`
+
+### Statut des phases
+- **Phase 1 ✅** — Fondation backend (modèles + migration `social_foundation`) + `relation.service` + `POST /users/search-by-phone` (rate limit Redis 20/h, block-aware, self, photo gated) + écran recherche par numéro (`(tabs)/search.tsx`) avec historique récent.
+- **Phase 2 ✅** — Amis E2E : module `social/friends.*` (envoyer/accepter/refuser/annuler/cooldown 7j/supprimer + listes) + `GET /users/:id/profile` gated ; **écran profil** (`app/user/[id].tsx`, skeleton, champs gated, boutons dynamiques selon `relationStatus`, message/appels selon canMessage/canCall, amis en commun) ; **`FriendsPanel`** (mes amis + reçues + envoyées, actions inline, badge demandes) intégré comme **segment « Amis » dans l'onglet Recherche** (`(tabs)/search.tsx`). La carte de recherche ouvre désormais le profil.
+- **Phase 3 🔜** — Section Paramètres Confidentialité (8 réglages) + application serveur (`PATCH /users/me/privacy`).
+- **Phase 4 🔜** — Blocage & signalement (effets : annulation amitié/demande, recherche masquée) + page « Bloqués ».
+- **Phase 5 🔜** — Message requests (dossier façon Instagram : pas de push, badge, pas d'accusés tant que non accepté).
+- **Phase 6 🔜** — Notifications push + in-app (demande reçue/acceptée, appel entrant).
+
+⚠️ Règles : ne jamais révéler l'existence d'un compte bloqué/masqué ; validation confidentialité **serveur uniquement** ; bouton d'action principal dynamique selon `relationStatus`.
 
 ---
 

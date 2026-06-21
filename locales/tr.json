@@ -104,6 +104,44 @@
     "hint": "Sohbet başlatmak için isim veya numara ile arayın",
     "no_results": "Sonuç yok"
   },
+  "search_phone": {
+    "placeholder": "Telefon numarası",
+    "not_found": "Bu numarayla kullanıcı bulunamadı.",
+    "invalid": "Geçersiz numara",
+    "own_number": "Bu sizin numaranız.",
+    "error": "Arama başarısız, daha sonra tekrar deneyin.",
+    "recent": "Son aramalar",
+    "clear": "Temizle"
+  },
+  "relation": {
+    "add_friend": "Arkadaş ekle",
+    "request_sent": "İstek gönderildi",
+    "friends": "Arkadaş",
+    "respond": "Yanıtla",
+    "cancel_request": "İsteği iptal et",
+    "accept": "Kabul et",
+    "refuse": "Reddet",
+    "remove_friend": "Arkadaşlıktan çıkar"
+  },
+  "profile_view": {
+    "not_found": "Kullanıcı bulunamadı",
+    "message": "Mesaj",
+    "message_friends_only": "Bu kullanıcı yalnızca arkadaşlarından mesaj kabul ediyor.",
+    "mutual_one": "{{count}} ortak arkadaş",
+    "mutual_other": "{{count}} ortak arkadaş",
+    "last_seen": "Son görülme"
+  },
+  "friends": {
+    "title": "Arkadaşlar",
+    "my_friends": "Arkadaşlarım",
+    "received": "Gelen",
+    "sent": "Gönderilen",
+    "no_friends": "Henüz arkadaş yok",
+    "no_received": "Gelen istek yok",
+    "no_sent": "Gönderilen istek yok",
+    "search_friends": "Arkadaşlarımda ara",
+    "remove_title": "Arkadaşlıktan çıkarılsın mı?"
+  },
   "stories": {
     "my_story": "Hikayem",
     "add": "Ekle",

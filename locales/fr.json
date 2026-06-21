@@ -104,6 +104,44 @@
     "hint": "Cherchez par nom ou numéro pour démarrer une conversation",
     "no_results": "Aucun résultat"
   },
+  "search_phone": {
+    "placeholder": "Numéro de téléphone",
+    "not_found": "Aucun utilisateur trouvé avec ce numéro.",
+    "invalid": "Numéro invalide",
+    "own_number": "C'est votre numéro.",
+    "error": "Recherche impossible, réessayez plus tard.",
+    "recent": "Recherches récentes",
+    "clear": "Effacer"
+  },
+  "relation": {
+    "add_friend": "Ajouter en ami",
+    "request_sent": "Demande envoyée",
+    "friends": "Amis",
+    "respond": "Répondre",
+    "cancel_request": "Annuler la demande",
+    "accept": "Accepter",
+    "refuse": "Refuser",
+    "remove_friend": "Retirer des amis"
+  },
+  "profile_view": {
+    "not_found": "Utilisateur introuvable",
+    "message": "Message",
+    "message_friends_only": "Cet utilisateur n'accepte les messages que de ses amis.",
+    "mutual_one": "{{count}} ami en commun",
+    "mutual_other": "{{count}} amis en commun",
+    "last_seen": "Dernière connexion"
+  },
+  "friends": {
+    "title": "Amis",
+    "my_friends": "Mes amis",
+    "received": "Reçues",
+    "sent": "Envoyées",
+    "no_friends": "Aucun ami pour l'instant",
+    "no_received": "Aucune demande reçue",
+    "no_sent": "Aucune demande envoyée",
+    "search_friends": "Rechercher dans mes amis",
+    "remove_title": "Retirer cet ami ?"
+  },
   "stories": {
     "my_story": "Ma story",
     "add": "Ajouter",

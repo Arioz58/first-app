@@ -104,6 +104,44 @@
     "hint": "Search by name or number to start a conversation",
     "no_results": "No results"
   },
+  "search_phone": {
+    "placeholder": "Phone number",
+    "not_found": "No user found with this number.",
+    "invalid": "Invalid number",
+    "own_number": "This is your number.",
+    "error": "Search failed, try again later.",
+    "recent": "Recent searches",
+    "clear": "Clear"
+  },
+  "relation": {
+    "add_friend": "Add friend",
+    "request_sent": "Request sent",
+    "friends": "Friends",
+    "respond": "Respond",
+    "cancel_request": "Cancel request",
+    "accept": "Accept",
+    "refuse": "Decline",
+    "remove_friend": "Remove friend"
+  },
+  "profile_view": {
+    "not_found": "User not found",
+    "message": "Message",
+    "message_friends_only": "This user only accepts messages from friends.",
+    "mutual_one": "{{count}} mutual friend",
+    "mutual_other": "{{count}} mutual friends",
+    "last_seen": "Last seen"
+  },
+  "friends": {
+    "title": "Friends",
+    "my_friends": "My friends",
+    "received": "Received",
+    "sent": "Sent",
+    "no_friends": "No friends yet",
+    "no_received": "No received requests",
+    "no_sent": "No sent requests",
+    "search_friends": "Search my friends",
+    "remove_title": "Remove this friend?"
+  },
   "stories": {
     "my_story": "My story",
     "add": "Add",
