@@ -310,6 +310,12 @@ export default function ProfileScreen() {
         />
         <View className="h-px bg-gray-100 ml-16" />
         <SettingRow
+          icon="lock-closed-outline"
+          label={t('privacy_settings.title')}
+          onPress={() => router.push('/privacy' as any)}
+        />
+        <View className="h-px bg-gray-100 ml-16" />
+        <SettingRow
           icon="shield-checkmark-outline"
           label={t('privacy_title')}
           value={

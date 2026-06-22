@@ -131,6 +131,24 @@
     "mutual_other": "{{count}} ortak arkadaş",
     "last_seen": "Son görülme"
   },
+  "privacy_settings": {
+    "title": "Gizlilik",
+    "everyone": "Herkes",
+    "friends": "Arkadaşlarım",
+    "nobody": "Hiç kimse",
+    "friends_of_friends": "Arkadaşlarımın arkadaşları",
+    "section_visibility": "Kimler görebilir",
+    "section_contact": "Bana kim ulaşabilir",
+    "photo": "Profil fotoğrafı",
+    "bio": "Biyografi",
+    "last_seen": "Son görülme",
+    "location": "Konum",
+    "phone": "Telefon numarası",
+    "messages": "Mesajlar",
+    "calls": "Aramalar",
+    "friend_requests": "Arkadaşlık istekleri",
+    "location_enabled": "Konumumu paylaş"
+  },
   "friends": {
     "title": "Arkadaşlar",
     "my_friends": "Arkadaşlarım",

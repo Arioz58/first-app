@@ -131,6 +131,24 @@
     "mutual_other": "{{count}} amis en commun",
     "last_seen": "Dernière connexion"
   },
+  "privacy_settings": {
+    "title": "Confidentialité",
+    "everyone": "Tout le monde",
+    "friends": "Mes amis",
+    "nobody": "Personne",
+    "friends_of_friends": "Amis d'amis",
+    "section_visibility": "Qui peut voir",
+    "section_contact": "Qui peut me contacter",
+    "photo": "Photo de profil",
+    "bio": "Bio",
+    "last_seen": "Dernière connexion",
+    "location": "Localisation",
+    "phone": "Numéro de téléphone",
+    "messages": "Messages",
+    "calls": "Appels",
+    "friend_requests": "Demandes d'ami",
+    "location_enabled": "Partager ma localisation"
+  },
   "friends": {
     "title": "Amis",
     "my_friends": "Mes amis",

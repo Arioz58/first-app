@@ -117,6 +117,7 @@ app/
 │   └── [id].tsx         # Écran chat temps réel (Socket.io)
 ├── user/
 │   └── [id].tsx         # Profil complet d'un autre utilisateur (gated) : skeleton, boutons dynamiques amis/message/appels, GET /users/:id/profile
+├── privacy.tsx          # Paramètres de confidentialité (8 réglages everyone/friends/nobody + amis-d'amis pour les demandes + toggle localisation) → PATCH /users/me/privacy
 ├── group/
 │   └── new.tsx          # Création de groupe : nom + recherche de membres (useUserSearch, chips sélectionnés) — plus de saisie d'ID bruts
 └── story/
@@ -195,6 +196,7 @@ DELETE /friends/:userId                           → retirer un ami
 GET  /users/me                                    → profil complet
 PATCH /users/me                                   → mise à jour (name, photoUrl, language sur User ; bio/privacyPresence/privacyPhoto routés sur Profile — `bio` effaçable via chaîne vide)
 POST /users/me/privacy-consent                    → consentement politique de confidentialité (body `{ version }` → privacyConsent + privacyConsentAt + privacyPolicyVersion)
+PATCH /users/me/privacy                            → met à jour la matrice de confidentialité (valeurs validées serveur : triple everyone/friends/nobody, friend_requests everyone/friends_of_friends/nobody, locationEnabled bool)
 POST /users/me/fcm-token                          → enregistrer/mettre à jour token FCM
 
 POST /conversations/direct                        → créer/récupérer conv directe
@@ -321,7 +323,7 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 ### Statut des phases
 - **Phase 1 ✅** — Fondation backend (modèles + migration `social_foundation`) + `relation.service` + `POST /users/search-by-phone` (rate limit Redis 20/h, block-aware, self, photo gated) + écran recherche par numéro (`(tabs)/search.tsx`) avec historique récent.
 - **Phase 2 ✅** — Amis E2E : module `social/friends.*` (envoyer/accepter/refuser/annuler/cooldown 7j/supprimer + listes) + `GET /users/:id/profile` gated ; **écran profil** (`app/user/[id].tsx`, skeleton, champs gated, boutons dynamiques selon `relationStatus`, message/appels selon canMessage/canCall, amis en commun) ; **`FriendsPanel`** (mes amis + reçues + envoyées, actions inline, badge demandes) intégré comme **segment « Amis » dans l'onglet Recherche** (`(tabs)/search.tsx`). La carte de recherche ouvre désormais le profil.
-- **Phase 3 🔜** — Section Paramètres Confidentialité (8 réglages) + application serveur (`PATCH /users/me/privacy`).
+- **Phase 3 ✅** — `PATCH /users/me/privacy` (validation serveur) + écran **Confidentialité** (`app/privacy.tsx`, 8 réglages via `BottomSheet` + toggle localisation), accessible depuis le profil. Les règles sont déjà appliquées serveur (Phases 1-2).
 - **Phase 4 🔜** — Blocage & signalement (effets : annulation amitié/demande, recherche masquée) + page « Bloqués ».
 - **Phase 5 🔜** — Message requests (dossier façon Instagram : pas de push, badge, pas d'accusés tant que non accepté).
 - **Phase 6 🔜** — Notifications push + in-app (demande reçue/acceptée, appel entrant).

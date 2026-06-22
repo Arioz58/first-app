@@ -131,6 +131,24 @@
     "mutual_other": "{{count}} mutual friends",
     "last_seen": "Last seen"
   },
+  "privacy_settings": {
+    "title": "Privacy",
+    "everyone": "Everyone",
+    "friends": "My friends",
+    "nobody": "Nobody",
+    "friends_of_friends": "Friends of friends",
+    "section_visibility": "Who can see",
+    "section_contact": "Who can contact me",
+    "photo": "Profile photo",
+    "bio": "Bio",
+    "last_seen": "Last seen",
+    "location": "Location",
+    "phone": "Phone number",
+    "messages": "Messages",
+    "calls": "Calls",
+    "friend_requests": "Friend requests",
+    "location_enabled": "Share my location"
+  },
   "friends": {
     "title": "Friends",
     "my_friends": "My friends",
