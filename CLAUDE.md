@@ -30,7 +30,7 @@ Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintena
 
 - **Mois 1** ✅ — Architecture, BDD, auth (JWT + OTP), profils, consentement politique de confidentialité, i18n (tr/fr/en)
 - **Mois 2** ✅ — Messagerie temps réel (Socket.io), groupes (API + rooms + gestion membres), FCM push, frontend mobile complet
-- **Mois 3** 🔄 — Stories 24h ✅ (éditeur texte riche + photo/vidéo, voir section dédiée), médias S3 ✅ (upload presigned + CloudFront), localisation 🔜, version web Next.js 🔜
+- **Mois 3** 🔄 — Stories 24h ✅ (éditeur texte riche + photo/vidéo, voir section dédiée), médias S3 ✅ (upload presigned + CloudFront), localisation 🔜 (**⚠️ inclure : afficher la localisation dans le profil utilisateur — gated par `privacyLocation` + `locationEnabled`, déjà câblés Phase 3 mais sans donnée à afficher ; voir `GET /users/:id/profile`**), version web Next.js 🔜
 - **Mois 4** — Appels audio/vidéo (Agora.io)
 - **Mois 5** — Points, leaderboard, anti-spam, module B2B, dashboard admin, site vitrine + DA verte + sécurité hardening (rate limiting, helmet, validation stricte)
 - **Mois 6** — QA, corrections, mise en production (App Store + Google Play + AWS)
@@ -117,7 +117,9 @@ app/
 │   └── [id].tsx         # Écran chat temps réel (Socket.io)
 ├── user/
 │   └── [id].tsx         # Profil complet d'un autre utilisateur (gated) : skeleton, boutons dynamiques amis/message/appels, GET /users/:id/profile
-├── privacy.tsx          # Paramètres de confidentialité (8 réglages everyone/friends/nobody + amis-d'amis pour les demandes + toggle localisation) → PATCH /users/me/privacy
+├── privacy.tsx          # Paramètres de confidentialité (8 réglages everyone/friends/nobody + amis-d'amis pour les demandes + toggle localisation + accès Utilisateurs bloqués) → PATCH /users/me/privacy
+├── blocked.tsx          # Page Utilisateurs bloqués (liste + débloquer) → GET/DELETE /blocks
+├── requests.tsx         # Demandes de messages (liste convs en attente + accepter/supprimer) → /conversations/requests
 ├── group/
 │   └── new.tsx          # Création de groupe : nom + recherche de membres (useUserSearch, chips sélectionnés) — plus de saisie d'ID bruts
 └── story/
@@ -165,7 +167,7 @@ src/
 └── modules/
     ├── auth/                       # send-code (OTP Redis 5min) + verify-code + refresh
     ├── users/                      # Profil + consentement + fcmToken + recherche (GET /search nom + POST /search-by-phone numéro, rate-limité)
-    ├── social/                     # relation.service.ts (helpers amitié/blocage/relation : areFriends, blockExistsBetween, getRelationStatus, mutualFriendsCount, canSee) + friends.* (demandes d'amis, listes, suppression — routes montées sur /friends)
+    ├── social/                     # relation.service.ts (helpers : areFriends, blockExistsBetween, getRelationStatus, mutualFriendsCount, canSee) + friends.* (/friends) + moderation.* (/blocks + /reports : blocage avec effets, signalement)
     ├── messages/                   # Conversations direct/groupe + messages + gestion membres
     ├── stories/                    # Stories 24h : CRUD + groupées par user (texts en colonne Json)
     └── upload/                     # Presigned URL S3 (lib/s3.ts) — folder/ext selon contentType
@@ -193,15 +195,23 @@ GET  /friends/requests/received                   → demandes reçues en attent
 GET  /friends/requests/sent                       → demandes envoyées en attente
 GET  /friends?q=                                  → mes amis (recherche par nom optionnelle)
 DELETE /friends/:userId                           → retirer un ami
+
+GET  /blocks                                      → mes utilisateurs bloqués
+POST /blocks                                      → bloquer `{ userId }` (effets : amitié supprimée + demandes en attente annulées ; recherche/profil déjà masqués via blockExistsBetween)
+DELETE /blocks/:userId                            → débloquer
+POST /reports                                     → signaler `{ userId, category }` (spam | impersonation | inappropriate | other)
 GET  /users/me                                    → profil complet
 PATCH /users/me                                   → mise à jour (name, photoUrl, language sur User ; bio/privacyPresence/privacyPhoto routés sur Profile — `bio` effaçable via chaîne vide)
 POST /users/me/privacy-consent                    → consentement politique de confidentialité (body `{ version }` → privacyConsent + privacyConsentAt + privacyPolicyVersion)
 PATCH /users/me/privacy                            → met à jour la matrice de confidentialité (valeurs validées serveur : triple everyone/friends/nobody, friend_requests everyone/friends_of_friends/nobody, locationEnabled bool)
 POST /users/me/fcm-token                          → enregistrer/mettre à jour token FCM
 
-POST /conversations/direct                        → créer/récupérer conv directe
+POST /conversations/direct                        → créer/récupérer conv directe (refus si bloqué ou privacyMessages l'interdit ; non-ami avec privacyMessages=everyone → conv en « demande » pour la cible)
 POST /conversations/group                         → créer groupe (admin = créateur)
-GET  /conversations                               → liste convs de l'user (avec dernier message)
+GET  /conversations                               → liste convs ACCEPTÉES de l'user (member.accepted=true)
+GET  /conversations/requests                      → demandes de messages reçues (member.accepted=false, ≥1 message)
+POST /conversations/:id/accept-request            → accepter une demande (rejoint les convs normales)
+DELETE /conversations/:id/request                 → refuser/supprimer une demande
 GET  /conversations/:id/messages                  → historique paginé (cursor-based, 30/page)
 POST /conversations/:id/members                   → ajouter membres (admin requis)
 DELETE /conversations/:id/members/:userId         → expulser un membre (admin requis)
@@ -226,15 +236,19 @@ send_message({ conversationId, content, type })
 leave_conversation(conversationId)
 
 // Serveur → Client
-new_message(message)                              → + FCM push si destinataire offline
+new_message(message)                              → refus si blocage (conv directe) ; + FCM push aux destinataires offline **acceptés** (pas de push aux membres en « demande » accepted=false → badge uniquement)
 members_added({ conversationId, memberIds })      → + FCM push aux nouveaux membres
 member_removed({ conversationId, userId })        → + FCM push au membre expulsé
 member_left({ conversationId, userId, newAdminId? })
 added_to_group({ conversationId })
 removed_from_group({ conversationId })            → redirige vers accueil côté app
 group_updated({ conversationId, name })           → + FCM push à tous les membres
+friend_request_received({ from })                 → demande d'ami reçue (in-app si en ligne, sinon FCM push) — notif locale côté app via `_layout`
+friend_request_accepted({ by })                   → demande d'ami acceptée (in-app si en ligne, sinon FCM push)
 error({ message })
 ```
+
+> **Notifications (social)** : `social/notify.service.ts` — push **uniquement si le destinataire est hors-ligne** (`isUserOnline`), sinon event socket → notif **in-app locale** (`expo-notifications`) côté `_layout` (pas de doublon push/in-app). Corps localisé selon la langue du destinataire (serveur) ou via i18n (client).
 
 ---
 
@@ -324,9 +338,11 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 - **Phase 1 ✅** — Fondation backend (modèles + migration `social_foundation`) + `relation.service` + `POST /users/search-by-phone` (rate limit Redis 20/h, block-aware, self, photo gated) + écran recherche par numéro (`(tabs)/search.tsx`) avec historique récent.
 - **Phase 2 ✅** — Amis E2E : module `social/friends.*` (envoyer/accepter/refuser/annuler/cooldown 7j/supprimer + listes) + `GET /users/:id/profile` gated ; **écran profil** (`app/user/[id].tsx`, skeleton, champs gated, boutons dynamiques selon `relationStatus`, message/appels selon canMessage/canCall, amis en commun) ; **`FriendsPanel`** (mes amis + reçues + envoyées, actions inline, badge demandes) intégré comme **segment « Amis » dans l'onglet Recherche** (`(tabs)/search.tsx`). La carte de recherche ouvre désormais le profil.
 - **Phase 3 ✅** — `PATCH /users/me/privacy` (validation serveur) + écran **Confidentialité** (`app/privacy.tsx`, 8 réglages via `BottomSheet` + toggle localisation), accessible depuis le profil. Les règles sont déjà appliquées serveur (Phases 1-2).
-- **Phase 4 🔜** — Blocage & signalement (effets : annulation amitié/demande, recherche masquée) + page « Bloqués ».
-- **Phase 5 🔜** — Message requests (dossier façon Instagram : pas de push, badge, pas d'accusés tant que non accepté).
-- **Phase 6 🔜** — Notifications push + in-app (demande reçue/acceptée, appel entrant).
+- **Phase 4 ✅** — `social/moderation.*` : `POST/DELETE/GET /blocks` (effets blocage : amitié + demandes supprimées, recherche/profil masqués) + `POST /reports` (4 catégories). Menu **« ... » Bloquer/Signaler** sur le profil + page **`app/blocked.tsx`** (accessible depuis Confidentialité). ⏳ Restant : masquer les messages existants côté bloqué + rejet d'appels (Mois 4).
+- **Phase 5 ✅** — Demandes de messages : `ConversationMember.accepted` (migration `message_requests`) ; `getOrCreateDirectConversation` applique blocage + `privacyMessages` (nobody/friends/everyone) et met la cible en « demande » si non-ami ; liste normale filtrée sur `accepted=true` ; `GET /conversations/requests` + accept/decline ; **socket `send_message`** refuse si blocage (direct) et **ne pousse pas** aux membres en demande (badge seul). Front : écran **`app/requests.tsx`** + **bannière badge** dans la liste des conversations. ⏳ Pas d'accusés de lecture dans l'app (donc rien à geler).
+- **Phase 6 ✅** — `social/notify.service.ts` : demande d'ami **reçue** + **acceptée** → push FCM si hors-ligne, sinon event socket → **notif in-app locale** (listeners globaux dans `_layout`). Demande de message = badge seul (Phase 5). ⏳ Appel entrant = Mois 4 (Agora).
+
+**→ Épopée sociale : Phases 1-6 terminées.** Restant transverse : afficher la localisation au profil (Mois 3, voir planning), masquer messages existants côté bloqué + rejet d'appels (Mois 4), notif appel entrant (Mois 4).
 
 ⚠️ Règles : ne jamais révéler l'existence d'un compte bloqué/masqué ; validation confidentialité **serveur uniquement** ; bouton d'action principal dynamique selon `relationStatus`.
 

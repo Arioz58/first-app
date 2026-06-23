@@ -160,6 +160,29 @@
     "search_friends": "Arkadaşlarımda ara",
     "remove_title": "Arkadaşlıktan çıkarılsın mı?"
   },
+  "message_requests": {
+    "title": "Mesaj istekleri",
+    "empty": "Mesaj isteği yok",
+    "decline": "Sil"
+  },
+  "notifications": {
+    "friend_request": "size arkadaşlık isteği gönderdi",
+    "friend_accepted": "arkadaşlık isteğinizi kabul etti"
+  },
+  "moderation": {
+    "block": "Engelle",
+    "unblock": "Engeli kaldır",
+    "report": "Şikayet et",
+    "block_confirm": "Bu kullanıcı engellensin mi?",
+    "blocked_users": "Engellenen kullanıcılar",
+    "no_blocked": "Engellenen kullanıcı yok",
+    "report_category": "Şikayet nedeni",
+    "spam": "Spam",
+    "impersonation": "Kimlik taklidi",
+    "inappropriate": "Uygunsuz içerik",
+    "other": "Diğer",
+    "report_done": "Şikayet gönderildi"
+  },
   "stories": {
     "my_story": "Hikayem",
     "add": "Ekle",

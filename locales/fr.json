@@ -160,6 +160,29 @@
     "search_friends": "Rechercher dans mes amis",
     "remove_title": "Retirer cet ami ?"
   },
+  "message_requests": {
+    "title": "Demandes de messages",
+    "empty": "Aucune demande de message",
+    "decline": "Supprimer"
+  },
+  "notifications": {
+    "friend_request": "vous a envoyé une demande d'ami",
+    "friend_accepted": "a accepté votre demande d'ami"
+  },
+  "moderation": {
+    "block": "Bloquer",
+    "unblock": "Débloquer",
+    "report": "Signaler",
+    "block_confirm": "Bloquer cet utilisateur ?",
+    "blocked_users": "Utilisateurs bloqués",
+    "no_blocked": "Aucun utilisateur bloqué",
+    "report_category": "Motif du signalement",
+    "spam": "Spam",
+    "impersonation": "Usurpation d'identité",
+    "inappropriate": "Contenu inapproprié",
+    "other": "Autre",
+    "report_done": "Signalement envoyé"
+  },
   "stories": {
     "my_story": "Ma story",
     "add": "Ajouter",

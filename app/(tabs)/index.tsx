@@ -27,6 +27,7 @@ export default function ConversationsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [requestCount, setRequestCount] = useState(0);
   const storiesRef = useRef<StoriesBarHandle>(null);
 
   const fetchConversations = async () => {
@@ -38,6 +39,9 @@ export default function ConversationsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
+    apiRequest<unknown[]>('/conversations/requests')
+      .then((r) => setRequestCount(r.length))
+      .catch(() => {});
   };
 
   useFocusEffect(useCallback(() => {
@@ -99,7 +103,27 @@ export default function ConversationsScreen() {
       <FlatList
         data={conversations}
         keyExtractor={(item) => item.id}
-        ListHeaderComponent={<StoriesBar ref={storiesRef} />}
+        ListHeaderComponent={
+          <>
+            <StoriesBar ref={storiesRef} />
+            {requestCount > 0 && (
+              <TouchableOpacity
+                className="flex-row items-center px-4 py-3 border-b border-gray-100"
+                onPress={() => router.push('/requests' as any)}
+              >
+                <View className="w-12 h-12 rounded-full bg-emerald-50 items-center justify-center mr-3">
+                  <Ionicons name="mail-unread-outline" size={22} color="#128C7E" />
+                </View>
+                <Text className="flex-1 font-semibold text-gray-900">
+                  {t('message_requests.title')}
+                </Text>
+                <View className="bg-red-500 rounded-full min-w-[22px] h-[22px] items-center justify-center px-1.5">
+                  <Text className="text-white text-xs font-bold">{requestCount}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+          </>
+        }
         alwaysBounceVertical
         refreshControl={
           <RefreshControl

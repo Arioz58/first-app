@@ -136,6 +136,20 @@ export default function PrivacyScreen() {
           <Row field="privacyCalls" options={TRIPLE} />
           <Row field="privacyFriendRequests" options={FR_VALUES} />
         </View>
+
+        {/* Utilisateurs bloqués */}
+        <View className="bg-white mt-5">
+          <TouchableOpacity
+            className="flex-row items-center px-4 py-4"
+            onPress={() => router.push('/blocked' as any)}
+          >
+            <Ionicons name="ban-outline" size={20} color="#EF4444" />
+            <Text className="flex-1 ml-3 text-base text-gray-900">
+              {t('moderation.blocked_users')}
+            </Text>
+            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+        </View>
         <View className="h-8" />
       </ScrollView>
 

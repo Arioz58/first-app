@@ -1,12 +1,19 @@
 import { Stack, useRouter, useSegments } from "expo-router";
+import * as Notifications from "expo-notifications";
 import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { setSessionExpiredHandler } from "../lib/api";
-import "../lib/i18n";
+import i18n from "../lib/i18n";
 import { registerForPushNotifications } from "../lib/notifications";
 import { connectSocket } from "../lib/socket";
 import { clearTokens, getAccessToken, getRefreshToken } from "../lib/storage";
 import "./globals.css";
+
+// Notif in-app locale (utilisateur en ligne → reçoit l'event socket plutôt qu'un push).
+const localNotify = (title: string, body: string) =>
+  Notifications.scheduleNotificationAsync({ content: { title, body }, trigger: null }).catch(
+    () => {},
+  );
 
 const isTokenExpired = (token: string): boolean => {
   try {
@@ -48,7 +55,16 @@ export default function RootLayout() {
       }
 
       if (inAuth) router.replace("/(tabs)");
-      await connectSocket();
+      const socket = await connectSocket();
+      // Notifications in-app temps réel (demandes d'amis) quand l'app est ouverte.
+      socket.off("friend_request_received");
+      socket.on("friend_request_received", (p: { from: { name: string } }) => {
+        localNotify(p.from.name, i18n.t("notifications.friend_request"));
+      });
+      socket.off("friend_request_accepted");
+      socket.on("friend_request_accepted", (p: { by: { name: string } }) => {
+        localNotify(p.by.name, i18n.t("notifications.friend_accepted"));
+      });
       await registerForPushNotifications();
       setChecked(true);
     };
@@ -66,6 +82,8 @@ export default function RootLayout() {
       <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="privacy" options={{ headerShown: false }} />
+      <Stack.Screen name="blocked" options={{ headerShown: false }} />
+      <Stack.Screen name="requests" options={{ headerShown: false }} />
       <Stack.Screen name="group/new" options={{ headerShown: false }} />
       <Stack.Screen
         name="story/[id]"

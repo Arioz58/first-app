@@ -160,6 +160,29 @@
     "search_friends": "Search my friends",
     "remove_title": "Remove this friend?"
   },
+  "message_requests": {
+    "title": "Message requests",
+    "empty": "No message requests",
+    "decline": "Delete"
+  },
+  "notifications": {
+    "friend_request": "sent you a friend request",
+    "friend_accepted": "accepted your friend request"
+  },
+  "moderation": {
+    "block": "Block",
+    "unblock": "Unblock",
+    "report": "Report",
+    "block_confirm": "Block this user?",
+    "blocked_users": "Blocked users",
+    "no_blocked": "No blocked users",
+    "report_category": "Report reason",
+    "spam": "Spam",
+    "impersonation": "Impersonation",
+    "inappropriate": "Inappropriate content",
+    "other": "Other",
+    "report_done": "Report sent"
+  },
   "stories": {
     "my_story": "My story",
     "add": "Add",

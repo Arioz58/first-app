@@ -101,6 +101,42 @@ export default function UserProfileScreen() {
       },
     ]);
 
+  const sendReport = (category: string) => {
+    apiRequest('/reports', { method: 'POST', body: { userId: id, category } })
+      .then(() => Alert.alert(t('moderation.report_done')))
+      .catch((e: any) => Alert.alert(t('error'), e.message));
+  };
+
+  const openReport = () => {
+    const cats = ['spam', 'impersonation', 'inappropriate', 'other'];
+    Alert.alert(t('moderation.report_category'), '', [
+      ...cats.map((c) => ({ text: t(`moderation.${c}`), onPress: () => sendReport(c) })),
+      { text: t('cancel'), style: 'cancel' as const },
+    ]);
+  };
+
+  const confirmBlock = () => {
+    Alert.alert(t('moderation.block_confirm'), '', [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('moderation.block'),
+        style: 'destructive',
+        onPress: () =>
+          apiRequest('/blocks', { method: 'POST', body: { userId: id } })
+            .then(() => router.back())
+            .catch((e: any) => Alert.alert(t('error'), e.message)),
+      },
+    ]);
+  };
+
+  const openMenu = () => {
+    Alert.alert('', '', [
+      { text: t('moderation.block'), style: 'destructive', onPress: confirmBlock },
+      { text: t('moderation.report'), onPress: openReport },
+      { text: t('cancel'), style: 'cancel' },
+    ]);
+  };
+
   const openChat = async () => {
     try {
       const conv = await apiRequest<{ id: string }>('/conversations/direct', {
@@ -125,6 +161,11 @@ export default function UserProfileScreen() {
         <Text className="text-lg font-semibold text-gray-900 flex-1" numberOfLines={1}>
           {data?.name ?? ''}
         </Text>
+        {data && !data.isSelf && (
+          <TouchableOpacity onPress={openMenu} className="ml-2 p-1">
+            <Ionicons name="ellipsis-horizontal" size={22} color="#374151" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {loading ? (
