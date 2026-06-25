@@ -16,13 +16,7 @@ Notifications.setNotificationHandler({
 export const registerForPushNotifications = async (): Promise<
   string | null
 > => {
-  if (!Device.isDevice) {
-    console.log(
-      "[FCM] Les notifications push nécessitent un appareil physique",
-    );
-    return null;
-  }
-
+  // Permission demandée partout (nécessaire aussi pour les notifs locales in-app, simulateur inclus).
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
 
@@ -42,6 +36,12 @@ export const registerForPushNotifications = async (): Promise<
       importance: Notifications.AndroidImportance.MAX,
       sound: "default",
     });
+  }
+
+  // Le token push REMOTE nécessite un vrai appareil (les notifs locales marchent quand même).
+  if (!Device.isDevice) {
+    console.log("[FCM] Token push ignoré (simulateur) — notifs locales OK");
+    return null;
   }
 
   let token: string;
