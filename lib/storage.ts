@@ -7,6 +7,8 @@ const USER_ID_KEY = 'userId';
 const LANGUAGE_KEY = 'language';
 const RECENT_SEARCHES_KEY = 'recentSearches';
 const CHAT_WALLPAPERS_KEY = 'chatWallpapers';
+const CONV_CUSTOM_KEY = 'conversationCustomizations';
+const CONV_CLEARED_KEY = 'conversationClearedAt';
 
 export type RecentSearch = {
   id: string;
@@ -78,6 +80,77 @@ export const setChatWallpaper = async (
   if (wallpaper) map[conversationId] = wallpaper;
   else delete map[conversationId];
   await SecureStore.setItemAsync(CHAT_WALLPAPERS_KEY, JSON.stringify(map));
+};
+
+// Personnalisations locales d'une conversation (perso, non partagées) :
+// surnom du contact + couleur d'accent des bulles. Map { conversationId → ... }.
+export type ConversationCustomization = {
+  nickname?: string | null;
+  bubbleColor?: string | null;
+};
+
+export const getConversationCustomization = async (
+  conversationId: string,
+): Promise<ConversationCustomization> => {
+  const raw = await SecureStore.getItemAsync(CONV_CUSTOM_KEY);
+  if (!raw) return {};
+  try {
+    const map = JSON.parse(raw) as Record<string, ConversationCustomization>;
+    return map[conversationId] ?? {};
+  } catch {
+    return {};
+  }
+};
+
+export const setConversationCustomization = async (
+  conversationId: string,
+  patch: ConversationCustomization,
+): Promise<ConversationCustomization> => {
+  const raw = await SecureStore.getItemAsync(CONV_CUSTOM_KEY);
+  let map: Record<string, ConversationCustomization> = {};
+  try {
+    map = raw ? (JSON.parse(raw) as Record<string, ConversationCustomization>) : {};
+  } catch {
+    map = {};
+  }
+  const next = { ...(map[conversationId] ?? {}), ...patch };
+  // Nettoie les clés vides pour ne pas garder de surnom/couleur "null".
+  if (!next.nickname) delete next.nickname;
+  if (!next.bubbleColor) delete next.bubbleColor;
+  if (Object.keys(next).length) map[conversationId] = next;
+  else delete map[conversationId];
+  await SecureStore.setItemAsync(CONV_CUSTOM_KEY, JSON.stringify(map));
+  return next;
+};
+
+// « Effacer la conversation » : on stocke localement un horodatage ; les messages
+// antérieurs sont masqués côté app (personnel, n'affecte pas l'autre — pas de backend).
+export const getConversationClearedAt = async (
+  conversationId: string,
+): Promise<number | null> => {
+  const raw = await SecureStore.getItemAsync(CONV_CLEARED_KEY);
+  if (!raw) return null;
+  try {
+    const map = JSON.parse(raw) as Record<string, number>;
+    return map[conversationId] ?? null;
+  } catch {
+    return null;
+  }
+};
+
+export const setConversationClearedAt = async (
+  conversationId: string,
+  timestamp: number,
+): Promise<void> => {
+  const raw = await SecureStore.getItemAsync(CONV_CLEARED_KEY);
+  let map: Record<string, number> = {};
+  try {
+    map = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    map = {};
+  }
+  map[conversationId] = timestamp;
+  await SecureStore.setItemAsync(CONV_CLEARED_KEY, JSON.stringify(map));
 };
 
 export const clearTokens = async () => {
