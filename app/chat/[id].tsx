@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import {
-  View, Text, FlatList, TextInput, TouchableOpacity,
+  View, Text, FlatList, TextInput, TouchableOpacity, Pressable,
   KeyboardAvoidingView, Platform, ActivityIndicator, Image, Alert,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
@@ -20,14 +20,24 @@ import {
 } from '../../lib/storage';
 import type { ChatWallpaper } from '../../lib/chatWallpapers';
 import { resolveBubbleColor } from '../../lib/bubbleColors';
+import { consumeScrollTarget } from '../../lib/chatNav';
 import { ChatBackground } from '../../components/ChatBackground';
 import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
 import { UserAvatar } from '../../components/UserAvatar';
 
 const NEXA = '#128C7E';
+const MUTE_FOREVER = new Date('2999-12-31T00:00:00Z'); // sentinelle « toujours »
 
 type ConvMember = { userId: string; role: string; user: { id: string; name: string; photoUrl: string | null } };
-type ConvMeta = { id: string; type: 'direct' | 'group'; name: string | null; members: ConvMember[] };
+type ConvMeta = {
+  id: string;
+  type: 'direct' | 'group';
+  name: string | null;
+  members: ConvMember[];
+  ephemeralDuration: number | null;
+  myMutedUntil: string | null;
+};
+type Flags = { pinned: string[]; starred: string[] };
 type HeaderProfile = {
   photoUrl: string | null;
   canCall: boolean;
@@ -85,19 +95,33 @@ export default function ChatScreen() {
   const [online, setOnline] = useState(false);
   const [lastSeen, setLastSeen] = useState<string | null>(null);
   const [peerTyping, setPeerTyping] = useState(false);
+  // Mute / éphémère / épinglés / favoris (Phase C)
+  const [ephemeralDuration, setEphemeralDuration] = useState<number | null>(null);
+  const [mutedUntil, setMutedUntil] = useState<string | null>(null);
+  const [flags, setFlags] = useState<Flags>({ pinned: [], starred: [] });
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [scrollTarget, setScrollTarget] = useState<string | null>(null);
   const listRef = useRef<FlatList>(null);
   const typingSentRef = useRef(false); // a-t-on déjà signalé qu'on écrit ?
   const typingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null); // arrêt auto de notre frappe
   const peerTypingRef = useRef<ReturnType<typeof setTimeout> | null>(null); // masquage auto (5 s)
   const otherUserIdRef = useRef<string | null>(null); // pour filtrer les events présence
 
-  // Personnalisations locales rechargées à chaque focus (modifiables depuis le panneau de détails).
+  const loadFlags = useCallback(() => {
+    apiRequest<Flags>(`/conversations/${id}/flags`).then(setFlags).catch(() => {});
+  }, [id]);
+
+  // Rechargé à chaque focus : perso locales + épinglés/favoris + cible de défilement
+  // (l'utilisateur revient du panneau de détails).
   useFocusEffect(
     useCallback(() => {
       getChatWallpaper(id).then(setWallpaper);
       getConversationCustomization(id).then(setCustom);
       getConversationClearedAt(id).then(setClearedAt);
-    }, [id]),
+      loadFlags();
+      const target = consumeScrollTarget(id);
+      if (target) setScrollTarget(target);
+    }, [id, loadFlags]),
   );
 
   // Aperçu live : on applique + persiste immédiatement sans fermer la feuille.
@@ -115,6 +139,8 @@ export default function ChatScreen() {
         // Métadonnées de la conversation → identifier l'autre participant (conv directe).
         const meta = await apiRequest<ConvMeta>(`/conversations/${id}`);
         setConvType(meta.type);
+        setEphemeralDuration(meta.ephemeralDuration);
+        setMutedUntil(meta.myMutedUntil);
         if (meta.type === 'direct') {
           const other = meta.members.find((m) => m.userId !== me.id);
           if (other) {
@@ -237,6 +263,72 @@ export default function ChatScreen() {
     stopTyping(socket);
   };
 
+  // --- Couper les notifications ---
+  const applyMute = (until: Date | null) => {
+    setMutedUntil(until ? until.toISOString() : null);
+    apiRequest(`/conversations/${id}/mute`, {
+      method: 'PATCH',
+      body: { mutedUntil: until ? until.toISOString() : null },
+    }).catch(() => {});
+  };
+  const muteMenu = () => {
+    const h = (hours: number) => new Date(Date.now() + hours * 3600 * 1000);
+    Alert.alert(t('details.mute'), undefined, [
+      { text: t('mute.8h'), onPress: () => applyMute(h(8)) },
+      { text: t('mute.week'), onPress: () => applyMute(h(24 * 7)) },
+      { text: t('mute.always'), onPress: () => applyMute(MUTE_FOREVER) },
+      ...(mutedUntil ? [{ text: t('mute.unmute'), onPress: () => applyMute(null) }] : []),
+      { text: t('cancel'), style: 'cancel' as const },
+    ]);
+  };
+
+  // --- Messages éphémères ---
+  const applyEphemeral = (duration: number | null) => {
+    setEphemeralDuration(duration);
+    apiRequest(`/conversations/${id}/ephemeral`, { method: 'PATCH', body: { duration } }).catch(
+      () => {},
+    );
+  };
+  const ephemeralMenu = () => {
+    const DAY = 24 * 3600;
+    Alert.alert(t('details.ephemeral'), undefined, [
+      { text: t('ephemeral.24h'), onPress: () => applyEphemeral(DAY) },
+      { text: t('ephemeral.7d'), onPress: () => applyEphemeral(7 * DAY) },
+      { text: t('ephemeral.30d'), onPress: () => applyEphemeral(30 * DAY) },
+      { text: t('ephemeral.off'), onPress: () => applyEphemeral(null) },
+      { text: t('cancel'), style: 'cancel' as const },
+    ]);
+  };
+
+  // --- Épingler / Favori (appui long sur un message) ---
+  const togglePin = (messageId: string, pinned: boolean) =>
+    apiRequest(`/conversations/${id}/messages/${messageId}/pin`, {
+      method: pinned ? 'DELETE' : 'POST',
+    })
+      .then(loadFlags)
+      .catch((e: any) => Alert.alert(t('error'), e.message));
+  const toggleStar = (messageId: string, starred: boolean) =>
+    apiRequest(`/conversations/${id}/messages/${messageId}/star`, {
+      method: starred ? 'DELETE' : 'POST',
+    })
+      .then(loadFlags)
+      .catch((e: any) => Alert.alert(t('error'), e.message));
+  const openMessageMenu = (messageId: string) => {
+    const pinned = flags.pinned.includes(messageId);
+    const starred = flags.starred.includes(messageId);
+    Alert.alert('', undefined, [
+      {
+        text: pinned ? t('details.unpin') : t('details.pin'),
+        onPress: () => togglePin(messageId, pinned),
+      },
+      {
+        text: starred ? t('details.unstar') : t('details.star'),
+        onPress: () => toggleStar(messageId, starred),
+      },
+      { text: t('cancel'), style: 'cancel' as const },
+    ]);
+  };
+
   // --- Valeurs dérivées ---
   const displayName = custom.nickname || name || '';
   const bubbleColor = resolveBubbleColor(custom.bubbleColor);
@@ -253,6 +345,19 @@ export default function ChatScreen() {
         ? t('chat.seen_at', { value: formatSeen(lastSeen) })
         : '';
   const subtitleAccent = peerTyping || online; // vert pour frappe / en ligne
+  const isMuted = !!mutedUntil && new Date(mutedUntil) > new Date();
+
+  // Défilement + surlignage temporaire vers un message (épinglé/favori) demandé par le panneau.
+  useEffect(() => {
+    if (!scrollTarget) return;
+    const idx = visibleMessages.findIndex((m) => m.id === scrollTarget);
+    if (idx < 0) return; // message non chargé (trop ancien) → on ignore
+    listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
+    setHighlightId(scrollTarget);
+    setScrollTarget(null);
+    const to = setTimeout(() => setHighlightId(null), 2500);
+    return () => clearTimeout(to);
+  }, [scrollTarget, visibleMessages]);
 
   const openDetails = () => {
     if (convType !== 'direct' || !otherUserId) return;
@@ -313,8 +418,8 @@ export default function ChatScreen() {
     const direct = convType === 'direct' && !!otherUserId;
     Alert.alert(displayName, undefined, [
       { text: t('details.search'), onPress: comingSoon },
-      { text: t('details.mute'), onPress: comingSoon },
-      { text: t('details.ephemeral'), onPress: comingSoon },
+      { text: t('details.mute'), onPress: muteMenu },
+      { text: t('details.ephemeral'), onPress: ephemeralMenu },
       { text: t('chat.wallpaper'), onPress: () => setPickerOpen(true) },
       { text: t('details.clear_chat'), style: 'destructive', onPress: clearChat },
       ...(direct
@@ -366,9 +471,25 @@ export default function ChatScreen() {
           onPress={openDetails}
           disabled={convType !== 'direct'}
         >
-          <Text className="text-base font-semibold text-gray-900" numberOfLines={1}>
-            {displayName}
-          </Text>
+          <View className="flex-row items-center">
+            <Text
+              className="text-base font-semibold text-gray-900 flex-shrink"
+              numberOfLines={1}
+            >
+              {displayName}
+            </Text>
+            {ephemeralDuration ? (
+              <Ionicons name="timer-outline" size={14} color="#6B7280" style={{ marginLeft: 6 }} />
+            ) : null}
+            {isMuted ? (
+              <Ionicons
+                name="notifications-off-outline"
+                size={14}
+                color="#6B7280"
+                style={{ marginLeft: 4 }}
+              />
+            ) : null}
+          </View>
           {subtitle ? (
             <Text
               className={`text-xs ${subtitleAccent ? 'text-nexa' : 'text-gray-400'}`}
@@ -430,11 +551,29 @@ export default function ChatScreen() {
             const isMe = item.sender?.id === currentUserId;
             const isStoryReply = item.type === 'story_reply' || !!item.storyMediaUrl;
             const reaction = isStoryReply && isEmojiOnly(item.content);
+            const isPinned = flags.pinned.includes(item.id);
+            const isStarred = flags.starred.includes(item.id);
+            const highlighted = highlightId === item.id;
 
             return (
-              <View
+              <Pressable
+                onLongPress={() => openMessageMenu(item.id)}
+                delayLongPress={300}
                 className={`max-w-[80%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
+                style={
+                  highlighted
+                    ? { backgroundColor: 'rgba(250,204,21,0.25)', borderRadius: 14, padding: 2 }
+                    : undefined
+                }
               >
+                {(isPinned || isStarred) && (
+                  <View
+                    className={`flex-row items-center gap-1 mb-0.5 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
+                  >
+                    {isPinned && <Ionicons name="pin" size={11} color="#9CA3AF" />}
+                    {isStarred && <Ionicons name="star" size={11} color="#F59E0B" />}
+                  </View>
+                )}
                 {isStoryReply ? (
                   <>
                     {/* Libellé contextuel : répondu / réagi */}
@@ -493,9 +632,10 @@ export default function ChatScreen() {
                     </View>
                   </>
                 )}
-              </View>
+              </Pressable>
             );
           }}
+          onScrollToIndexFailed={() => {}}
         />
         </ChatBackground>
 

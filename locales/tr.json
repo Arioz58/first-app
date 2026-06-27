@@ -130,7 +130,25 @@
     "calls_coming": "Aramalar yakında geliyor",
     "mute": "Bildirimler",
     "search": "Ara",
-    "save": "Kaydet"
+    "save": "Kaydet",
+    "pin": "Sabitle",
+    "unpin": "Sabiti kaldır",
+    "star": "Favorilere ekle",
+    "unstar": "Favorilerden çıkar",
+    "no_pinned": "Sabitlenmiş mesaj yok",
+    "no_starred": "Yıldızlı mesaj yok"
+  },
+  "mute": {
+    "8h": "8 saat",
+    "week": "1 hafta",
+    "always": "Her zaman",
+    "unmute": "Sesi aç"
+  },
+  "ephemeral": {
+    "24h": "24 saat",
+    "7d": "7 gün",
+    "30d": "30 gün",
+    "off": "Kapalı"
   },
   "group": {
     "new_group": "Yeni grup",

@@ -19,6 +19,7 @@ import BottomSheet from '../../components/BottomSheet';
 import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
+import { requestScrollToMessage } from '../../lib/chatNav';
 import {
   BUBBLE_COLORS,
   DEFAULT_BUBBLE_COLOR,
@@ -35,6 +36,7 @@ import {
 } from '../../lib/storage';
 
 const NEXA = '#128C7E';
+const MUTE_FOREVER = new Date('2999-12-31T00:00:00Z');
 
 type RelationStatus = 'self' | 'friends' | 'request_sent' | 'request_received' | 'none';
 
@@ -53,6 +55,14 @@ type ProfileData = {
   canMessage: boolean;
   canCall: boolean;
   canFriendRequest: boolean;
+};
+
+type PinnedMsg = {
+  id: string;
+  content: string | null;
+  createdAt: string;
+  sender: { name: string };
+  storyMediaUrl?: string | null;
 };
 
 export default function ConversationDetailsScreen() {
@@ -77,6 +87,12 @@ export default function ConversationDetailsScreen() {
   const [nicknameDraft, setNicknameDraft] = useState('');
   const [photoViewer, setPhotoViewer] = useState(false);
 
+  // Phase C — mute / éphémère / épinglés / favoris
+  const [ephemeralDuration, setEphemeralDuration] = useState<number | null>(null);
+  const [mutedUntil, setMutedUntil] = useState<string | null>(null);
+  const [pins, setPins] = useState<PinnedMsg[]>([]);
+  const [starred, setStarred] = useState<PinnedMsg[]>([]);
+
   // Re-vérification serveur du profil à l'ouverture (jamais que du cache).
   const load = useCallback(async () => {
     try {
@@ -97,14 +113,31 @@ export default function ConversationDetailsScreen() {
     }
   }, [userId]);
 
+  const loadConvData = useCallback(() => {
+    apiRequest<{ ephemeralDuration: number | null; myMutedUntil: string | null }>(
+      `/conversations/${conversationId}`,
+    )
+      .then((c) => {
+        setEphemeralDuration(c.ephemeralDuration);
+        setMutedUntil(c.myMutedUntil);
+      })
+      .catch(() => {});
+    apiRequest<PinnedMsg[]>(`/conversations/${conversationId}/pins`).then(setPins).catch(() => {});
+    apiRequest<PinnedMsg[]>(`/conversations/${conversationId}/starred`)
+      .then(setStarred)
+      .catch(() => {});
+  }, [conversationId]);
+
   useEffect(() => {
     if (userId) load();
     else setLoading(false);
     getConversationCustomization(conversationId).then(setCustom);
     getChatWallpaper(conversationId).then(setWallpaper);
-  }, [load, userId, conversationId]);
+    loadConvData();
+  }, [load, userId, conversationId, loadConvData]);
 
   const displayName = custom.nickname || data?.name || name || '';
+  const isMuted = !!mutedUntil && new Date(mutedUntil) > new Date();
 
   // --- Personnalisation (local) ---
   const applyWallpaper = (w: ChatWallpaper | null) => {
@@ -121,6 +154,65 @@ export default function ConversationDetailsScreen() {
       await setConversationCustomization(conversationId, { nickname: nicknameDraft.trim() || null }),
     );
   };
+
+  // --- Couper les notifications ---
+  const applyMute = (until: Date | null) => {
+    setMutedUntil(until ? until.toISOString() : null);
+    apiRequest(`/conversations/${conversationId}/mute`, {
+      method: 'PATCH',
+      body: { mutedUntil: until ? until.toISOString() : null },
+    }).catch(() => {});
+  };
+  const muteMenu = () => {
+    const h = (hours: number) => new Date(Date.now() + hours * 3600 * 1000);
+    Alert.alert(t('details.mute'), undefined, [
+      { text: t('mute.8h'), onPress: () => applyMute(h(8)) },
+      { text: t('mute.week'), onPress: () => applyMute(h(24 * 7)) },
+      { text: t('mute.always'), onPress: () => applyMute(MUTE_FOREVER) },
+      ...(isMuted ? [{ text: t('mute.unmute'), onPress: () => applyMute(null) }] : []),
+      { text: t('cancel'), style: 'cancel' as const },
+    ]);
+  };
+
+  // --- Messages éphémères ---
+  const applyEphemeral = (duration: number | null) => {
+    setEphemeralDuration(duration);
+    apiRequest(`/conversations/${conversationId}/ephemeral`, {
+      method: 'PATCH',
+      body: { duration },
+    }).catch(() => {});
+  };
+  const ephemeralMenu = () => {
+    const DAY = 24 * 3600;
+    Alert.alert(t('details.ephemeral'), undefined, [
+      { text: t('ephemeral.24h'), onPress: () => applyEphemeral(DAY) },
+      { text: t('ephemeral.7d'), onPress: () => applyEphemeral(7 * DAY) },
+      { text: t('ephemeral.30d'), onPress: () => applyEphemeral(30 * DAY) },
+      { text: t('ephemeral.off'), onPress: () => applyEphemeral(null) },
+      { text: t('cancel'), style: 'cancel' as const },
+    ]);
+  };
+  const ephemeralLabel = () => {
+    const DAY = 24 * 3600;
+    if (!ephemeralDuration) return t('ephemeral.off');
+    if (ephemeralDuration <= DAY) return t('ephemeral.24h');
+    if (ephemeralDuration <= 7 * DAY) return t('ephemeral.7d');
+    return t('ephemeral.30d');
+  };
+
+  // --- Épinglés / Favoris ---
+  const goToMessage = (messageId: string) => {
+    requestScrollToMessage(conversationId, messageId);
+    router.back();
+  };
+  const unpin = (messageId: string) =>
+    apiRequest(`/conversations/${conversationId}/messages/${messageId}/pin`, { method: 'DELETE' })
+      .then(loadConvData)
+      .catch(() => {});
+  const unstar = (messageId: string) =>
+    apiRequest(`/conversations/${conversationId}/messages/${messageId}/star`, { method: 'DELETE' })
+      .then(loadConvData)
+      .catch(() => {});
 
   // --- Gestion ---
   const clearChat = () => {
@@ -243,7 +335,11 @@ export default function ConversationDetailsScreen() {
                   Alert.alert('', data.canCall ? t('details.calls_coming') : t('details.call_unavailable'))
                 }
               />
-              <QuickAction icon="notifications-off" label={t('details.mute')} onPress={comingSoon} />
+              <QuickAction
+                icon={isMuted ? 'notifications-off' : 'notifications-outline'}
+                label={t('details.mute')}
+                onPress={muteMenu}
+              />
               <QuickAction icon="search" label={t('details.search')} onPress={comingSoon} />
             </View>
           ) : null}
@@ -274,9 +370,8 @@ export default function ConversationDetailsScreen() {
             <Row
               icon="timer"
               label={t('details.ephemeral')}
-              value={t('details.coming_soon')}
-              disabled
-              onPress={comingSoon}
+              value={ephemeralLabel()}
+              onPress={ephemeralMenu}
             />
           </Section>
 
@@ -305,10 +400,39 @@ export default function ConversationDetailsScreen() {
             </View>
           </Section>
 
-          {/* 2.5 / 2.6 Épinglés & Favoris (placeholders Phase C) */}
-          <Section title={t('details.organize')}>
-            <Row icon="pin" label={`${t('details.pinned')} · 0`} disabled onPress={comingSoon} />
-            <Row icon="star" label={`${t('details.starred')} · 0`} disabled onPress={comingSoon} />
+          {/* 2.5 Messages épinglés */}
+          <Section title={`${t('details.pinned')} · ${pins.length}`}>
+            {pins.length === 0 ? (
+              <Text className="text-gray-400 text-sm px-5 py-4">{t('details.no_pinned')}</Text>
+            ) : (
+              pins.map((m) => (
+                <MessageRow
+                  key={m.id}
+                  msg={m}
+                  icon="pin"
+                  onPress={() => goToMessage(m.id)}
+                  onRemove={() => unpin(m.id)}
+                />
+              ))
+            )}
+          </Section>
+
+          {/* 2.6 Messages favoris */}
+          <Section title={`${t('details.starred')} · ${starred.length}`}>
+            {starred.length === 0 ? (
+              <Text className="text-gray-400 text-sm px-5 py-4">{t('details.no_starred')}</Text>
+            ) : (
+              starred.map((m) => (
+                <MessageRow
+                  key={m.id}
+                  msg={m}
+                  icon="star"
+                  iconColor="#F59E0B"
+                  onPress={() => goToMessage(m.id)}
+                  onRemove={() => unstar(m.id)}
+                />
+              ))
+            )}
           </Section>
 
           {/* 2.7 Gestion */}
@@ -494,6 +618,36 @@ function Row({
       {right ?? (value ? <Text className="text-gray-400 text-sm" numberOfLines={1}>{value}</Text> : null)}
       <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 6 }} />
     </TouchableOpacity>
+  );
+}
+
+function MessageRow({
+  msg,
+  icon,
+  iconColor = '#6B7280',
+  onPress,
+  onRemove,
+}: {
+  msg: PinnedMsg;
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor?: string;
+  onPress: () => void;
+  onRemove: () => void;
+}) {
+  const preview = msg.content?.trim() || (msg.storyMediaUrl ? '📷' : '…');
+  return (
+    <View className="flex-row items-center px-5 py-3 border-b border-gray-50">
+      <Ionicons name={icon} size={18} color={iconColor} />
+      <TouchableOpacity className="flex-1 ml-3" onPress={onPress} activeOpacity={0.7}>
+        <Text className="text-gray-800" numberOfLines={1}>
+          {preview}
+        </Text>
+        <Text className="text-gray-400 text-xs mt-0.5">{msg.sender?.name}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={onRemove} className="p-1 ml-2">
+        <Ionicons name="close" size={18} color="#9CA3AF" />
+      </TouchableOpacity>
+    </View>
   );
 }
 

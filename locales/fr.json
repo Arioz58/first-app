@@ -130,7 +130,25 @@
     "calls_coming": "Les appels arrivent bientôt",
     "mute": "Notifications",
     "search": "Rechercher",
-    "save": "Enregistrer"
+    "save": "Enregistrer",
+    "pin": "Épingler",
+    "unpin": "Désépingler",
+    "star": "Ajouter aux favoris",
+    "unstar": "Retirer des favoris",
+    "no_pinned": "Aucun message épinglé",
+    "no_starred": "Aucun message favori"
+  },
+  "mute": {
+    "8h": "8 heures",
+    "week": "1 semaine",
+    "always": "Toujours",
+    "unmute": "Réactiver les notifications"
+  },
+  "ephemeral": {
+    "24h": "24 heures",
+    "7d": "7 jours",
+    "30d": "30 jours",
+    "off": "Désactivé"
   },
   "group": {
     "new_group": "Nouveau groupe",

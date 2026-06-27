@@ -130,7 +130,25 @@
     "calls_coming": "Calls are coming soon",
     "mute": "Notifications",
     "search": "Search",
-    "save": "Save"
+    "save": "Save",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "star": "Add to favorites",
+    "unstar": "Remove from favorites",
+    "no_pinned": "No pinned messages",
+    "no_starred": "No starred messages"
+  },
+  "mute": {
+    "8h": "8 hours",
+    "week": "1 week",
+    "always": "Always",
+    "unmute": "Unmute"
+  },
+  "ephemeral": {
+    "24h": "24 hours",
+    "7d": "7 days",
+    "30d": "30 days",
+    "off": "Off"
   },
   "group": {
     "new_group": "New group",
