@@ -150,6 +150,19 @@
     "30d": "30 jours",
     "off": "Désactivé"
   },
+  "media": {
+    "attach": "Pièce jointe",
+    "gallery": "Galerie",
+    "document": "Document",
+    "gif": "GIF",
+    "gif_search": "Rechercher des GIFs",
+    "gif_no_key": "Clé Giphy non configurée",
+    "upload_error": "Échec de l'envoi du fichier",
+    "uploading": "Envoi…",
+    "mic_permission": "Autorisez l'accès au micro",
+    "download_all": "Tout télécharger",
+    "downloaded": "{{count}} fichier(s) téléchargé(s)"
+  },
   "group": {
     "new_group": "Nouveau groupe",
     "group_name": "Nom du groupe",

@@ -7,9 +7,29 @@ import { useTranslation } from 'react-i18next';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, {
+  FadeInDown,
+  FadeOutDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Linking from 'expo-linking';
+import {
+  useAudioRecorder,
+  RecordingPresets,
+  AudioModule,
+  setAudioModeAsync,
+} from 'expo-audio';
 import { apiRequest } from '../../lib/api';
 import { connectSocket, getSocket } from '../../lib/socket';
+import { uploadFile, firstUrl } from '../../lib/upload';
+import { MessageMedia } from '../../components/MessageMedia';
+import { MediaViewer } from '../../components/MediaViewer';
+import GiphyPicker from '../../components/GiphyPicker';
 import {
   getChatWallpaper,
   setChatWallpaper,
@@ -54,6 +74,10 @@ const BUBBLE_SHADOW = {
   elevation: 1,
 };
 
+// Médias affichés en grand (sans bulle) vs en carte (audio/document).
+const isImageLike = (mt?: string | null) => mt === 'image' || mt === 'video' || mt === 'gif';
+const recFmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
 type Sender = { id: string; name: string };
 type Message = {
   id: string;
@@ -64,6 +88,19 @@ type Message = {
   type?: string;
   storyId?: string | null;
   storyMediaUrl?: string | null;
+  mediaUrl?: string | null;
+  mediaType?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  durationMs?: number | null;
+};
+type MediaPayload = {
+  mediaUrl: string;
+  mediaType: 'image' | 'video' | 'audio' | 'document' | 'gif';
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  durationMs?: number;
 };
 
 // Détecte une réaction emoji seule (≤ 8 pictogrammes) → affichage géant hors bulle
@@ -106,6 +143,19 @@ export default function ChatScreen() {
   const typingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null); // arrêt auto de notre frappe
   const peerTypingRef = useRef<ReturnType<typeof setTimeout> | null>(null); // masquage auto (5 s)
   const otherUserIdRef = useRef<string | null>(null); // pour filtrer les events présence
+  // Pièces jointes / médias (Phase D)
+  const [viewer, setViewer] = useState<{ type: 'image' | 'video'; url: string } | null>(null);
+  const [giphyOpen, setGiphyOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const plusRotation = useSharedValue(0);
+  const plusStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${plusRotation.value}deg` }],
+  }));
 
   const loadFlags = useCallback(() => {
     apiRequest<Flags>(`/conversations/${id}/flags`).then(setFlags).catch(() => {});
@@ -225,6 +275,7 @@ export default function ChatScreen() {
         socket?.emit('typing', { conversationId: id, typing: false });
         typingSentRef.current = false;
       }
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
     };
   }, [id]);
 
@@ -261,6 +312,131 @@ export default function ChatScreen() {
     socket.emit('send_message', { conversationId: id, content });
     setText('');
     stopTyping(socket);
+  };
+
+  // --- Médias / pièces jointes ---
+  const sendMedia = (payload: MediaPayload, caption = '') => {
+    getSocket()?.emit('send_message', { conversationId: id, content: caption, ...payload });
+  };
+
+  const pickFromGallery = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'videos'],
+      quality: 0.8,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    const isVideo = asset.type === 'video';
+    const contentType = isVideo
+      ? asset.mimeType?.startsWith('video/')
+        ? asset.mimeType
+        : 'video/mp4'
+      : 'image/jpeg';
+    setUploading(true);
+    try {
+      const url = await uploadFile(asset.uri, contentType, 'chat');
+      sendMedia({
+        mediaUrl: url,
+        mediaType: isVideo ? 'video' : 'image',
+        mimeType: contentType,
+        durationMs: asset.duration ? Math.round(asset.duration) : undefined,
+      });
+    } catch {
+      Alert.alert(t('error'), t('media.upload_error'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const pickDocument = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    const contentType = asset.mimeType ?? 'application/pdf';
+    setUploading(true);
+    try {
+      const url = await uploadFile(asset.uri, contentType, 'chat');
+      sendMedia({
+        mediaUrl: url,
+        mediaType: 'document',
+        fileName: asset.name,
+        fileSize: asset.size ?? undefined,
+        mimeType: contentType,
+      });
+    } catch {
+      Alert.alert(t('error'), t('media.upload_error'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const onGifSelect = (url: string) => {
+    setGiphyOpen(false);
+    sendMedia({ mediaUrl: url, mediaType: 'gif' });
+  };
+
+  const toggleAttach = () => {
+    setAttachOpen((o) => {
+      const next = !o;
+      plusRotation.value = withTiming(next ? 45 : 0, { duration: 200 });
+      return next;
+    });
+  };
+  // Ferme le panneau (en remettant le « + » droit) puis lance l'action choisie.
+  const runAttach = (fn: () => void) => {
+    setAttachOpen(false);
+    plusRotation.value = withTiming(0, { duration: 200 });
+    fn();
+  };
+  const attachItems = [
+    { key: 'gallery', icon: 'images' as const, color: '#8B5CF6', label: t('media.gallery'), action: pickFromGallery },
+    { key: 'document', icon: 'document-text' as const, color: '#3B82F6', label: t('media.document'), action: pickDocument },
+    { key: 'gif', icon: 'happy' as const, color: '#EC4899', label: t('media.gif'), action: () => setGiphyOpen(true) },
+  ];
+
+  // --- Message vocal ---
+  const stopRecordTimer = () => {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+  };
+  const startRecording = async () => {
+    const perm = await AudioModule.requestRecordingPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(t('media.mic_permission'));
+      return;
+    }
+    await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
+    await recorder.prepareToRecordAsync();
+    recorder.record();
+    setRecordSeconds(0);
+    setIsRecording(true);
+    recordTimerRef.current = setInterval(() => setRecordSeconds((s) => s + 1), 1000);
+  };
+  const cancelRecording = async () => {
+    stopRecordTimer();
+    setIsRecording(false);
+    await recorder.stop().catch(() => {});
+  };
+  const stopAndSendRecording = async () => {
+    stopRecordTimer();
+    setIsRecording(false);
+    const seconds = recordSeconds;
+    try {
+      await recorder.stop();
+      const uri = recorder.uri;
+      if (!uri || seconds < 1) return;
+      setUploading(true);
+      const url = await uploadFile(uri, 'audio/m4a', 'chat');
+      sendMedia({ mediaUrl: url, mediaType: 'audio', mimeType: 'audio/m4a', durationMs: seconds * 1000 });
+    } catch {
+      Alert.alert(t('error'), t('media.upload_error'));
+    } finally {
+      setUploading(false);
+    }
   };
 
   // --- Couper les notifications ---
@@ -617,19 +793,52 @@ export default function ChatScreen() {
                       </View>
                     )}
                   </>
+                ) : item.mediaUrl ? (
+                  <>
+                    {!isMe && (
+                      <Text className="text-xs text-gray-400 mb-1 ml-1">{item.sender?.name}</Text>
+                    )}
+                    {isImageLike(item.mediaType) ? (
+                      <View>
+                        <MessageMedia
+                          message={item}
+                          tint={bubbleColor}
+                          onOpenImage={(url) => setViewer({ type: 'image', url })}
+                          onOpenVideo={(url) => setViewer({ type: 'video', url })}
+                        />
+                        {item.content ? (
+                          <Text className="text-xs text-gray-500 mt-1 px-1">{item.content}</Text>
+                        ) : null}
+                      </View>
+                    ) : (
+                      <View style={BUBBLE_SHADOW} className="rounded-2xl px-3 py-2 bg-white">
+                        <MessageMedia
+                          message={item}
+                          tint={bubbleColor}
+                          onOpenImage={() => {}}
+                          onOpenVideo={() => {}}
+                        />
+                      </View>
+                    )}
+                  </>
                 ) : (
                   <>
                     {!isMe && (
                       <Text className="text-xs text-gray-400 mb-1 ml-1">{item.sender?.name}</Text>
                     )}
-                    <View
+                    <Pressable
+                      onPress={
+                        firstUrl(item.content) ? () => Linking.openURL(firstUrl(item.content)!) : undefined
+                      }
                       style={[BUBBLE_SHADOW, isMe ? { backgroundColor: bubbleColor } : null]}
                       className={`rounded-2xl px-4 py-2 ${isMe ? '' : 'bg-white'}`}
                     >
-                      <Text className={isMe ? 'text-white' : 'text-gray-900'}>
+                      <Text
+                        className={`${isMe ? 'text-white' : 'text-gray-900'} ${firstUrl(item.content) ? 'underline' : ''}`}
+                      >
                         {item.content}
                       </Text>
-                    </View>
+                    </Pressable>
                   </>
                 )}
               </Pressable>
@@ -639,24 +848,84 @@ export default function ChatScreen() {
         />
         </ChatBackground>
 
-        {/* Input */}
-        <View className="flex-row items-center px-3 py-2 border-t border-gray-100">
-          <TextInput
-            className="flex-1 bg-gray-100 rounded-full px-4 py-2 mr-2 text-base"
-            placeholder={t('chat.message_placeholder')}
-            value={text}
-            onChangeText={handleChangeText}
-            multiline
-            returnKeyType="send"
-            onSubmitEditing={sendMessage}
-          />
-          <TouchableOpacity
-            className="w-10 h-10 bg-nexa rounded-full items-center justify-center"
-            onPress={sendMessage}
-          >
-            <Ionicons name="send" size={18} color="white" />
-          </TouchableOpacity>
-        </View>
+        {/* Panneau de pièces jointes animé */}
+        {attachOpen && !isRecording && (
+          <View className="flex-row px-5 py-4 border-t border-gray-100" style={{ gap: 28 }}>
+            {attachItems.map((it, i) => (
+              <Animated.View
+                key={it.key}
+                entering={FadeInDown.delay(i * 40).springify().damping(26).stiffness(200)}
+                exiting={FadeOutDown.duration(120)}
+              >
+                <TouchableOpacity className="items-center" onPress={() => runAttach(it.action)}>
+                  <View
+                    className="w-14 h-14 rounded-full items-center justify-center"
+                    style={{ backgroundColor: it.color }}
+                  >
+                    <Ionicons name={it.icon} size={26} color="white" />
+                  </View>
+                  <Text className="text-xs text-gray-600 mt-1.5">{it.label}</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            ))}
+          </View>
+        )}
+
+        {uploading && (
+          <Text className="text-xs text-gray-400 px-4 pt-1">{t('media.uploading')}</Text>
+        )}
+
+        {/* Barre d'enregistrement vocal */}
+        {isRecording ? (
+          <View className="flex-row items-center px-3 py-3 border-t border-gray-100">
+            <TouchableOpacity onPress={cancelRecording} className="px-2">
+              <Ionicons name="trash-outline" size={22} color="#EF4444" />
+            </TouchableOpacity>
+            <View className="flex-1 flex-row items-center ml-2">
+              <View className="w-2.5 h-2.5 rounded-full bg-red-500 mr-2" />
+              <Text className="text-gray-700">{recFmt(recordSeconds)}</Text>
+            </View>
+            <TouchableOpacity
+              onPress={stopAndSendRecording}
+              className="w-10 h-10 bg-nexa rounded-full items-center justify-center"
+            >
+              <Ionicons name="send" size={18} color="white" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          /* Input */
+          <View className="flex-row items-center px-3 py-2 border-t border-gray-100">
+            <TouchableOpacity onPress={toggleAttach} disabled={uploading} className="mr-1 px-1">
+              <Animated.View style={plusStyle}>
+                <Ionicons name="add-circle-outline" size={26} color={NEXA} />
+              </Animated.View>
+            </TouchableOpacity>
+            <TextInput
+              className="flex-1 bg-gray-100 rounded-full px-4 py-2 mr-2 text-base"
+              placeholder={t('chat.message_placeholder')}
+              value={text}
+              onChangeText={handleChangeText}
+              multiline
+              returnKeyType="send"
+              onSubmitEditing={sendMessage}
+            />
+            {text.trim() ? (
+              <TouchableOpacity
+                className="w-10 h-10 bg-nexa rounded-full items-center justify-center"
+                onPress={sendMessage}
+              >
+                <Ionicons name="send" size={18} color="white" />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                className="w-10 h-10 bg-nexa rounded-full items-center justify-center"
+                onPress={startRecording}
+              >
+                <Ionicons name="mic" size={20} color="white" />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </KeyboardAvoidingView>
 
       <ChatWallpaperPicker
@@ -665,6 +934,11 @@ export default function ChatScreen() {
         onClose={() => setPickerOpen(false)}
         onSelect={handleSelectWallpaper}
       />
+
+      {viewer && (
+        <MediaViewer type={viewer.type} url={viewer.url} onClose={() => setViewer(null)} />
+      )}
+      <GiphyPicker visible={giphyOpen} onClose={() => setGiphyOpen(false)} onSelect={onGifSelect} />
     </SafeAreaView>
   );
 }

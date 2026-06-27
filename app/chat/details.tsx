@@ -65,6 +65,15 @@ type PinnedMsg = {
   storyMediaUrl?: string | null;
 };
 
+type MediaCounts = {
+  images: number;
+  videos: number;
+  documents: number;
+  audio: number;
+  gifs: number;
+  links: number;
+};
+
 export default function ConversationDetailsScreen() {
   const router = useRouter();
   const { t } = useTranslation();
@@ -92,6 +101,14 @@ export default function ConversationDetailsScreen() {
   const [mutedUntil, setMutedUntil] = useState<string | null>(null);
   const [pins, setPins] = useState<PinnedMsg[]>([]);
   const [starred, setStarred] = useState<PinnedMsg[]>([]);
+  const [mediaCounts, setMediaCounts] = useState<MediaCounts>({
+    images: 0,
+    videos: 0,
+    documents: 0,
+    audio: 0,
+    gifs: 0,
+    links: 0,
+  });
 
   // Re-vérification serveur du profil à l'ouverture (jamais que du cache).
   const load = useCallback(async () => {
@@ -126,7 +143,17 @@ export default function ConversationDetailsScreen() {
     apiRequest<PinnedMsg[]>(`/conversations/${conversationId}/starred`)
       .then(setStarred)
       .catch(() => {});
+    apiRequest<MediaCounts>(`/conversations/${conversationId}/media-counts`)
+      .then(setMediaCounts)
+      .catch(() => {});
   }, [conversationId]);
+
+  const openMedia = (category: string, sectionTitle: string) => {
+    router.push({
+      pathname: '/chat/media' as any,
+      params: { conversationId, category, title: sectionTitle },
+    });
+  };
 
   useEffect(() => {
     if (userId) load();
@@ -375,29 +402,24 @@ export default function ConversationDetailsScreen() {
             />
           </Section>
 
-          {/* 2.4 Médias, liens et documents (placeholders — pas encore de médias dans le chat) */}
+          {/* 2.4 Médias, liens et documents */}
           <Section title={t('details.media')}>
             {(
               [
-                ['images', 'section_media'],
-                ['link', 'section_links'],
-                ['document-text', 'section_docs'],
-                ['musical-notes', 'section_audio'],
-                ['happy', 'section_gifs'],
+                ['images', 'section_media', 'media', mediaCounts.images + mediaCounts.videos],
+                ['link', 'section_links', 'links', mediaCounts.links],
+                ['document-text', 'section_docs', 'documents', mediaCounts.documents],
+                ['musical-notes', 'section_audio', 'audio', mediaCounts.audio],
+                ['happy', 'section_gifs', 'gifs', mediaCounts.gifs],
               ] as const
-            ).map(([icon, key]) => (
+            ).map(([icon, key, category, count]) => (
               <Row
-                key={key}
+                key={category}
                 icon={icon}
-                label={`${t(`details.${key}`)} · 0`}
-                disabled
-                onPress={comingSoon}
+                label={`${t(`details.${key}`)} · ${count}`}
+                onPress={() => openMedia(category, t(`details.${key}`))}
               />
             ))}
-            <View className="items-center py-6">
-              <Ionicons name="images-outline" size={32} color="#D1D5DB" />
-              <Text className="text-gray-400 text-sm mt-2">{t('details.empty_media')}</Text>
-            </View>
           </Section>
 
           {/* 2.5 Messages épinglés */}

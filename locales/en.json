@@ -150,6 +150,19 @@
     "30d": "30 days",
     "off": "Off"
   },
+  "media": {
+    "attach": "Attachment",
+    "gallery": "Gallery",
+    "document": "Document",
+    "gif": "GIF",
+    "gif_search": "Search GIFs",
+    "gif_no_key": "Giphy key not configured",
+    "upload_error": "File upload failed",
+    "uploading": "Sending…",
+    "mic_permission": "Allow microphone access",
+    "download_all": "Download all",
+    "downloaded": "{{count}} file(s) downloaded"
+  },
   "group": {
     "new_group": "New group",
     "group_name": "Group name",

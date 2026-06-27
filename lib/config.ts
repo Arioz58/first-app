@@ -15,3 +15,7 @@ export const PRIVACY_URL = "https://nexa.app/privacy";
 // Version de la politique acceptée (envoyée au backend pour tracer le consentement).
 // Incrémenter à chaque révision du texte légal.
 export const PRIVACY_POLICY_VERSION = "1.0";
+
+// GIFs — Giphy. ⚠️ Placeholder : créer une app sur https://developers.giphy.com
+// et coller ici la clé API (sinon la recherche de GIFs reste désactivée).
+export const GIPHY_API_KEY = "Cba5SL13AfnwB0vwUlzvJOiRqVBNie6R";

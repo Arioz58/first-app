@@ -150,6 +150,19 @@
     "30d": "30 gün",
     "off": "Kapalı"
   },
+  "media": {
+    "attach": "Ek",
+    "gallery": "Galeri",
+    "document": "Belge",
+    "gif": "GIF",
+    "gif_search": "GIF ara",
+    "gif_no_key": "Giphy anahtarı ayarlı değil",
+    "upload_error": "Dosya gönderilemedi",
+    "uploading": "Gönderiliyor…",
+    "mic_permission": "Mikrofon erişimine izin verin",
+    "download_all": "Tümünü indir",
+    "downloaded": "{{count}} dosya indirildi"
+  },
   "group": {
     "new_group": "Yeni grup",
     "group_name": "Grup adı",
