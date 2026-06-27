@@ -29,6 +29,8 @@ type Props = {
   onClose: () => void;
   /** Hauteur fixe (ex. liste scrollable). Si absente, la feuille épouse son contenu. */
   height?: number;
+  /** Opacité max du backdrop noir (défaut 0.55 ; baisser pour laisser voir le contenu derrière). */
+  backdropOpacity?: number;
   children: ReactNode;
 };
 
@@ -41,6 +43,7 @@ export default function BottomSheet({
   visible,
   onClose,
   height,
+  backdropOpacity = 0.55,
   children,
 }: Props) {
   const [rendered, setRendered] = useState(false);
@@ -90,7 +93,7 @@ export default function BottomSheet({
     transform: [{ translateY: sheetY.value }],
   }));
   const backdropStyle = useAnimatedStyle(() => ({
-    opacity: Math.max(0, 1 - sheetY.value / sheetH.value) * 0.55,
+    opacity: Math.max(0, 1 - sheetY.value / sheetH.value) * backdropOpacity,
   }));
 
   // Drag sur la poignée : suit le doigt vers le bas, aimantation fermé/ouvert au relâcher.

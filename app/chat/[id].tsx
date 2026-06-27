@@ -9,6 +9,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../../lib/api';
 import { connectSocket, getSocket } from '../../lib/socket';
+import { getChatWallpaper, setChatWallpaper } from '../../lib/storage';
+import type { ChatWallpaper } from '../../lib/chatWallpapers';
+import { ChatBackground } from '../../components/ChatBackground';
+import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
+
+// Légère ombre portée sur les bulles → lisibles sur n'importe quel fond.
+const BUBBLE_SHADOW = {
+  shadowColor: '#000',
+  shadowOpacity: 0.06,
+  shadowRadius: 1.5,
+  shadowOffset: { width: 0, height: 1 },
+  elevation: 1,
+};
 
 type Sender = { id: string; name: string };
 type Message = {
@@ -40,7 +53,20 @@ export default function ChatScreen() {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [wallpaper, setWallpaper] = useState<ChatWallpaper | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const listRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    getChatWallpaper(id).then(setWallpaper);
+  }, [id]);
+
+  // Aperçu live : on applique + persiste immédiatement sans fermer la feuille
+  // (le fond change derrière le sélecteur ; l'utilisateur ferme quand il est satisfait).
+  const handleSelectWallpaper = (w: ChatWallpaper | null) => {
+    setWallpaper(w);
+    setChatWallpaper(id, w);
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -109,6 +135,9 @@ export default function ChatScreen() {
           <Ionicons name="arrow-back" size={24} color="#128C7E" />
         </TouchableOpacity>
         <Text className="text-lg font-semibold text-gray-900 flex-1">{name}</Text>
+        <TouchableOpacity onPress={() => setPickerOpen(true)} className="ml-3">
+          <Ionicons name="image-outline" size={22} color="#128C7E" />
+        </TouchableOpacity>
       </View>
 
       {/* Messages */}
@@ -117,6 +146,7 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={0}
       >
+        <ChatBackground wallpaper={wallpaper}>
         <FlatList
           ref={listRef}
           data={messages}
@@ -166,7 +196,8 @@ export default function ChatScreen() {
                       </Text>
                     ) : (
                       <View
-                        className={`rounded-2xl px-4 py-2 ${isMe ? 'bg-nexa' : 'bg-gray-100'}`}
+                        style={BUBBLE_SHADOW}
+                        className={`rounded-2xl px-4 py-2 ${isMe ? 'bg-nexa' : 'bg-white'}`}
                       >
                         <Text className={isMe ? 'text-white' : 'text-gray-900'}>
                           {item.content}
@@ -180,7 +211,8 @@ export default function ChatScreen() {
                       <Text className="text-xs text-gray-400 mb-1 ml-1">{item.sender?.name}</Text>
                     )}
                     <View
-                      className={`rounded-2xl px-4 py-2 ${isMe ? 'bg-nexa' : 'bg-gray-100'}`}
+                      style={BUBBLE_SHADOW}
+                      className={`rounded-2xl px-4 py-2 ${isMe ? 'bg-nexa' : 'bg-white'}`}
                     >
                       <Text className={isMe ? 'text-white' : 'text-gray-900'}>
                         {item.content}
@@ -192,6 +224,7 @@ export default function ChatScreen() {
             );
           }}
         />
+        </ChatBackground>
 
         {/* Input */}
         <View className="flex-row items-center px-3 py-2 border-t border-gray-100">
@@ -212,6 +245,13 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      <ChatWallpaperPicker
+        visible={pickerOpen}
+        current={wallpaper}
+        onClose={() => setPickerOpen(false)}
+        onSelect={handleSelectWallpaper}
+      />
     </SafeAreaView>
   );
 }

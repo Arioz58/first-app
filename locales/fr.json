@@ -89,7 +89,14 @@
     "you_reacted": "Vous avez réagi à sa story",
     "reacted": "{{name}} a réagi à votre story",
     "you_replied": "Vous avez répondu à sa story",
-    "replied": "{{name}} a répondu à votre story"
+    "replied": "{{name}} a répondu à votre story",
+    "wallpaper": "Fond d'écran",
+    "wallpaper_hint": "Personnel à cet appareil — la personne en face ne le verra pas.",
+    "wallpaper_default": "Défaut",
+    "wallpaper_auto": "Auto",
+    "wallpaper_gallery": "Galerie",
+    "wallpaper_permission": "Autorisez l'accès à la galerie pour choisir une photo.",
+    "wallpaper_error": "Impossible de charger cette image."
   },
   "group": {
     "new_group": "Nouveau groupe",

@@ -89,7 +89,14 @@
     "you_reacted": "You reacted to their story",
     "reacted": "{{name}} reacted to your story",
     "you_replied": "You replied to their story",
-    "replied": "{{name}} replied to your story"
+    "replied": "{{name}} replied to your story",
+    "wallpaper": "Wallpaper",
+    "wallpaper_hint": "Personal to this device — the other person won't see it.",
+    "wallpaper_default": "Default",
+    "wallpaper_auto": "Auto",
+    "wallpaper_gallery": "Gallery",
+    "wallpaper_permission": "Allow gallery access to pick a photo.",
+    "wallpaper_error": "Couldn't load this image."
   },
   "group": {
     "new_group": "New group",

@@ -1,10 +1,12 @@
 import * as SecureStore from 'expo-secure-store';
+import type { ChatWallpaper } from './chatWallpapers';
 
 const ACCESS_KEY = 'accessToken';
 const REFRESH_KEY = 'refreshToken';
 const USER_ID_KEY = 'userId';
 const LANGUAGE_KEY = 'language';
 const RECENT_SEARCHES_KEY = 'recentSearches';
+const CHAT_WALLPAPERS_KEY = 'chatWallpapers';
 
 export type RecentSearch = {
   id: string;
@@ -45,6 +47,37 @@ export const addRecentSearch = async (item: RecentSearch): Promise<RecentSearch[
 
 export const clearRecentSearches = async (): Promise<void> => {
   await SecureStore.deleteItemAsync(RECENT_SEARCHES_KEY);
+};
+
+// Fonds de conversation : map locale { conversationId → fond } (perso, non partagé).
+export const getChatWallpaper = async (
+  conversationId: string,
+): Promise<ChatWallpaper | null> => {
+  const raw = await SecureStore.getItemAsync(CHAT_WALLPAPERS_KEY);
+  if (!raw) return null;
+  try {
+    const map = JSON.parse(raw) as Record<string, ChatWallpaper>;
+    return map[conversationId] ?? null;
+  } catch {
+    return null;
+  }
+};
+
+// `wallpaper = null` → réinitialise au fond par défaut (entrée supprimée).
+export const setChatWallpaper = async (
+  conversationId: string,
+  wallpaper: ChatWallpaper | null,
+): Promise<void> => {
+  const raw = await SecureStore.getItemAsync(CHAT_WALLPAPERS_KEY);
+  let map: Record<string, ChatWallpaper> = {};
+  try {
+    map = raw ? (JSON.parse(raw) as Record<string, ChatWallpaper>) : {};
+  } catch {
+    map = {};
+  }
+  if (wallpaper) map[conversationId] = wallpaper;
+  else delete map[conversationId];
+  await SecureStore.setItemAsync(CHAT_WALLPAPERS_KEY, JSON.stringify(map));
 };
 
 export const clearTokens = async () => {

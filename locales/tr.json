@@ -89,7 +89,14 @@
     "you_reacted": "Hikayesine tepki verdiniz",
     "reacted": "{{name}} hikayenize tepki verdi",
     "you_replied": "Hikayesine yanıt verdiniz",
-    "replied": "{{name}} hikayenize yanıt verdi"
+    "replied": "{{name}} hikayenize yanıt verdi",
+    "wallpaper": "Duvar kağıdı",
+    "wallpaper_hint": "Bu cihaza özel — karşıdaki kişi göremez.",
+    "wallpaper_default": "Varsayılan",
+    "wallpaper_auto": "Otomatik",
+    "wallpaper_gallery": "Galeri",
+    "wallpaper_permission": "Fotoğraf seçmek için galeri erişimine izin verin.",
+    "wallpaper_error": "Bu görsel yüklenemedi."
   },
   "group": {
     "new_group": "Yeni grup",

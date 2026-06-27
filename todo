@@ -1,0 +1,13 @@
+todo :
+
+1 - Dans la carte afficher : ameliorer les visuels (couleurs, dipositions des boutons, etc)
+Ajouter des infos/fonctionnalitées complementaires (Medias/documents envoyé/theme de la discussion/Creer un groupe/ Ajouter au groupe). Ces ajouts la seront uniquement si la personne est deja amies avec nous
+
+2 - Lors de l'ajout d'un amis, afficher une pastille rouge dans la navbar en bas au niveau de "recherche" (verifier si c'est possible d'abord car c'est une Navbar native). Ajouter cette meme pastille dans l'onglet "Amis" a coter de l'onglet "Recherche".
+Lorsque cette personne est ajouter en amies je voudrais que pour ouvrir la conversation avec lui il y ai un bouton en bas a droite avec un "+" quand on clique dessus je veux que ca nous propose de crée un groupe ou bien lancer une conversation ou ajouter une personne (qui renvoie directement sur l'onglet "rechercher").
+Utiliser un nom d'onglet plus pertinant pour "rechercher" et idem on pour l'icon de ce dernier.
+Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir fermer tous les clavier qui s'ouvre en appuyant dans le vide dans l'app de maniere general)
+
+Page Messages : Faire un prompte qui explique que je souhaite une page qui se mets a jour tout seule sans rafraichir, que la conv avec le message le plus recents soit le plus haut, qu'on puisse epingler une conversation, et des choses au quelle je n'ai peut etre pas penser
+
+Dans les story affiché uniquement les story de ses amis.
