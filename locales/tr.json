@@ -97,7 +97,9 @@
     "wallpaper_gallery": "Galeri",
     "wallpaper_permission": "Fotoğraf seçmek için galeri erişimine izin verin.",
     "wallpaper_error": "Bu görsel yüklenemedi.",
-    "seen_at": "Son görülme {{value}}"
+    "seen_at": "Son görülme {{value}}",
+    "typing": "Yazıyor…",
+    "online": "Çevrimiçi"
   },
   "details": {
     "title": "Ayrıntılar",

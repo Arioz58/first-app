@@ -97,7 +97,9 @@
     "wallpaper_gallery": "Gallery",
     "wallpaper_permission": "Allow gallery access to pick a photo.",
     "wallpaper_error": "Couldn't load this image.",
-    "seen_at": "Last seen {{value}}"
+    "seen_at": "Last seen {{value}}",
+    "typing": "Typing…",
+    "online": "Online"
   },
   "details": {
     "title": "Details",

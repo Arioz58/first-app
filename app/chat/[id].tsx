@@ -28,7 +28,12 @@ const NEXA = '#128C7E';
 
 type ConvMember = { userId: string; role: string; user: { id: string; name: string; photoUrl: string | null } };
 type ConvMeta = { id: string; type: 'direct' | 'group'; name: string | null; members: ConvMember[] };
-type HeaderProfile = { photoUrl: string | null; canCall: boolean; lastSeenAt: string | null };
+type HeaderProfile = {
+  photoUrl: string | null;
+  canCall: boolean;
+  lastSeenAt: string | null;
+  online: boolean;
+};
 
 // Légère ombre portée sur les bulles → lisibles sur n'importe quel fond.
 const BUBBLE_SHADOW = {
@@ -76,7 +81,15 @@ export default function ChatScreen() {
   const [clearedAt, setClearedAt] = useState<number | null>(null);
   const [wallpaper, setWallpaper] = useState<ChatWallpaper | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Présence + frappe (Phase B)
+  const [online, setOnline] = useState(false);
+  const [lastSeen, setLastSeen] = useState<string | null>(null);
+  const [peerTyping, setPeerTyping] = useState(false);
   const listRef = useRef<FlatList>(null);
+  const typingSentRef = useRef(false); // a-t-on déjà signalé qu'on écrit ?
+  const typingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null); // arrêt auto de notre frappe
+  const peerTypingRef = useRef<ReturnType<typeof setTimeout> | null>(null); // masquage auto (5 s)
+  const otherUserIdRef = useRef<string | null>(null); // pour filtrer les events présence
 
   // Personnalisations locales rechargées à chaque focus (modifiables depuis le panneau de détails).
   useFocusEffect(
@@ -106,11 +119,19 @@ export default function ChatScreen() {
           const other = meta.members.find((m) => m.userId !== me.id);
           if (other) {
             setOtherUserId(other.userId);
-            // En-tête gated (re-vérifié serveur) : photo, autorisation d'appel, dernière connexion.
+            otherUserIdRef.current = other.userId;
+            // En-tête gated (re-vérifié serveur) : photo, appel, dernière connexion, en ligne.
             apiRequest<HeaderProfile>(`/users/${other.userId}/profile`)
-              .then((p) =>
-                setHeader({ photoUrl: p.photoUrl, canCall: p.canCall, lastSeenAt: p.lastSeenAt }),
-              )
+              .then((p) => {
+                setHeader({
+                  photoUrl: p.photoUrl,
+                  canCall: p.canCall,
+                  lastSeenAt: p.lastSeenAt,
+                  online: p.online,
+                });
+                setOnline(p.online);
+                setLastSeen(p.lastSeenAt);
+              })
               .catch(() => {});
           }
         }
@@ -131,6 +152,31 @@ export default function ChatScreen() {
         socket.on('removed_from_group', ({ conversationId }: { conversationId: string }) => {
           if (conversationId === id) router.replace('/(tabs)');
         });
+
+        // Frappe du correspondant → affichage + masquage auto après 5 s d'inactivité.
+        socket.on(
+          'peer_typing',
+          (d: { conversationId: string; userId: string; typing: boolean }) => {
+            if (d.conversationId !== id) return;
+            if (peerTypingRef.current) clearTimeout(peerTypingRef.current);
+            if (d.typing) {
+              setPeerTyping(true);
+              peerTypingRef.current = setTimeout(() => setPeerTyping(false), 5000);
+            } else {
+              setPeerTyping(false);
+            }
+          },
+        );
+
+        // Présence du correspondant (gating déjà appliqué côté serveur).
+        socket.on(
+          'presence_update',
+          (d: { userId: string; online: boolean; lastSeenAt: string | null }) => {
+            if (d.userId !== otherUserIdRef.current) return;
+            setOnline(d.online);
+            if (d.lastSeenAt) setLastSeen(d.lastSeenAt);
+          },
+        );
       } catch {
         router.replace('/(tabs)');
       } finally {
@@ -144,8 +190,41 @@ export default function ChatScreen() {
       const socket = getSocket();
       socket?.off('new_message');
       socket?.off('removed_from_group');
+      socket?.off('peer_typing');
+      socket?.off('presence_update');
+      // On arrête proprement notre propre indicateur de frappe.
+      if (typingStopRef.current) clearTimeout(typingStopRef.current);
+      if (peerTypingRef.current) clearTimeout(peerTypingRef.current);
+      if (typingSentRef.current) {
+        socket?.emit('typing', { conversationId: id, typing: false });
+        typingSentRef.current = false;
+      }
     };
   }, [id]);
+
+  const stopTyping = (socket: ReturnType<typeof getSocket>) => {
+    if (typingStopRef.current) clearTimeout(typingStopRef.current);
+    if (typingSentRef.current) {
+      socket?.emit('typing', { conversationId: id, typing: false });
+      typingSentRef.current = false;
+    }
+  };
+
+  // Émission de l'indicateur de frappe (auto-stop après 3 s sans saisie).
+  const handleChangeText = (v: string) => {
+    setText(v);
+    const socket = getSocket();
+    if (!socket) return;
+    if (!typingSentRef.current) {
+      socket.emit('typing', { conversationId: id, typing: true });
+      typingSentRef.current = true;
+    }
+    if (typingStopRef.current) clearTimeout(typingStopRef.current);
+    typingStopRef.current = setTimeout(() => {
+      socket.emit('typing', { conversationId: id, typing: false });
+      typingSentRef.current = false;
+    }, 3000);
+  };
 
   const sendMessage = () => {
     const content = text.trim();
@@ -155,6 +234,7 @@ export default function ChatScreen() {
 
     socket.emit('send_message', { conversationId: id, content });
     setText('');
+    stopTyping(socket);
   };
 
   // --- Valeurs dérivées ---
@@ -164,10 +244,15 @@ export default function ChatScreen() {
   const visibleMessages = clearedAt
     ? messages.filter((m) => new Date(m.createdAt).getTime() > clearedAt)
     : messages;
-  // Sous-titre (priorité : frappe > en ligne > vu le… > rien) — frappe/en ligne = Phase B.
-  const subtitle = header?.lastSeenAt
-    ? t('chat.seen_at', { value: formatSeen(header.lastSeenAt) })
-    : '';
+  // Sous-titre (priorité : frappe > en ligne > vu le… > rien).
+  const subtitle = peerTyping
+    ? t('chat.typing')
+    : online
+      ? t('chat.online')
+      : lastSeen
+        ? t('chat.seen_at', { value: formatSeen(lastSeen) })
+        : '';
+  const subtitleAccent = peerTyping || online; // vert pour frappe / en ligne
 
   const openDetails = () => {
     if (convType !== 'direct' || !otherUserId) return;
@@ -267,8 +352,10 @@ export default function ChatScreen() {
           ) : (
             <View>
               <UserAvatar photoUrl={header?.photoUrl ?? null} name={displayName} size={40} />
-              {/* vert = en ligne / gris = hors ligne — présence temps réel branchée en Phase B */}
-              <View className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white bg-gray-400" />
+              {/* vert = en ligne / gris = hors ligne */}
+              <View
+                className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${online ? 'bg-green-500' : 'bg-gray-400'}`}
+              />
             </View>
           )}
         </TouchableOpacity>
@@ -283,7 +370,10 @@ export default function ChatScreen() {
             {displayName}
           </Text>
           {subtitle ? (
-            <Text className="text-xs text-gray-400" numberOfLines={1}>
+            <Text
+              className={`text-xs ${subtitleAccent ? 'text-nexa' : 'text-gray-400'}`}
+              numberOfLines={1}
+            >
               {subtitle}
             </Text>
           ) : null}
@@ -415,7 +505,7 @@ export default function ChatScreen() {
             className="flex-1 bg-gray-100 rounded-full px-4 py-2 mr-2 text-base"
             placeholder={t('chat.message_placeholder')}
             value={text}
-            onChangeText={setText}
+            onChangeText={handleChangeText}
             multiline
             returnKeyType="send"
             onSubmitEditing={sendMessage}

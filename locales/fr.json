@@ -97,7 +97,9 @@
     "wallpaper_gallery": "Galerie",
     "wallpaper_permission": "Autorisez l'accès à la galerie pour choisir une photo.",
     "wallpaper_error": "Impossible de charger cette image.",
-    "seen_at": "Vu le {{value}}"
+    "seen_at": "Vu le {{value}}",
+    "typing": "En train d'écrire…",
+    "online": "En ligne"
   },
   "details": {
     "title": "Détails",
