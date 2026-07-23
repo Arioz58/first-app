@@ -21,6 +21,7 @@ Application de messagerie communautaire ciblant le marché turc (V1), avec ambit
 Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintenance. Délai : 6 mois.
 
 ### DA (Design)
+
 - Couleurs finales : **nuances de verts style WhatsApp** — à appliquer en Mois 5/6
 - Couleur principale actuelle : `#1E40AF` (bleu) + `#128C7E` (nexa — vert WhatsApp, déjà en place sur les écrans auth)
 - Couleur Tailwind custom : `bg-nexa`, `text-nexa`, `border-nexa` → `#128C7E`
@@ -30,7 +31,7 @@ Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintena
 
 - **Mois 1** ✅ — Architecture, BDD, auth (JWT + OTP), profils, consentement politique de confidentialité, i18n (tr/fr/en)
 - **Mois 2** ✅ — Messagerie temps réel (Socket.io), groupes (API + rooms + gestion membres), FCM push, frontend mobile complet
-- **Mois 3** 🔄 — Stories 24h ✅ (éditeur texte riche + photo/vidéo, voir section dédiée), médias S3 ✅ (upload presigned + CloudFront), localisation 🔜 (**⚠️ inclure : afficher la localisation dans le profil utilisateur — gated par `privacyLocation` + `locationEnabled`, déjà câblés Phase 3 mais sans donnée à afficher ; voir `GET /users/:id/profile`**), version web Next.js 🔜
+- **Mois 3** 🔄 — Stories 24h ✅ (éditeur texte riche + photo/vidéo, voir section dédiée), médias S3 ✅ (upload presigned + CloudFront), chat enrichi ✅ (Phases A→D : header profil, présence/frappe, mute/éphémères/épinglés/favoris, pièces jointes — voir section dédiée), localisation 🔜 (**⚠️ inclure : afficher la localisation dans le profil utilisateur — gated par `privacyLocation` + `locationEnabled`, déjà câblés Phase 3 mais sans donnée à afficher ; voir `GET /users/:id/profile`**), version web Next.js 🔜
 - **Mois 4** — Appels audio/vidéo (Agora.io)
 - **Mois 5** — Points, leaderboard, anti-spam, module B2B, dashboard admin, site vitrine + DA verte + sécurité hardening (rate limiting, helmet, validation stricte)
 - **Mois 6** — QA, corrections, mise en production (App Store + Google Play + AWS)
@@ -66,7 +67,11 @@ first-app-web/       → Next.js — à créer au Mois 3
 - **expo-video-thumbnails** — miniatures de la timeline de rognage ⚠️ **module natif** (rebuild requis)
 - **expo-linear-gradient** — fonds dégradés des stories texte ⚠️ **module natif** (rebuild requis)
 - **expo-image** — affichage d'images
-- **expo-video** — lecture vidéo dans le viewer stories ⚠️ **module natif** (rebuild requis après install : `npx expo run:ios`)
+- **expo-video** — lecture vidéo dans le viewer stories + `MediaViewer` du chat ⚠️ **module natif** (rebuild requis après install : `npx expo run:ios`)
+- **expo-audio** — enregistrement et lecture des messages vocaux (plugin `expo-audio` dans `app.json`) ⚠️ **module natif** (rebuild requis)
+- **expo-document-picker** — pièces jointes documents du chat ⚠️ **module natif** (rebuild requis)
+- **expo-file-system** — copie du fond de conversation en stockage permanent + téléchargement groupé des médias (import `expo-file-system/legacy`)
+- **expo-blur** — overlay de chargement du viewer stories ⚠️ **module natif** (rebuild requis)
 - TypeScript strict
 
 ### Backend (`first-app-backend/`)
@@ -77,7 +82,7 @@ first-app-web/       → Next.js — à créer au Mois 3
 - Socket.io — messagerie temps réel + vérification membership
 - JWT access (15min) + refresh tokens (7j) — auto-refresh côté client
 - firebase-admin — FCM push notifications
-- Nettoyage automatique stories expirées toutes les heures (setInterval)
+- Nettoyage automatique stories expirées toutes les heures + messages éphémères expirés toutes les 5 min (setInterval)
 
 ### Infrastructure AWS (prod)
 
@@ -114,7 +119,9 @@ app/
 │   ├── saved.tsx        # Appels (à implémenter Mois 4)
 │   └── profile.tsx      # Profil (thème vert nexa) : avatar+photo (upload S3 ; appui = Changer/Supprimer → PATCH photoUrl:null = retour à l'initiale), édition nom + bio (modale combinée, bio 140 car.), sélecteur de langue i18n (PATCH + persistance), statut consentement confidentialité, déconnexion → welcome
 ├── chat/
-│   └── [id].tsx         # Écran chat temps réel (Socket.io)
+│   ├── [id].tsx         # Écran chat temps réel (Socket.io) — header profil, présence/frappe, médias, vocal, épinglés/favoris (voir section Chat)
+│   ├── details.tsx      # Panneau de détails d'une conversation directe : profil gated, actions rapides, personnalisation (fond/surnom/couleur de bulle/éphémère), sections médias, épinglés, favoris, gestion (effacer/bloquer/signaler)
+│   └── media.tsx        # Galerie par catégorie (media/links/documents/audio/gifs) — grille ou liste, pagination curseur, téléchargement groupé
 ├── user/
 │   └── [id].tsx         # Profil complet d'un autre utilisateur (gated) : skeleton, boutons dynamiques amis/message/appels, GET /users/:id/profile
 ├── privacy.tsx          # Paramètres de confidentialité (8 réglages everyone/friends/nobody + amis-d'amis pour les demandes + toggle localisation + accès Utilisateurs bloqués) → PATCH /users/me/privacy
@@ -134,17 +141,27 @@ components/
 ├── BottomSheet.tsx      # Drawer bottom-sheet réutilisable (SHEET_SPRING partagé : montage différé piloté par `visible`, drag-to-dismiss sur la poignée, backdrop en fondu) — hauteur fixe (liste) ou auto (contenu)
 ├── CountryPicker.tsx    # Sélecteur pays + indicatif — utilise `BottomSheet` (hauteur fixe 85% + recherche + FlatList)
 ├── UserAvatar.tsx       # Avatar circulaire réutilisable (photo ou initiale sur fond vert nexa, prop `size`)
-└── FriendsPanel.tsx     # Panneau Amis (sous-onglets mes amis / reçues / envoyées, actions inline, badge demandes) — segment de l'onglet Recherche
+├── FriendsPanel.tsx     # Panneau Amis (sous-onglets mes amis / reçues / envoyées, actions inline, badge demandes) — segment de l'onglet Recherche
+├── ChatBackground.tsx   # Fond de conversation (asset nexa clair/sombre par défaut, preset couleur/dégradé, ou photo perso)
+├── ChatWallpaperPicker.tsx # Sélecteur de fond de conversation (BottomSheet, presets + galerie, aperçu live)
+├── MessageMedia.tsx     # Rendu d'une pièce jointe dans la bulle selon `mediaType` (image/gif, vidéo, audio, document)
+├── MediaViewer.tsx      # Visionneuse plein écran image/vidéo (Modal, expo-video pour la vidéo)
+├── AudioMessage.tsx     # Lecteur de message vocal (expo-audio : play/pause + progression + durée)
+└── GiphyPicker.tsx      # Recherche de GIFs Giphy (tendances + recherche débouncée) — désactivé si clé absente
 lib/
 ├── api.ts               # Fetch wrapper — JWT Bearer + auto-refresh + handler SESSION_EXPIRED global
 ├── socket.ts            # Client Socket.io singleton
-├── storage.ts           # SecureStore : accessToken, refreshToken, userId, language
+├── storage.ts           # SecureStore : accessToken, refreshToken, userId, language + réglages **locaux** de conversation (fond, surnom/couleur de bulle, horodatage « effacer »)
 ├── useUserSearch.ts     # Hook recherche d'utilisateurs (debounce 300ms + anti-race) → GET /users/search
 ├── notifications.ts     # Demande permission + enregistre token FCM au backend
 ├── countries.ts         # Liste pays avec drapeau, nom et indicatif téléphonique
 ├── storyText.ts         # Styles texte stories (couleur, fond none/translucent/solid, gras/italique/souligné) — partagé create + viewer
 ├── storyBackgrounds.ts  # Presets de fond stories texte (id → couleurs unies/dégradés)
 ├── storyStickers.ts     # Liste d'emojis stickers + STICKER_FONT_SIZE (partagé create + viewer)
+├── upload.ts            # Upload générique S3 (presigned → PUT → URL CloudFront) + formatFileSize + firstUrl (détection de lien)
+├── chatWallpapers.ts    # Presets de fond de conversation (asset nexa clair/sombre + unis/dégradés) — réglage local
+├── bubbleColors.ts      # Palette de couleurs d'accent des bulles « moi » (réglage local)
+├── chatNav.ts           # Relais mémoire one-shot : détails → chat, « défiler jusqu'à ce message » (épinglé/favori)
 └── i18n.ts              # Config i18next (tr/fr/en) + SUPPORTED_LANGUAGES + setAppLanguage (changeLanguage + persistance SecureStore) ; restaure la langue sauvegardée au démarrage
 locales/
 ├── tr.json
@@ -172,7 +189,7 @@ src/
     ├── stories/                    # Stories 24h : CRUD + groupées par user (texts en colonne Json)
     └── upload/                     # Presigned URL S3 (lib/s3.ts) — folder/ext selon contentType
 prisma/
-└── schema.prisma                   # User, Profile, Conversation, ConversationMember, Message, Story, Call, Points, FriendRequest, Friendship, Block, Report...
+└── schema.prisma                   # User, Profile, Conversation, ConversationMember, Message, PinnedMessage, StarredMessage, Story, StoryView, Call, Points, FriendRequest, Friendship, Block, Report...
 ```
 
 ### Endpoints disponibles
@@ -212,13 +229,23 @@ GET  /conversations                               → liste convs ACCEPTÉES de 
 GET  /conversations/requests                      → demandes de messages reçues (member.accepted=false, ≥1 message)
 POST /conversations/:id/accept-request            → accepter une demande (rejoint les convs normales)
 DELETE /conversations/:id/request                 → refuser/supprimer une demande
+GET  /conversations/:id                           → métadonnées d'une conv (type, name, members, ephemeralDuration, myMutedUntil)
 GET  /conversations/:id/messages                  → historique paginé (cursor-based, 30/page)
+PATCH /conversations/:id/mute                     → couper/réactiver mes notifications `{ mutedUntil }` (null = actives ; date lointaine = « toujours »)
+PATCH /conversations/:id/ephemeral                → durée des messages éphémères `{ duration }` en secondes (null = désactivé) — s'applique à toute la conv
+GET  /conversations/:id/pins                      → messages épinglés (niveau conversation, visibles par tous les membres)
+GET  /conversations/:id/starred                   → mes messages favoris (personnel)
+GET  /conversations/:id/flags                     → `{ pinned: string[], starred: string[] }` — ids pour décorer les bulles
+POST/DELETE /conversations/:id/messages/:msgId/pin   → épingler / désépingler
+POST/DELETE /conversations/:id/messages/:msgId/star  → mettre / retirer des favoris
+GET  /conversations/:id/media?category=&cursor=   → pièces jointes paginées (30/page) — `category` : media | images | videos | documents | audio | gifs | links
+GET  /conversations/:id/media-counts              → compteurs par catégorie (images, videos, documents, audio, gifs, links)
 POST /conversations/:id/members                   → ajouter membres (admin requis)
 DELETE /conversations/:id/members/:userId         → expulser un membre (admin requis)
 POST /conversations/:id/leave                     → quitter (promeut prochain admin si besoin)
 PATCH /conversations/:id                          → renommer groupe (admin requis)
 
-POST /upload/presigned-url                        → URL S3 presignée (contentType → ext/folder) + publicUrl CloudFront
+POST /upload/presigned-url                        → URL S3 presignée (contentType → ext/folder) + publicUrl CloudFront ; `folder` optionnel (`chat` | `stories`) pour surcharger le dossier par défaut du type. Types autorisés : images, gif, vidéos, audio (m4a/mp3), documents (pdf/doc/docx/xls/xlsx/txt)
 POST /stories                                     → créer story (mediaUrl + texts[] JSON, expire dans 24h)
 GET  /stories                                     → toutes stories actives groupées par user
 GET  /stories/me                                  → mes stories actives (+ viewCount)
@@ -232,11 +259,14 @@ DELETE /stories/:storyId                          → supprimer (propriétaire u
 ```
 // Client → Serveur (vérification membership sur chaque event)
 join_conversation(conversationId)
-send_message({ conversationId, content, type })
+send_message({ conversationId, content, type, mediaUrl?, mediaType?, fileName?, fileSize?, mimeType?, durationMs? })
+typing({ conversationId, typing })                → relayé aux autres membres en `peer_typing`
 leave_conversation(conversationId)
 
 // Serveur → Client
-new_message(message)                              → refus si blocage (conv directe) ; + FCM push aux destinataires offline **acceptés** (pas de push aux membres en « demande » accepted=false → badge uniquement)
+new_message(message)                              → refus si blocage (conv directe) ; pièces jointes + `hasLink` (détection d'URL) + `expiresAt` si la conv est en éphémère ; + FCM push aux destinataires offline **acceptés** (pas de push aux membres en « demande » accepted=false → badge uniquement, ni aux membres ayant coupé les notifs `mutedUntil` dans le futur)
+peer_typing({ conversationId, userId, typing })   → le correspondant écrit (masquage auto après 5 s côté app)
+presence_update({ userId, online, lastSeenAt })   → connexion/déconnexion d'un contact (gating `privacyLastSeen` appliqué serveur)
 members_added({ conversationId, memberIds })      → + FCM push aux nouveaux membres
 member_removed({ conversationId, userId })        → + FCM push au membre expulsé
 member_left({ conversationId, userId, newAdminId? })
@@ -257,6 +287,7 @@ error({ message })
 Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** expo-camera / **texte seul** fond coloré) → crop selon zoom (expo-image-manipulator, photos) → upload S3 via **presigned URL** (`POST /upload/presigned-url`) → `POST /stories` avec `mediaUrl`/`background` + `texts[]`. Médias jamais en BDD (URL CloudFront uniquement).
 
 ### Caméra in-app (`components/StoryCamera.tsx`)
+
 - `CameraView` (expo-camera) plein écran, permissions caméra + micro (`useCameraPermissions`/`useMicrophonePermissions`, écran de repli + `Linking.openSettings()` si refus)
 - **Geste capture** : `Gesture.Exclusive(pan, tap)` → **tap = photo** (`takePictureAsync`), **maintien = vidéo** via `Gesture.Pan().activateAfterLongPress(250)` (le Pan suit le doigt sans s'annuler au mouvement) ; **glisser vers le haut = verrouiller** (`LOCK_THRESHOLD`, cadenas animé) → l'enregistrement continue sans maintenir, bouton **Stop** dédié. Caméra en **`mode="video"` permanent** (pas de switch de mode → pas de race `recordAsync`) ; `recordAsync` max 30 s, garde `cameraReady` (`onCameraReady`)
 - **Geste stabilisé** (`useMemo` + handlers via ref) : indispensable, sinon le re-render du chrono recrée le geste et coupe l'enregistrement en cours
@@ -267,6 +298,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 - Après capture : **photo** → éditeur direct ; **vidéo** → `VideoTrimmer` avant l'éditeur
 
 ### Rognage vidéo (`components/VideoTrimmer.tsx`)
+
 - Toute vidéo (galerie **ou** caméra) passe par le trimmer avant l'éditeur (`create.tsx` : `trimUri`)
 - Preview `expo-video` en **boucle sur la sélection** (`timeUpdate` → seek au début) ; durée via `isValidFile()` (ms)
 - **Timeline à miniatures** (`expo-video-thumbnails`, ~8 vignettes) + **2 poignées** draggables (reanimated/gesture, gestes `useMemo` + callbacks stables, seek live, aucun `setState` pendant le drag → poignées non interrompues)
@@ -276,6 +308,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 - **Backend inchangé** : le fichier trimmé s'upload comme n'importe quelle vidéo
 
 ### Création (`app/story/create.tsx`)
+
 - Photo **ou vidéo** ; zoom/pan sur l'image (double-tap = reset) ; le crop est appliqué à la publication selon le zoom/pan
 - **Textes multiples**, chacun déplaçable / redimensionnable / rotatable :
   - pinch + rotation **remontés au conteneur plein écran**, ciblant le « texte actif » → le 2ᵉ doigt peut se poser **n'importe où** (le 1ᵉ doigt sur le texte le sélectionne via un flag `owns`)
@@ -289,6 +322,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 - Éditeur « live » : rendu direct (pas de cadre de formulaire), curseur seul (pas de placeholder), `scrollEnabled={false}` + padding (évite le retour à la ligne en italique), boutons OK + A(fond) + B/I/U
 
 ### Viewer (`app/story/[id].tsx`)
+
 - Ordre **chronologique** (plus ancienne → plus récente, la plus récente en dernier)
 - Barre de progression + navigation **tap** gauche/droite
 - **Maintien appuyé = pause** (gèle la barre, reprend au temps restant au relâcher ; `pausedRef` synchrone)
@@ -302,23 +336,73 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 - **Répondre à une story** (non-propriétaire) : barre en bas — **champ texte sur fond noir** (`bg-black/60`) avec smiley intégré ouvrant un **popover flottant de réactions** (`QUICK_EMOJIS`, animé `FadeInDown/FadeOutDown`, tap = envoi + fermeture, pause de la story tant qu'ouvert) ; bouton d'envoi vert qui apparaît dès qu'on tape. `KeyboardAvoidingView`, pause de la story au focus ; un tap navigation ferme d'abord le popover. Envoi = `POST /conversations/direct` `{ targetUserId }` puis `socket.emit('send_message', { type: 'story_reply', storyId, storyMediaUrl })` ; feedback « Envoyé ✓ », pas de navigation (on reste dans la story). Affichage **contextualisé** dans `chat/[id].tsx` : icône `↩` + libellé « a répondu / a **réagi** à votre story » (nuance selon emoji-only), **vignette verticale** `storyMediaUrl` (50×84), puis bulle de texte — ou **réaction emoji en grand hors bulle** (~50px) détectée via `isEmojiOnly` (`\p{Extended_Pictographic}`). Bulles alignées au contenu (`items-end/start` sur le conteneur, plus de bulle pleine largeur)
 
 ### StoriesBar (`components/StoriesBar.tsx`)
+
 - Bouton **+** (coin de l'avatar) pour ajouter une story supplémentaire quand on en a déjà une — le tap sur l'avatar reste « visionner ma story »
 - Rafraîchissement : `useFocusEffect` (au focus) **+** `forwardRef`/`useImperativeHandle` exposant `refresh()` → le **pull-to-refresh** de l'écran Messages (`(tabs)/index.tsx`) recharge aussi les stories (`storiesRef.current?.refresh()`)
 - UI : `StoryRing` (anneau **dégradé vert nexa** `expo-linear-gradient` si non vu / **gris** si vu) + `Avatar` (photo de profil ou initiale) ; **« Ma story »** affiche **ta photo de profil** (via `/users/me`) + badge `+` nexa toujours visible. Tout harmonisé sur le vert nexa (plus de bleu)
 - **Anneau « non vu »** : bordure `border-nexa` (vert) si le groupe a au moins une story non vue, sinon `border-gray-300` (basé sur `hasUnviewed` renvoyé par `GET /stories`)
 
 ### Données / backend
+
 - `texts` stocké en colonne **`Json`** → champs libres persistés tels quels (`content, normX, normY, scale, rotation, color, bgMode, bold, italic, underline`), **aucune validation backend** (le type étroit du service est cosmétique)
 - Détection vidéo côté viewer via l'**extension de l'URL** (`.mp4` garanti par `upload.controller.ts`)
 - **`StoryView`** (modèle Prisma, unique `[storyId, viewerId]`, cascade) : `recordStoryView` upsert idempotent (pas d'auto-vue), `getStoryViewers` owner-only ; `getActiveStories(viewerId)` tague `viewed`/`hasUnviewed`, `getMyStories` expose `viewCount` via `_count`
 
 ### Story fond coloré (texte seul) ✅
+
 - Éditeur (`create.tsx`) : écran de choix à 2 boutons (**Photo/vidéo** ou **Story texte**) ; en mode texte, `bgId` (preset) + fond `StoryBackground` au lieu de l'image, **zoom/pan image neutralisés** via shared value `isTextOnly` (le pinch/rotation ne pilotent que le texte actif), sélecteur de fond (pastilles en bas). Publication **sans upload S3** : `POST /stories { background, texts }` (transform identité `s=1, tx=0, ty=0`).
 - Presets dans `lib/storyBackgrounds.ts` (id → `colors[]`, 1 = uni / 2+ = dégradé) ; rendu partagé `components/StoryBackground.tsx` (`View` ou `expo-linear-gradient`). **Stocké = l'id du preset** → aucune migration pour ajouter un fond.
 - Viewer + StoriesBar : si pas de `mediaUrl`, rendent `StoryBackground` ; le viewer démarre texte+timer **immédiatement** (pas de gating média).
 
 ### Reste à faire (features stories) 🔜
+
 - Idées : stickers/emojis (réutilise le système de drag/pinch/rotate), mentions `@`, swipe-down pour fermer, audience (amis proches), highlights/archive au-delà de 24h
+
+---
+
+## Chat enrichi (Phases A→D) ✅ — détail
+
+Chantier livré par phases, sur `app/chat/[id].tsx` + `app/chat/details.tsx` + `app/chat/media.tsx`.
+Principe transverse : **ce qui est cosmétique et personnel reste local** (SecureStore), **ce qui est partagé ou modéré passe par le backend**.
+
+### Phase A — En-tête de conversation + personnalisation locale
+
+- Header : avatar (`UserAvatar`) + nom + boutons d'appel **grisés selon `canCall`** (re-vérifié serveur via `GET /users/:id/profile`, appels réels = Mois 4) + menu « … ». Tap sur l'avatar/le nom → `chat/details.tsx` (conv directe uniquement).
+- **`chat/details.tsx`** : profil gated, actions rapides, personnalisation, sections médias/épinglés/favoris, gestion (effacer / bloquer / signaler).
+- **Réglages locaux** (`lib/storage.ts`, maps `{ conversationId → … }`, jamais partagés — la personne en face ne les voit pas) :
+  - **fond de conversation** (`lib/chatWallpapers.ts` + `ChatBackground`) : défaut = asset nexa qui **suit le thème** de l'appareil ; presets `nexa_light`/`nexa_dark` = variante forcée ; presets couleur/dégradé ; ou **photo perso** (copiée dans `documentDirectory` — l'uri du picker vit en cache, donc purgeable)
+  - **surnom** du contact (prime sur le vrai nom, affiché en sous-titre dans les détails)
+  - **couleur des bulles « moi »** (`lib/bubbleColors.ts`, défaut = vert nexa)
+  - **« Effacer la conversation »** = horodatage local ; les messages antérieurs sont **filtrés côté app** (aucun appel backend, n'affecte pas l'autre)
+- Bulles : `BUBBLE_SHADOW` (ombre légère) pour rester lisibles sur n'importe quel fond.
+
+### Phase B — Présence temps réel + indicateur de frappe
+
+- **Sous-titre dynamique** par priorité : `frappe` > `en ligne` > `vu le JJ/MM HH:MM` > rien ; vert nexa pour frappe/en ligne, gris sinon. **Point de statut** sur l'avatar (vert/gris).
+- Émission de `typing` à la 1ʳᵉ frappe puis **auto-stop après 3 s** sans saisie (+ stop à l'envoi et au démontage) ; côté réception, `peer_typing` avec **masquage auto après 5 s**.
+- `presence_update` filtré sur `otherUserIdRef` (une ref, pas un state — l'écouteur socket est monté une fois). `lastSeenAt` mis à jour serveur à la déconnexion, **gating `privacyLastSeen` appliqué serveur**.
+
+### Phase C — Mute / éphémères / épinglés / favoris
+
+- **Mute** (`PATCH /:id/mute`) : 8 h / 1 semaine / toujours (sentinelle `MUTE_FOREVER` = an 2999) / réactiver. Par membre (`ConversationMember.mutedUntil`) → **le backend saute le push FCM** si muté.
+- **Éphémères** (`PATCH /:id/ephemeral`) : 24 h / 7 j / 30 j / off, **au niveau de la conversation** (`Conversation.ephemeralDuration`, en secondes). À l'envoi, le socket calcule `expiresAt` ; un `setInterval` (5 min) purge les expirés ; toutes les requêtes médias filtrent sur `expiresAt`.
+- **Épinglés** (`PinnedMessage`) = **niveau conversation, visibles par tous**. **Favoris** (`StarredMessage`) = **personnels**. Appui long sur une bulle → menu épingler/favori ; `GET /:id/flags` fournit les ids pour décorer les bulles (icônes 📌 / ⭐).
+- Depuis les détails, tap sur un épinglé/favori → `lib/chatNav.ts` (relais one-shot) → retour au chat, `scrollToIndex` + **surlignage jaune 2,5 s**. Si le message n'est pas dans la page chargée, l'action est ignorée (pas de fetch remontant).
+
+### Phase D — Médias dans le chat
+
+- **Panneau de pièces jointes animé** : le « + » **pivote à 45°** (reanimated `withTiming`) et révèle 3 pastilles en `FadeInDown` décalé — Galerie, Document, GIF.
+- Types : **photo/vidéo** (expo-image-picker), **document** (expo-document-picker), **GIF** (Giphy), **message vocal** (expo-audio : le bouton micro remplace l'envoi quand le champ est vide ; barre d'enregistrement avec chrono, corbeille pour annuler, envoi ; < 1 s = ignoré).
+- Pipeline identique aux stories : `lib/upload.ts` → presigned S3 (`folder: 'chat'`) → URL CloudFront → `socket.emit('send_message', { …payload })`. **Jamais de binaire en BDD.**
+- Rendu (`MessageMedia`) : image/gif/vidéo **en grand hors bulle** (+ légende dessous), audio/document **en carte dans une bulle blanche**. Tap image/vidéo → `MediaViewer` plein écran. Les URLs dans le texte sont **soulignées et cliquables** (`firstUrl`).
+- **Galerie par catégorie** (`chat/media.tsx`) depuis les détails : grille 3 colonnes (media/gifs) ou liste (documents/audio/links), pagination curseur 30/page, **téléchargement groupé** dans le stockage de l'app.
+- Détection de lien côté serveur (`hasLink`) → alimente la catégorie « Liens » sans re-scanner les textes.
+
+### Points d'attention
+
+- `GIPHY_API_KEY` est dans `lib/config.ts` ; sans clé (ou avec le placeholder), `GiphyPicker` affiche un écran « clé absente » au lieu de planter. ⚠️ **clé en dur à sortir avant la prod** (voir Sécurité).
+- Les réglages locaux sont en **SecureStore** : ils ne survivent pas à une désinstallation et ne se synchronisent pas entre appareils. Assumé pour de la cosmétique.
+- Le chat charge **une seule page** de messages (`GET /:id/messages`) — pas encore de scroll infini vers le haut.
 
 ---
 
@@ -327,6 +411,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 Construction **par phases livrables**, toutes les règles de confidentialité **vérifiées côté serveur**.
 
 ### Modèle de données
+
 - **Profile** : matrice de confidentialité (chaque champ = `everyone` | `friends` | `nobody`) — `privacyPhoto`, `privacyBio`, `privacyLastSeen`, `privacyLocation` (défaut `friends`), `privacyPhone`, `privacyMessages`, `privacyCalls`, `privacyFriendRequests` + `locationEnabled` (bool, défaut false)
 - **User** : `lastSeenAt`
 - **FriendRequest** `{ fromUserId, toUserId, status: pending|refused, createdAt, respondedAt }` (refused + date = cooldown 7j) ; unique `[fromUserId, toUserId]`
@@ -335,6 +420,7 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 - Helpers partagés : `src/modules/social/relation.service.ts`
 
 ### Statut des phases
+
 - **Phase 1 ✅** — Fondation backend (modèles + migration `social_foundation`) + `relation.service` + `POST /users/search-by-phone` (rate limit Redis 20/h, block-aware, self, photo gated) + écran recherche par numéro (`(tabs)/search.tsx`) avec historique récent.
 - **Phase 2 ✅** — Amis E2E : module `social/friends.*` (envoyer/accepter/refuser/annuler/cooldown 7j/supprimer + listes) + `GET /users/:id/profile` gated ; **écran profil** (`app/user/[id].tsx`, skeleton, champs gated, boutons dynamiques selon `relationStatus`, message/appels selon canMessage/canCall, amis en commun) ; **`FriendsPanel`** (mes amis + reçues + envoyées, actions inline, badge demandes) intégré comme **segment « Amis » dans l'onglet Recherche** (`(tabs)/search.tsx`). La carte de recherche ouvre désormais le profil.
 - **Phase 3 ✅** — `PATCH /users/me/privacy` (validation serveur) + écran **Confidentialité** (`app/privacy.tsx`, 8 réglages via `BottomSheet` + toggle localisation), accessible depuis le profil. Les règles sont déjà appliquées serveur (Phases 1-2).
@@ -351,6 +437,7 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 ## Sécurité — état actuel
 
 ### En place ✅
+
 - JWT access 15min + refresh 7j, secrets en variables d'environnement
 - Vérification expiration JWT au démarrage — redirection vers welcome si les deux tokens sont expirés
 - Handler SESSION_EXPIRED global dans `api.ts` — redirection automatique depuis n'importe quel écran
@@ -358,19 +445,24 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 - Socket.io : vérification JWT + membership sur chaque événement
 - Autorisation groupes : admin only pour add/remove/rename
 - Stories : owner-only delete
+- Chat : `assertMember` sur toutes les routes de conversation (médias, épinglés, favoris, mute, éphémère) — jamais d'accès à une conv dont on n'est pas membre
 - SecureStore côté client (chiffré, pas AsyncStorage)
 - Consentement à la politique de confidentialité intégré — case opt-in **obligatoire à l'inscription** (`login.tsx`, signup uniquement), persisté via `POST /users/me/privacy-consent` après création du compte (stocke `privacyConsent` + `privacyConsentAt` + `privacyPolicyVersion`) ; lien vers la politique = `PRIVACY_URL`, version = `PRIVACY_POLICY_VERSION` (`lib/config.ts`, ⚠️ **URL placeholder à remplacer** par la vraie page web)
 - `firebase-service-account.json` dans `.gitignore`
 
 ### À faire en Mois 5 (avant prod) ⚠️
+
 - Rate limiting sur `/auth/send-code` et `/auth/verify-code` (anti-spam OTP)
 - Limite de tentatives OTP (3 essais max)
 - Helmet.js (headers HTTP sécurité)
 - Validation stricte des inputs (zod ou joi)
 - CORS restreint aux domaines autorisés (pas `*`)
 - Validation URLs médias (S3 uniquement en prod)
+- **Trancher le comportement d'« Effacer la conversation »** — aujourd'hui purement local (horodatage SecureStore, voir section Chat) : après réinstallation ou changement d'appareil, la conversation **réapparaît intégralement**. Acceptable pour les réglages cosmétiques (fond, surnom, couleur), discutable ici — un utilisateur qui « efface » attend souvent un effacement durable. Options : garder tel quel mais l'expliciter dans l'UI, ou persister l'horodatage côté serveur (par membre)
+- **Sortir `GIPHY_API_KEY` de `lib/config.ts`** — clé en dur dans le bundle, contraire à la règle « jamais de clé API en dur » (passer par une variable d'env EAS, ou mieux : proxifier Giphy côté backend). ⚠️ La clé étant **déjà commitée**, la retirer du fichier ne suffit pas : il faut la **révoquer et en régénérer une** sur developers.giphy.com
 
 ### Décisions architecturales
+
 - **Pas de E2EE en V1** : incompatible avec modération + dashboard admin + loi turque KVKK
   (les autorités turques ont droit d'accès aux données — E2EE serait un risque légal)
 - E2EE prévu en V2 si demande client
@@ -391,12 +483,15 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 
 - **Prisma v5** — ne pas upgrader en v7 (breaking changes majeurs sur la config datasource).
 - **OTP** simulé en local (log console). Remplacer par Twilio avant la mise en prod.
-- **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'`. **Langue détectée automatiquement au 1er lancement** depuis la langue de l'appareil (`expo-localization`, mappée sur tr/fr/en sinon turc) ; un choix explicite sauvegardé (SecureStore) prime ensuite. Modifiable via le profil (`setAppLanguage` + `PATCH /users/me`). Clés organisées par groupes imbriqués (`onboarding`, `auth`, `country_picker`, …) — **garder les 3 fichiers `locales/*.json` strictement alignés** (mêmes clés). Écrans déjà branchés sur `t()` : onboarding (welcome/security/intro/login/verify), profil, CountryPicker, liste conversations (`(tabs)/index`), chat (`chat/[id]`), création de groupe (`group/new`), StoriesBar, viewer/éditeur de stories (`story/[id]`, `story/create`), caméra in-app (`StoryCamera`). Groupes de clés dédiés : `stories.*` (viewer + éditeur, ex. `time_now`/`minutes_short`/`views`), `camera.*`. **Pas encore traduits** : écrans stubs `search`/`saved` (à implémenter). `VideoTrimmer`/`EmojiPicker` n'ont pas de texte.
+- **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'`. **Langue détectée automatiquement au 1er lancement** depuis la langue de l'appareil (`expo-localization`, mappée sur tr/fr/en sinon turc) ; un choix explicite sauvegardé (SecureStore) prime ensuite. Modifiable via le profil (`setAppLanguage` + `PATCH /users/me`). Clés organisées par groupes imbriqués (`onboarding`, `auth`, `country_picker`, …) — **garder les 3 fichiers `locales/*.json` strictement alignés** (mêmes clés). Écrans déjà branchés sur `t()` : onboarding (welcome/security/intro/login/verify), profil, CountryPicker, liste conversations (`(tabs)/index`), chat (`chat/[id]`), création de groupe (`group/new`), StoriesBar, viewer/éditeur de stories (`story/[id]`, `story/create`), caméra in-app (`StoryCamera`). Groupes de clés dédiés : `stories.*` (viewer + éditeur, ex. `time_now`/`minutes_short`/`views`), `camera.*`, `chat.*`, `details.*`, `media.*`, `mute.*`, `ephemeral.*`, `moderation.*`, `relation.*`. **Pas encore traduits** : écran stub `saved` (Appels, Mois 4). `VideoTrimmer`/`MediaViewer` n'ont pas de texte.
 - En local : PostgreSQL + Redis tournent via `docker-compose up -d` dans `first-app-backend/`.
 - **FCM iOS** : nécessite compte Apple Developer payant (99€/an) + clés APNs dans Firebase Console.
+- **`lib/config.ts`** contient aussi `PRIVACY_URL` / `PRIVACY_POLICY_VERSION` (⚠️ URL placeholder) et `GIPHY_API_KEY` (⚠️ clé en dur, à sortir avant la prod).
 - **URL backend** : centralisée dans `lib/config.ts` (`BASE_URL = __DEV__ ? LOCAL_URL : CLOUD_URL`). En dev (Metro) → backend **local** (mettre à jour `LOCAL_URL` à chaque changement de réseau Wi-Fi) ; en build release/EAS → backend **Railway** (`CLOUD_URL`). `api.ts` et `socket.ts` importent `BASE_URL` depuis `config.ts`.
 - **Native tabs** : import depuis `expo-router/unstable-native-tabs` — API peut changer (alpha).
 - **Bundle ID iOS** : `com.berke.firstapp` (changé de `org.name.firstapp` pour signing perso).
 - **Icône iOS 26 (Liquid Glass)** : bundle **Icon Composer** `assets/images/Nexa-icon-comp.icon` référencé via `ios.icon` dans `app.json` (supporté SDK 54+). Fallback auto sur iOS ancien ; `icon.png` racine = Android + base. Modif **native** → rebuild EAS requis ; bien **committer le `.icon`** avant le build.
 - **expo-video** : module natif (plugin config) — après son install, **rebuild requis** (`npx expo run:ios`), un reload Metro ne suffit pas.
 - **Stories texts** : colonne `Json` côté backend → ajouter un champ de style ne nécessite **aucune migration** ni changement backend (passe par `lib/storyText.ts` côté app).
+- **Réglages locaux de conversation** (fond, surnom, couleur de bulle, « effacer ») : stockés en **SecureStore**, donc **aucun backend** — ne pas chercher d'endpoint côté serveur pour ces réglages.
+- **Migrations chat** : `phase_c_mute_ephemeral_pin_star` (mute, éphémères, `PinnedMessage`, `StarredMessage`) et `phase_d_message_media` (`mediaUrl`/`mediaType`/`fileName`/`fileSize`/`mimeType`/`durationMs`/`hasLink`).

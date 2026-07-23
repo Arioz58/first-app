@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   Modal,
   Pressable,
   Text,
@@ -339,7 +340,7 @@ export default function ProfileScreen() {
           className="flex-1 justify-center items-center bg-black/40 px-8"
           onPress={() => setEditModal(false)}
         >
-          <Pressable className="w-full bg-white rounded-2xl p-5" onPress={() => {}}>
+          <Pressable className="w-full bg-white rounded-2xl p-5" onPress={() => Keyboard.dismiss()}>
             <Text className="text-lg font-bold text-gray-900 mb-3">
               {t('edit_profile')}
             </Text>

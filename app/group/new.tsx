@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DismissKeyboard } from '../../components/DismissKeyboard';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
 import { SearchUser, useUserSearch } from '../../lib/useUserSearch';
@@ -60,6 +61,7 @@ export default function NewGroupScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
+      <DismissKeyboard>
       <View className="flex-row items-center px-4 py-3 border-b border-gray-100">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color="#128C7E" />
@@ -119,6 +121,7 @@ export default function NewGroupScreen() {
         data={results}
         keyExtractor={(item) => item.id}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingTop: 8 }}
         renderItem={({ item }) => {
           const isSelected = selected.some((m) => m.id === item.id);
@@ -158,6 +161,7 @@ export default function NewGroupScreen() {
           )}
         </TouchableOpacity>
       </View>
+      </DismissKeyboard>
     </SafeAreaView>
   );
 }

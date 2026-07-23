@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CountryPicker from '../../components/CountryPicker';
+import { DismissKeyboard } from '../../components/DismissKeyboard';
 import { FriendsPanel } from '../../components/FriendsPanel';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
@@ -162,7 +163,7 @@ export default function SearchScreen() {
       {seg === 'friends' ? (
         <FriendsPanel onOpenProfile={openProfile} />
       ) : (
-        <View className="flex-1">
+        <DismissKeyboard>
           <View className="px-4 pb-2">
             <View className="flex-row items-center">
               <CountryPicker selected={country} onSelect={setCountry} />
@@ -231,6 +232,7 @@ export default function SearchScreen() {
           data={recent}
           keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           ListHeaderComponent={
             <View className="flex-row items-center justify-between px-4 pt-4 pb-1">
               <Text className="text-xs font-semibold uppercase text-gray-400">
@@ -259,7 +261,7 @@ export default function SearchScreen() {
           )}
             />
           )}
-        </View>
+        </DismissKeyboard>
       )}
     </SafeAreaView>
   );

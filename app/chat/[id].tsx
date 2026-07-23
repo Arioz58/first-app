@@ -143,6 +143,7 @@ export default function ChatScreen() {
   const typingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null); // arrêt auto de notre frappe
   const peerTypingRef = useRef<ReturnType<typeof setTimeout> | null>(null); // masquage auto (5 s)
   const otherUserIdRef = useRef<string | null>(null); // pour filtrer les events présence
+  const atBottomRef = useRef(true); // l'utilisateur est-il collé au bas ? (auto-scroll conditionnel)
   // Pièces jointes / médias (Phase D)
   const [viewer, setViewer] = useState<{ type: 'image' | 'video'; url: string } | null>(null);
   const [giphyOpen, setGiphyOpen] = useState(false);
@@ -221,7 +222,11 @@ export default function ChatScreen() {
         socket.on('new_message', (msg: Message) => {
           if (msg.conversationId === id || !msg.conversationId) {
             setMessages((prev) => [...prev, msg]);
-            setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+            // On ne ré-aimante en bas que si on y était déjà, ou si c'est notre propre message
+            // (sinon on interromprait la lecture de l'historique).
+            if (atBottomRef.current || msg.sender?.id === me.id) {
+              setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+            }
           }
         });
 
@@ -721,8 +726,26 @@ export default function ChatScreen() {
           ref={listRef}
           data={visibleMessages}
           keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           contentContainerStyle={{ padding: 12, gap: 8 }}
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          scrollEventThrottle={16}
+          onScroll={(e) => {
+            const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+            // « en bas » avec une marge de 80px pour tolérer les petits écarts.
+            atBottomRef.current =
+              contentSize.height - layoutMeasurement.height - contentOffset.y < 80;
+          }}
+          // Auto-scroll seulement si on est déjà en bas (nouveau message / redimensionnement),
+          // pour ne pas interrompre la lecture de l'historique.
+          onContentSizeChange={() => {
+            if (atBottomRef.current) listRef.current?.scrollToEnd({ animated: false });
+          }}
+          // Filet de sécurité à l'ouverture : le contentSize peut arriver avant que la liste
+          // ait sa hauteur → on force une fois le positionnement en bas au premier layout.
+          onLayout={() => {
+            if (atBottomRef.current) listRef.current?.scrollToEnd({ animated: false });
+          }}
           renderItem={({ item }) => {
             const isMe = item.sender?.id === currentUserId;
             const isStoryReply = item.type === 'story_reply' || !!item.storyMediaUrl;

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   Modal,
   Pressable,
   ScrollView,
@@ -520,7 +521,7 @@ export default function ConversationDetailsScreen() {
       {/* Surnom */}
       <Modal visible={nicknameOpen} transparent animationType="fade" onRequestClose={() => setNicknameOpen(false)}>
         <Pressable className="flex-1 bg-black/40 justify-center px-8" onPress={() => setNicknameOpen(false)}>
-          <Pressable className="bg-white rounded-2xl p-5" onPress={(e) => e.stopPropagation()}>
+          <Pressable className="bg-white rounded-2xl p-5" onPress={() => Keyboard.dismiss()}>
             <Text className="text-lg font-bold text-gray-900">{t('details.nickname')}</Text>
             <Text className="text-sm text-gray-500 mt-1 mb-3">{t('details.nickname_hint')}</Text>
             <TextInput
