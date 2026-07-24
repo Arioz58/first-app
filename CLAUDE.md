@@ -247,9 +247,9 @@ PATCH /conversations/:id                          → renommer groupe (admin req
 
 POST /upload/presigned-url                        → URL S3 presignée (contentType → ext/folder) + publicUrl CloudFront ; `folder` optionnel (`chat` | `stories`) pour surcharger le dossier par défaut du type. Types autorisés : images, gif, vidéos, audio (m4a/mp3), documents (pdf/doc/docx/xls/xlsx/txt)
 POST /stories                                     → créer story (mediaUrl + texts[] JSON, expire dans 24h)
-GET  /stories                                     → toutes stories actives groupées par user
+GET  /stories                                     → stories actives **des amis uniquement**, groupées par user (liste vide si aucun ami)
 GET  /stories/me                                  → mes stories actives (+ viewCount)
-POST /stories/:storyId/view                       → enregistrer une vue (upsert idempotent, pas d'auto-vue)
+POST /stories/:storyId/view                       → enregistrer une vue (upsert idempotent, pas d'auto-vue, 403 si non-ami)
 GET  /stories/:storyId/views                      → liste des viewers (propriétaire uniquement)
 DELETE /stories/:storyId                          → supprimer (propriétaire uniquement)
 ```
@@ -346,7 +346,8 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 
 - `texts` stocké en colonne **`Json`** → champs libres persistés tels quels (`content, normX, normY, scale, rotation, color, bgMode, bold, italic, underline`), **aucune validation backend** (le type étroit du service est cosmétique)
 - Détection vidéo côté viewer via l'**extension de l'URL** (`.mp4` garanti par `upload.controller.ts`)
-- **`StoryView`** (modèle Prisma, unique `[storyId, viewerId]`, cascade) : `recordStoryView` upsert idempotent (pas d'auto-vue), `getStoryViewers` owner-only ; `getActiveStories(viewerId)` tague `viewed`/`hasUnviewed`, `getMyStories` expose `viewCount` via `_count`
+- **`StoryView`** (modèle Prisma, unique `[storyId, viewerId]`, cascade) : `recordStoryView` upsert idempotent (pas d'auto-vue, **refus si non-ami** → 403), `getStoryViewers` owner-only ; `getActiveStories(viewerId)` tague `viewed`/`hasUnviewed`, `getMyStories` expose `viewCount` via `_count`
+- **Audience = amis uniquement** : `getActiveStories` filtre sur `getFriendIds(viewerId)` (`social/relation.service`) → `userId: { in: friendIds }`, court-circuit `[]` si aucun ami. Le blocage supprimant l'amitié, un utilisateur bloqué sort mécaniquement de la liste (pas de filtre blocage supplémentaire). Ses **propres** stories ne passent pas par cette route (`/stories/me` + filtre client dans `StoriesBar`). Aucune migration : c'est un filtre de requête, pas un champ.
 
 ### Story fond coloré (texte seul) ✅
 
@@ -356,7 +357,8 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 
 ### Reste à faire (features stories) 🔜
 
-- Idées : stickers/emojis (réutilise le système de drag/pinch/rotate), mentions `@`, swipe-down pour fermer, audience (amis proches), highlights/archive au-delà de 24h
+- Idées : mentions `@`, audience fine (amis proches / masquer à certains), highlights/archive au-delà de 24h
+- ✅ Faits depuis : stickers/emojis, swipe-down pour fermer, audience « amis uniquement »
 
 ---
 
