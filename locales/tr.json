@@ -37,9 +37,9 @@
   "photo_error": "Fotoğraf güncellenemedi",
   "tabs": {
     "messages": "Mesajlar",
-    "search": "Ara",
     "calls": "Aramalar",
-    "profile": "Profil"
+    "profile": "Profil",
+    "contacts": "Kişiler"
   },
   "onboarding": {
     "welcome_title": "NEXA'ya hoş geldiniz!",
@@ -183,7 +183,8 @@
     "own_number": "Bu sizin numaranız.",
     "error": "Arama başarısız, daha sonra tekrar deneyin.",
     "recent": "Son aramalar",
-    "clear": "Temizle"
+    "clear": "Temizle",
+    "segment": "Ara"
   },
   "relation": {
     "add_friend": "Arkadaş ekle",
@@ -293,5 +294,14 @@
     "locked_hint": "Kilitli · Durdurmak için düğmeye basın",
     "lock_hint": "Kilitlemek için yukarı kaydırın",
     "capture_hint": "Fotoğraf için dokunun · Video için basılı tutun"
+  },
+  "fab": {
+    "new_chat": "Yeni sohbet",
+    "new_group": "Yeni grup",
+    "add_contact": "Kişi ekle"
+  },
+  "new_chat": {
+    "title": "Yeni sohbet",
+    "no_results": "Sonuç bulunamadı"
   }
 }

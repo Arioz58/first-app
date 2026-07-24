@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { apiRequest } from '../lib/api';
+import { setPendingFriendRequests } from '../lib/friendRequests';
 import { UserAvatar } from './UserAvatar';
 
 type Friend = { id: string; name: string; photoUrl: string | null };
@@ -47,6 +48,9 @@ export function FriendsPanel({
       setFriends(f);
       setReceived(r);
       setSent(s);
+      // `load()` est rejoué au focus et après chaque accept/refuse : c'est le
+      // point unique qui resynchronise le badge de l'onglet Contacts.
+      setPendingFriendRequests(r.length);
     } catch {
       // silencieux
     } finally {

@@ -3,6 +3,10 @@ import * as Notifications from "expo-notifications";
 import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { setSessionExpiredHandler } from "../lib/api";
+import {
+  incrementPendingFriendRequests,
+  refreshPendingFriendRequests,
+} from "../lib/friendRequests";
 import i18n from "../lib/i18n";
 import { registerForPushNotifications } from "../lib/notifications";
 import { connectSocket } from "../lib/socket";
@@ -60,12 +64,14 @@ export default function RootLayout() {
       socket.off("friend_request_received");
       socket.on("friend_request_received", (p: { from: { name: string } }) => {
         localNotify(p.from.name, i18n.t("notifications.friend_request"));
+        incrementPendingFriendRequests();
       });
       socket.off("friend_request_accepted");
       socket.on("friend_request_accepted", (p: { by: { name: string } }) => {
         localNotify(p.by.name, i18n.t("notifications.friend_accepted"));
       });
       await registerForPushNotifications();
+      refreshPendingFriendRequests();
       setChecked(true);
     };
 
@@ -80,6 +86,7 @@ export default function RootLayout() {
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="chat/new" options={{ headerShown: false }} />
       <Stack.Screen
         name="chat/details"
         options={{ headerShown: false, animation: "slide_from_right" }}

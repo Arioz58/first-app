@@ -115,13 +115,14 @@ app/
 ├── (tabs)/
 │   ├── _layout.tsx      # NativeTabs (SF Symbols) — 4 onglets
 │   ├── index.tsx        # Liste conversations + StoriesBar en header
-│   ├── search.tsx       # Onglet segmenté « Recherche / Amis ». Recherche = par NUMÉRO (CountryPicker, debounce, carte → profil, cas limites, historique récent). Amis = `<FriendsPanel>`
+│   ├── search.tsx       # Onglet **« Contacts »** (fichier/route toujours `search`), segmenté « Recherche / Amis ». Recherche = par NUMÉRO (CountryPicker, debounce, carte → profil, cas limites, historique récent). Amis = `<FriendsPanel>` + pastille rouge des demandes en attente sur le segment. Ouverture sur un segment imposé via `consumeContactsSegment()`
 │   ├── saved.tsx        # Appels (à implémenter Mois 4)
 │   └── profile.tsx      # Profil (thème vert nexa) : avatar+photo (upload S3 ; appui = Changer/Supprimer → PATCH photoUrl:null = retour à l'initiale), édition nom + bio (modale combinée, bio 140 car.), sélecteur de langue i18n (PATCH + persistance), statut consentement confidentialité, déconnexion → welcome
 ├── chat/
 │   ├── [id].tsx         # Écran chat temps réel (Socket.io) — header profil, présence/frappe, médias, vocal, épinglés/favoris (voir section Chat)
 │   ├── details.tsx      # Panneau de détails d'une conversation directe : profil gated, actions rapides, personnalisation (fond/surnom/couleur de bulle/éphémère), sections médias, épinglés, favoris, gestion (effacer/bloquer/signaler)
-│   └── media.tsx        # Galerie par catégorie (media/links/documents/audio/gifs) — grille ou liste, pagination curseur, téléchargement groupé
+│   ├── media.tsx        # Galerie par catégorie (media/links/documents/audio/gifs) — grille ou liste, pagination curseur, téléchargement groupé
+│   └── new.tsx          # Sélecteur d'ami pour démarrer une conversation (GET /friends + filtre local) → POST /conversations/direct → `router.replace` vers le chat
 ├── user/
 │   └── [id].tsx         # Profil complet d'un autre utilisateur (gated) : skeleton, boutons dynamiques amis/message/appels, GET /users/:id/profile
 ├── privacy.tsx          # Paramètres de confidentialité (8 réglages everyone/friends/nobody + amis-d'amis pour les demandes + toggle localisation + accès Utilisateurs bloqués) → PATCH /users/me/privacy
@@ -162,6 +163,8 @@ lib/
 ├── chatWallpapers.ts    # Presets de fond de conversation (asset nexa clair/sombre + unis/dégradés) — réglage local
 ├── bubbleColors.ts      # Palette de couleurs d'accent des bulles « moi » (réglage local)
 ├── chatNav.ts           # Relais mémoire one-shot : détails → chat, « défiler jusqu'à ce message » (épinglé/favori)
+├── tabsNav.ts           # Relais mémoire one-shot : FAB → onglet Contacts, segment à ouvrir (un param de route ne se redéclencherait pas au 2ᵉ passage, valeur identique)
+├── friendRequests.ts    # Store externe (`useSyncExternalStore`) du **compteur de demandes d'ami reçues** — alimente le badge natif de l'onglet Contacts et la pastille du segment Amis
 └── i18n.ts              # Config i18next (tr/fr/en) + SUPPORTED_LANGUAGES + setAppLanguage (changeLanguage + persistance SecureStore) ; restaure la langue sauvegardée au démarrage
 locales/
 ├── tr.json
@@ -408,6 +411,13 @@ Principe transverse : **ce qui est cosmétique et personnel reste local** (Secur
 
 ---
 
+## Navigation : onglets, badges, FAB ✅
+
+- **Onglet « Contacts »** (`tabs.contacts`, SF Symbol `person.2.fill`). ⚠️ La **route reste `search`** (`app/(tabs)/search.tsx`) — seul le libellé a changé ; ne pas renommer le fichier sans mettre à jour `NativeTabs.Trigger name="search"` et tous les `router.navigate('/(tabs)/search')`.
+- **Badge natif de demandes d'ami** : `<Badge>` d'`expo-router/unstable-native-tabs`. ⚠️ Le « petit point » sans texte est documenté **Android uniquement** ; sur iOS le badge s'affiche comme une **chaîne** → on passe le **nombre** (`99+` au-delà). `hidden` quand le compteur est à 0.
+- **Source du compteur** : `lib/friendRequests.ts`, store externe via `useSyncExternalStore`. Un Context ne conviendrait pas : le badge est rendu par `(tabs)/_layout`, qui serait aussi le fournisseur — un composant ne peut pas consommer le Context qu'il fournit. Alimenté par (1) `refreshPendingFriendRequests()` au démarrage dans `app/_layout.tsx`, (2) `incrementPendingFriendRequests()` sur socket `friend_request_received` (optimiste, sans aller-retour), (3) `setPendingFriendRequests(r.length)` dans le `load()` de `FriendsPanel` — ce `load()` étant rejoué au focus **et** après chaque accept/refuse, c'est le point unique de resynchronisation.
+- **FAB « + »** en bas à droite de la page Messages → `BottomSheet` (hauteur auto) à 3 actions : nouvelle conversation (`chat/new`), nouveau groupe (`group/new`), ajouter un contact (→ onglet Contacts, segment recherche via `requestContactsSegment`). Il **remplace** l'ancienne icône « nouveau groupe » du header, devenue redondante.
+
 ## Social : amis, confidentialité, blocage (épopée multi-phases) 🔄
 
 Construction **par phases livrables**, toutes les règles de confidentialité **vérifiées côté serveur**.
@@ -485,7 +495,7 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 
 - **Prisma v5** — ne pas upgrader en v7 (breaking changes majeurs sur la config datasource).
 - **OTP** simulé en local (log console). Remplacer par Twilio avant la mise en prod.
-- **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'`. **Langue détectée automatiquement au 1er lancement** depuis la langue de l'appareil (`expo-localization`, mappée sur tr/fr/en sinon turc) ; un choix explicite sauvegardé (SecureStore) prime ensuite. Modifiable via le profil (`setAppLanguage` + `PATCH /users/me`). Clés organisées par groupes imbriqués (`onboarding`, `auth`, `country_picker`, …) — **garder les 3 fichiers `locales/*.json` strictement alignés** (mêmes clés). Écrans déjà branchés sur `t()` : onboarding (welcome/security/intro/login/verify), profil, CountryPicker, liste conversations (`(tabs)/index`), chat (`chat/[id]`), création de groupe (`group/new`), StoriesBar, viewer/éditeur de stories (`story/[id]`, `story/create`), caméra in-app (`StoryCamera`). Groupes de clés dédiés : `stories.*` (viewer + éditeur, ex. `time_now`/`minutes_short`/`views`), `camera.*`, `chat.*`, `details.*`, `media.*`, `mute.*`, `ephemeral.*`, `moderation.*`, `relation.*`. **Pas encore traduits** : écran stub `saved` (Appels, Mois 4). `VideoTrimmer`/`MediaViewer` n'ont pas de texte.
+- **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'`. **Langue détectée automatiquement au 1er lancement** depuis la langue de l'appareil (`expo-localization`, mappée sur tr/fr/en sinon turc) ; un choix explicite sauvegardé (SecureStore) prime ensuite. Modifiable via le profil (`setAppLanguage` + `PATCH /users/me`). Clés organisées par groupes imbriqués (`onboarding`, `auth`, `country_picker`, …) — **garder les 3 fichiers `locales/*.json` strictement alignés** (mêmes clés). Écrans déjà branchés sur `t()` : onboarding (welcome/security/intro/login/verify), profil, CountryPicker, liste conversations (`(tabs)/index`), chat (`chat/[id]`), création de groupe (`group/new`), StoriesBar, viewer/éditeur de stories (`story/[id]`, `story/create`), caméra in-app (`StoryCamera`). Groupes de clés dédiés : `stories.*` (viewer + éditeur, ex. `time_now`/`minutes_short`/`views`), `camera.*`, `chat.*`, `details.*`, `media.*`, `mute.*`, `ephemeral.*`, `moderation.*`, `relation.*`, `fab.*`, `new_chat.*`. ⚠️ `tabs.search` a été **supprimé** (onglet renommé) : le libellé du segment recherche est `search_phone.segment`, celui de l'onglet `tabs.contacts`. **Pas encore traduits** : écran stub `saved` (Appels, Mois 4). `VideoTrimmer`/`MediaViewer` n'ont pas de texte.
 - En local : PostgreSQL + Redis tournent via `docker-compose up -d` dans `first-app-backend/`.
 - **FCM iOS** : nécessite compte Apple Developer payant (99€/an) + clés APNs dans Firebase Console.
 - **`lib/config.ts`** contient aussi `PRIVACY_URL` / `PRIVACY_POLICY_VERSION` (⚠️ URL placeholder) et `GIPHY_API_KEY` (⚠️ clé en dur, à sortir avant la prod).

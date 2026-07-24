@@ -8,7 +8,41 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../../lib/api';
 import { getSocket } from '../../lib/socket';
 import { getUserId } from '../../lib/storage';
+import { requestContactsSegment } from '../../lib/tabsNav';
+import BottomSheet from '../../components/BottomSheet';
 import StoriesBar, { type StoriesBarHandle } from '../../components/StoriesBar';
+
+// La tab bar native flotte au-dessus du contenu et `SafeAreaView` ne la connaît
+// pas : on remonte le FAB de sa hauteur (~49pt) + une marge, sinon il passe dessous.
+const FAB_BOTTOM = 96;
+
+// Ombre portée du FAB (iOS + Android).
+const FAB_SHADOW = {
+  shadowColor: '#000',
+  shadowOpacity: 0.25,
+  shadowRadius: 6,
+  shadowOffset: { width: 0, height: 3 },
+  elevation: 6,
+};
+
+// Actions du FAB. Défini hors du composant : ne dépend que du router.
+const FAB_ACTIONS: {
+  key: 'new_group' | 'new_chat' | 'add_contact';
+  icon: keyof typeof Ionicons.glyphMap;
+  run: (router: ReturnType<typeof useRouter>) => void;
+}[] = [
+  { key: 'new_chat', icon: 'chatbubble-ellipses', run: (r) => r.push('/chat/new' as any) },
+  { key: 'new_group', icon: 'people', run: (r) => r.push('/group/new' as any) },
+  {
+    key: 'add_contact',
+    icon: 'person-add',
+    run: (r) => {
+      // Le segment est transmis par relais mémoire, pas par paramètre de route.
+      requestContactsSegment('search');
+      r.navigate('/(tabs)/search' as any);
+    },
+  },
+];
 
 type Message = { id: string; content: string; createdAt: string; conversationId: string };
 type Member = { userId: string; user: { name: string } };
@@ -28,6 +62,7 @@ export default function ConversationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [requestCount, setRequestCount] = useState(0);
+  const [fabOpen, setFabOpen] = useState(false);
   const storiesRef = useRef<StoriesBarHandle>(null);
 
   const fetchConversations = async () => {
@@ -95,9 +130,6 @@ export default function ConversationsScreen() {
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
         <Text className="text-xl font-bold text-nexa">{t('messages')}</Text>
-        <TouchableOpacity onPress={() => router.push('/group/new' as any)}>
-          <Ionicons name="create-outline" size={24} color="#128C7E" />
-        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -161,6 +193,36 @@ export default function ConversationsScreen() {
           </TouchableOpacity>
         )}
       />
+
+      {/* FAB « + » — remplace l'ancienne icône « nouveau groupe » du header. */}
+      <TouchableOpacity
+        className="absolute right-5 w-14 h-14 rounded-full bg-nexa items-center justify-center"
+        style={[FAB_SHADOW, { bottom: FAB_BOTTOM }]}
+        activeOpacity={0.85}
+        onPress={() => setFabOpen(true)}
+      >
+        <Ionicons name="add" size={30} color="#fff" />
+      </TouchableOpacity>
+
+      <BottomSheet visible={fabOpen} onClose={() => setFabOpen(false)}>
+        <View className="pb-6 pt-2">
+          {FAB_ACTIONS.map(({ key, icon, run }) => (
+            <TouchableOpacity
+              key={key}
+              className="flex-row items-center px-5 py-4"
+              onPress={() => {
+                setFabOpen(false);
+                run(router);
+              }}
+            >
+              <View className="w-11 h-11 rounded-full bg-emerald-50 items-center justify-center mr-4">
+                <Ionicons name={icon} size={22} color="#128C7E" />
+              </View>
+              <Text className="text-base font-semibold text-gray-900">{t(`fab.${key}`)}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </BottomSheet>
     </SafeAreaView>
   );
 }

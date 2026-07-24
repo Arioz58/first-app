@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -17,6 +18,8 @@ import { FriendsPanel } from '../../components/FriendsPanel';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
 import { COUNTRIES, Country } from '../../lib/countries';
+import { usePendingFriendRequests } from '../../lib/friendRequests';
+import { consumeContactsSegment } from '../../lib/tabsNav';
 import {
   addRecentSearch,
   clearRecentSearches,
@@ -45,6 +48,7 @@ export default function SearchScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const [seg, setSeg] = useState<'search' | 'friends'>('search');
+  const pendingRequests = usePendingFriendRequests();
   const [country, setCountry] = useState<Country>(COUNTRIES[0]);
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
@@ -57,6 +61,14 @@ export default function SearchScreen() {
   useEffect(() => {
     getRecentSearches().then(setRecent);
   }, []);
+
+  // Le FAB de la page Messages peut demander l'ouverture sur un segment précis.
+  useFocusEffect(
+    useCallback(() => {
+      const requested = consumeContactsSegment();
+      if (requested) setSeg(requested);
+    }, []),
+  );
 
   useEffect(() => {
     const digits = phone.replace(/\D/g, '');
@@ -137,23 +149,31 @@ export default function SearchScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="px-4 pt-3 pb-2">
-        <Text className="text-2xl font-bold text-nexa mb-3">{t('tabs.search')}</Text>
+        <Text className="text-2xl font-bold text-nexa mb-3">{t('tabs.contacts')}</Text>
         {/* Segmented Recherche / Amis */}
         <View className="flex-row bg-gray-100 rounded-full p-1">
           {(['search', 'friends'] as const).map((s) => {
             const active = seg === s;
+            const showBadge = s === 'friends' && pendingRequests > 0;
             return (
               <TouchableOpacity
                 key={s}
-                className={`flex-1 items-center py-2 rounded-full ${active ? 'bg-white' : ''}`}
+                className={`flex-1 flex-row items-center justify-center py-2 rounded-full ${active ? 'bg-white' : ''}`}
                 style={active ? { elevation: 1 } : undefined}
                 onPress={() => setSeg(s)}
               >
                 <Text
                   className={`text-sm font-semibold ${active ? 'text-nexa' : 'text-gray-500'}`}
                 >
-                  {s === 'search' ? t('tabs.search') : t('friends.title')}
+                  {s === 'search' ? t('search_phone.segment') : t('friends.title')}
                 </Text>
+                {showBadge && (
+                  <View className="bg-red-500 rounded-full min-w-[18px] h-[18px] items-center justify-center px-1 ml-1.5">
+                    <Text className="text-white text-[10px] font-bold">
+                      {pendingRequests > 99 ? '99+' : pendingRequests}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}

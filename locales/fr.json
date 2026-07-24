@@ -37,9 +37,9 @@
   "photo_error": "Impossible de mettre à jour la photo",
   "tabs": {
     "messages": "Messages",
-    "search": "Recherche",
     "calls": "Appels",
-    "profile": "Profil"
+    "profile": "Profil",
+    "contacts": "Contacts"
   },
   "onboarding": {
     "welcome_title": "Bienvenue sur NEXA !",
@@ -183,7 +183,8 @@
     "own_number": "C'est votre numéro.",
     "error": "Recherche impossible, réessayez plus tard.",
     "recent": "Recherches récentes",
-    "clear": "Effacer"
+    "clear": "Effacer",
+    "segment": "Recherche"
   },
   "relation": {
     "add_friend": "Ajouter en ami",
@@ -293,5 +294,14 @@
     "locked_hint": "Verrouillé · Appuyez sur le bouton pour arrêter",
     "lock_hint": "Glissez vers le haut pour verrouiller",
     "capture_hint": "Appuyez pour une photo · Maintenez pour une vidéo"
+  },
+  "fab": {
+    "new_chat": "Nouvelle conversation",
+    "new_group": "Nouveau groupe",
+    "add_contact": "Ajouter un contact"
+  },
+  "new_chat": {
+    "title": "Nouvelle conversation",
+    "no_results": "Aucun résultat"
   }
 }
