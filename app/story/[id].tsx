@@ -840,7 +840,7 @@ export default function StoryViewScreen() {
                       <View
                         key={v.id}
                         style={{ marginLeft: i === 0 ? 0 : -10 }}
-                        className="w-8 h-8 rounded-full overflow-hidden border-2 border-neutral-900 bg-emerald-100 items-center justify-center"
+                        className="w-8 h-8 rounded-full overflow-hidden border-2 border-neutral-900 bg-blue-100 items-center justify-center"
                       >
                         {v.viewer.photoUrl ? (
                           <Image
@@ -889,7 +889,7 @@ export default function StoryViewScreen() {
                 }}
                 renderItem={({ item }) => (
                   <View className="flex-row items-center gap-3 px-5 py-2.5">
-                    <View className="w-11 h-11 rounded-full overflow-hidden bg-emerald-100 items-center justify-center">
+                    <View className="w-11 h-11 rounded-full overflow-hidden bg-blue-100 items-center justify-center">
                       {item.viewer.photoUrl ? (
                         <Image
                           source={{ uri: item.viewer.photoUrl }}

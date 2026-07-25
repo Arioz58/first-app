@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomSheet from '../components/BottomSheet';
 import { apiRequest } from '../lib/api';
 
-const NEXA = '#128C7E';
+const NEXA = '#1E40AF';
 const TRIPLE = ['everyone', 'friends', 'nobody'] as const;
 const FR_VALUES = ['everyone', 'friends_of_friends', 'nobody'] as const;
 

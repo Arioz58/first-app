@@ -186,7 +186,7 @@ export default function LoginScreen() {
               router.back();
             }}
           >
-            <Ionicons name="arrow-back" size={28} color="#128C7E" />
+            <Ionicons name="arrow-back" size={28} color="#1E40AF" />
           </TouchableOpacity>
           <Image
             source={require("../../assets/images/nexaLogo.png")}
@@ -194,7 +194,7 @@ export default function LoginScreen() {
               width: 46,
               height: 46,
               opacity: 0.5,
-              tintColor: "#128C7E",
+              tintColor: "#1E40AF",
             }}
             resizeMode="contain"
           />
@@ -302,7 +302,7 @@ export default function LoginScreen() {
               <Ionicons
                 name={accepted ? "checkbox" : "square-outline"}
                 size={24}
-                color={accepted ? "#128C7E" : "#9CA3AF"}
+                color={accepted ? "#1E40AF" : "#9CA3AF"}
               />
               <Text className="ml-2 flex-1 text-base text-gray-600 leading-6">
                 {(() => {

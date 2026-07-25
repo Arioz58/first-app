@@ -13,7 +13,7 @@ export function UserAvatar({
   return (
     <View
       style={{ width: size, height: size, borderRadius: size / 2 }}
-      className="overflow-hidden bg-emerald-50 items-center justify-center"
+      className="overflow-hidden bg-blue-50 items-center justify-center"
     >
       {photoUrl ? (
         <Image source={{ uri: photoUrl }} style={{ width: '100%', height: '100%' }} />

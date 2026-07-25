@@ -45,7 +45,7 @@ import { ChatBackground } from '../../components/ChatBackground';
 import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
 import { UserAvatar } from '../../components/UserAvatar';
 
-const NEXA = '#128C7E';
+const NEXA = '#1E40AF';
 const MUTE_FOREVER = new Date('2999-12-31T00:00:00Z'); // sentinelle « toujours »
 
 type ConvMember = { userId: string; role: string; user: { id: string; name: string; photoUrl: string | null } };
@@ -624,7 +624,7 @@ export default function ChatScreen() {
   if (loading) {
     return (
       <View className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color="#128C7E" />
+        <ActivityIndicator size="large" color="#1E40AF" />
       </View>
     );
   }
@@ -640,7 +640,7 @@ export default function ChatScreen() {
         {/* Avatar + point de statut */}
         <TouchableOpacity onPress={openDetails} disabled={convType !== 'direct'} className="ml-1">
           {convType === 'group' ? (
-            <View className="w-10 h-10 rounded-full bg-emerald-50 items-center justify-center">
+            <View className="w-10 h-10 rounded-full bg-blue-50 items-center justify-center">
               <Ionicons name="people" size={20} color={NEXA} />
             </View>
           ) : (

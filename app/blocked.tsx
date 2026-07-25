@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { UserAvatar } from '../components/UserAvatar';
 import { apiRequest } from '../lib/api';
 
-const NEXA = '#128C7E';
+const NEXA = '#1E40AF';
 type Blocked = { id: string; name: string; photoUrl: string | null };
 
 export default function BlockedScreen() {

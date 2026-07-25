@@ -16,7 +16,7 @@ export default function WelcomeScreen() {
       <View className="flex-row justify-end px-4 py-3">
         <Image
           source={require("../../assets/images/nexaLogo.png")}
-          style={{ width: 46, height: 46, opacity: 0.5, tintColor: "#128C7E" }}
+          style={{ width: 46, height: 46, opacity: 0.5, tintColor: "#1E40AF" }}
           resizeMode="contain"
         />
       </View>

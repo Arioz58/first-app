@@ -140,7 +140,7 @@ export function FriendsPanel({
       )}
 
       {loading ? (
-        <ActivityIndicator color="#128C7E" className="mt-10" />
+        <ActivityIndicator color="#1E40AF" className="mt-10" />
       ) : sub === 'friends' ? (
         <FlatList
           data={filteredFriends}

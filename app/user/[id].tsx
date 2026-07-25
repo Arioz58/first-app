@@ -38,7 +38,7 @@ type ProfileData = {
   canFriendRequest: boolean;
 };
 
-const NEXA = '#128C7E';
+const NEXA = '#1E40AF';
 
 export default function UserProfileScreen() {
   const router = useRouter();
@@ -248,12 +248,12 @@ export default function UserProfileScreen() {
                   className="flex-1"
                 />
                 <View
-                  className={`w-12 h-12 rounded-full items-center justify-center ${data.canCall ? 'bg-emerald-50' : 'bg-gray-100'}`}
+                  className={`w-12 h-12 rounded-full items-center justify-center ${data.canCall ? 'bg-blue-50' : 'bg-gray-100'}`}
                 >
                   <Ionicons name="call" size={20} color={data.canCall ? NEXA : '#9CA3AF'} />
                 </View>
                 <View
-                  className={`w-12 h-12 rounded-full items-center justify-center ${data.canCall ? 'bg-emerald-50' : 'bg-gray-100'}`}
+                  className={`w-12 h-12 rounded-full items-center justify-center ${data.canCall ? 'bg-blue-50' : 'bg-gray-100'}`}
                 >
                   <Ionicons name="videocam" size={20} color={data.canCall ? NEXA : '#9CA3AF'} />
                 </View>

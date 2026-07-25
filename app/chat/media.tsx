@@ -19,7 +19,7 @@ import { MediaViewer } from '../../components/MediaViewer';
 import { apiRequest } from '../../lib/api';
 import { firstUrl, formatFileSize } from '../../lib/upload';
 
-const NEXA = '#128C7E';
+const NEXA = '#1E40AF';
 const PAGE = 30;
 
 type Msg = {

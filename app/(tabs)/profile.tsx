@@ -22,7 +22,7 @@ import { SUPPORTED_LANGUAGES, setAppLanguage } from '../../lib/i18n';
 import { clearTokens } from '../../lib/storage';
 import { disconnectSocket } from '../../lib/socket';
 
-const NEXA = '#128C7E';
+const NEXA = '#1E40AF';
 
 type User = {
   id: string;
@@ -57,7 +57,7 @@ function SettingRow({
     >
       <View
         className="w-9 h-9 rounded-full items-center justify-center"
-        style={{ backgroundColor: danger ? '#FEE2E2' : '#D1FAE5' }}
+        style={{ backgroundColor: danger ? '#FEE2E2' : '#DBEAFE' }}
       >
         <Ionicons name={icon} size={20} color={danger ? '#EF4444' : NEXA} />
       </View>
@@ -256,7 +256,7 @@ export default function ProfileScreen() {
           activeOpacity={0.8}
           disabled={uploading}
         >
-          <View className="w-28 h-28 rounded-full overflow-hidden items-center justify-center bg-emerald-50">
+          <View className="w-28 h-28 rounded-full overflow-hidden items-center justify-center bg-blue-50">
             {user?.photoUrl ? (
               <Image
                 source={{ uri: user.photoUrl }}

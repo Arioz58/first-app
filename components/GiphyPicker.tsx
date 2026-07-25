@@ -68,7 +68,7 @@ export default function GiphyPicker({
         <SafeAreaView className="flex-1 bg-white" edges={['top', 'bottom']}>
         <View className="flex-row items-center px-4 py-2 border-b border-gray-100">
           <TouchableOpacity onPress={onClose} className="mr-3">
-            <Ionicons name="close" size={24} color="#128C7E" />
+            <Ionicons name="close" size={24} color="#1E40AF" />
           </TouchableOpacity>
           <TextInput
             className="flex-1 bg-gray-100 rounded-full px-4 py-2"
@@ -85,7 +85,7 @@ export default function GiphyPicker({
             <Text className="text-gray-400 text-center mt-3">{t('media.gif_no_key')}</Text>
           </View>
         ) : loading ? (
-          <ActivityIndicator color="#128C7E" className="mt-8" />
+          <ActivityIndicator color="#1E40AF" className="mt-8" />
         ) : (
           <FlatList
             data={gifs}

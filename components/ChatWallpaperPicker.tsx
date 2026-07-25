@@ -126,14 +126,14 @@ export default function ChatWallpaperPicker({ visible, current, onClose, onSelec
               </View>
             ) : (
               <View className={`${SWATCH} bg-gray-100 border border-dashed border-gray-300`}>
-                <Ionicons name="image-outline" size={26} color="#128C7E" />
+                <Ionicons name="image-outline" size={26} color="#1E40AF" />
               </View>
             )}
             <Text className="text-[11px] text-gray-500 mt-1">{t('chat.wallpaper_gallery')}</Text>
           </TouchableOpacity>
         </View>
 
-        {busy && <ActivityIndicator className="mt-5" color="#128C7E" />}
+        {busy && <ActivityIndicator className="mt-5" color="#1E40AF" />}
       </View>
     </BottomSheet>
   );

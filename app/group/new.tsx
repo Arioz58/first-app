@@ -74,7 +74,7 @@ export default function NewGroupScreen() {
       <DismissKeyboard>
       <View className="flex-row items-center px-4 py-3 border-b border-gray-100">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
-          <Ionicons name="arrow-back" size={24} color="#128C7E" />
+          <Ionicons name="arrow-back" size={24} color="#1E40AF" />
         </TouchableOpacity>
         <Text className="text-lg font-semibold text-gray-900">
           {t('group.new_group')}
@@ -96,14 +96,14 @@ export default function NewGroupScreen() {
             {selected.map((m) => (
               <TouchableOpacity
                 key={m.id}
-                className="flex-row items-center bg-emerald-50 rounded-full pl-1 pr-2 py-1"
+                className="flex-row items-center bg-blue-50 rounded-full pl-1 pr-2 py-1"
                 onPress={() => toggleMember(m)}
               >
                 <UserAvatar photoUrl={m.photoUrl} name={m.name} size={24} />
                 <Text className="text-nexa text-sm font-medium ml-1.5 mr-1">
                   {m.name}
                 </Text>
-                <Ionicons name="close-circle" size={16} color="#128C7E" />
+                <Ionicons name="close-circle" size={16} color="#1E40AF" />
               </TouchableOpacity>
             ))}
           </View>
@@ -123,7 +123,7 @@ export default function NewGroupScreen() {
             autoCapitalize="none"
             autoCorrect={false}
           />
-          {searching && <ActivityIndicator color="#128C7E" size="small" />}
+          {searching && <ActivityIndicator color="#1E40AF" size="small" />}
         </View>
       </View>
 
@@ -147,7 +147,7 @@ export default function NewGroupScreen() {
               <Ionicons
                 name={isSelected ? 'checkmark-circle' : 'add-circle-outline'}
                 size={24}
-                color={isSelected ? '#128C7E' : '#9CA3AF'}
+                color={isSelected ? '#1E40AF' : '#9CA3AF'}
               />
             </TouchableOpacity>
           );

@@ -197,7 +197,7 @@ export default function SearchScreen() {
               onChangeText={setPhone}
             />
             {loading ? (
-              <ActivityIndicator color="#128C7E" size="small" />
+              <ActivityIndicator color="#1E40AF" size="small" />
             ) : phone.length > 0 ? (
               <TouchableOpacity onPress={() => setPhone('')}>
                 <Ionicons name="close-circle" size={18} color="#9CA3AF" />
@@ -236,7 +236,7 @@ export default function SearchScreen() {
               <Text className="text-gray-500 text-sm">{result.phone}</Text>
             </View>
             {!isSelf && (
-              <View className="bg-emerald-50 rounded-full px-3 py-1.5">
+              <View className="bg-blue-50 rounded-full px-3 py-1.5">
                 <Text className="text-nexa text-xs font-semibold">
                   {relationLabel(result.relationStatus)}
                 </Text>

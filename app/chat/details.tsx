@@ -38,7 +38,7 @@ import {
   type ConversationCustomization,
 } from '../../lib/storage';
 
-const NEXA = '#128C7E';
+const NEXA = '#1E40AF';
 const MUTE_FOREVER = new Date('2999-12-31T00:00:00Z');
 
 // Ombre douce partagée des cartes (iOS + Android).
@@ -417,7 +417,7 @@ export default function ConversationDetailsScreen() {
           {/* 2.1 Bloc profil — bannière dégradée + avatar en débord */}
           <View className="bg-white rounded-2xl mx-4 mt-3 overflow-hidden" style={CARD_SHADOW}>
             <LinearGradient
-              colors={['#17A793', '#0E7A6C']}
+              colors={['#3B82F6', '#1E3A8A']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={{ height: 76 }}
@@ -463,7 +463,7 @@ export default function ConversationDetailsScreen() {
               {data && data.mutualFriendsCount > 0 ? (
                 <TouchableOpacity
                   onPress={() => setMutualOpen(true)}
-                  className="flex-row items-center mt-3 bg-emerald-50 rounded-full pl-1.5 pr-3 py-1"
+                  className="flex-row items-center mt-3 bg-blue-50 rounded-full pl-1.5 pr-3 py-1"
                 >
                   {/* Avatars empilés des amis en commun */}
                   {mutualPreview.length > 0 ? (
@@ -472,7 +472,7 @@ export default function ConversationDetailsScreen() {
                         <View
                           key={f.id}
                           style={{ marginLeft: i === 0 ? 0 : -8 }}
-                          className="rounded-full border border-emerald-50"
+                          className="rounded-full border border-blue-50"
                         >
                           <UserAvatar photoUrl={f.photoUrl} name={f.name} size={20} />
                         </View>
@@ -599,7 +599,7 @@ export default function ConversationDetailsScreen() {
                   onPress={() => openMedia(category, t(`details.${key}`))}
                   activeOpacity={0.7}
                 >
-                  <View className="w-12 h-12 rounded-2xl bg-emerald-50 items-center justify-center">
+                  <View className="w-12 h-12 rounded-2xl bg-blue-50 items-center justify-center">
                     <Ionicons name={icon} size={22} color={NEXA} />
                   </View>
                   <Text className="text-gray-900 font-semibold mt-1.5">{count}</Text>
@@ -779,7 +779,7 @@ export default function ConversationDetailsScreen() {
                 onPress={() => addToGroup(g)}
                 disabled={!!addingTo}
               >
-                <View className="w-11 h-11 rounded-full bg-emerald-50 items-center justify-center mr-3">
+                <View className="w-11 h-11 rounded-full bg-blue-50 items-center justify-center mr-3">
                   <Ionicons name="people" size={20} color={NEXA} />
                 </View>
                 <View className="flex-1">
@@ -832,7 +832,7 @@ function RelationBadge({ status, t }: { status: RelationStatus; t: (k: string) =
           ? t('relation.accept')
           : t('relation.add_friend');
   return (
-    <View className={`mt-3 px-3 py-1 rounded-full ${accent ? 'bg-emerald-50' : 'bg-gray-100'}`}>
+    <View className={`mt-3 px-3 py-1 rounded-full ${accent ? 'bg-blue-50' : 'bg-gray-100'}`}>
       <Text className={`text-xs font-semibold ${accent ? 'text-nexa' : 'text-gray-600'}`}>
         {label}
       </Text>
@@ -856,7 +856,7 @@ function QuickAction({
   return (
     <TouchableOpacity className="items-center" onPress={onPress} style={{ opacity: disabled ? 0.4 : 1 }}>
       <View
-        className={`w-12 h-12 rounded-2xl items-center justify-center ${active ? 'bg-nexa' : 'bg-emerald-50'}`}
+        className={`w-12 h-12 rounded-2xl items-center justify-center ${active ? 'bg-nexa' : 'bg-blue-50'}`}
       >
         <Ionicons name={icon} size={22} color={active ? 'white' : NEXA} />
       </View>
@@ -900,7 +900,7 @@ function Row({
       style={{ opacity: disabled ? 0.45 : 1 }}
     >
       <View
-        className={`w-9 h-9 rounded-full items-center justify-center ${danger ? 'bg-red-50' : 'bg-emerald-50'}`}
+        className={`w-9 h-9 rounded-full items-center justify-center ${danger ? 'bg-red-50' : 'bg-blue-50'}`}
       >
         <Ionicons name={icon} size={18} color={danger ? '#EF4444' : NEXA} />
       </View>

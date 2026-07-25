@@ -22,10 +22,12 @@ Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintena
 
 ### DA (Design)
 
-- Couleurs finales : **nuances de verts style WhatsApp** — à appliquer en Mois 5/6
-- Couleur principale actuelle : `#1E40AF` (bleu) + `#128C7E` (nexa — vert WhatsApp, déjà en place sur les écrans auth)
-- Couleur Tailwind custom : `bg-nexa`, `text-nexa`, `border-nexa` → `#128C7E`
-- Tab bar : **native iOS** (`expo-router/unstable-native-tabs`) avec SF Symbols — pas de tab bar custom JS ; onglet actif teinté en vert nexa via la prop `tintColor="#128C7E"` sur `<NativeTabs>`
+- **DA passée au bleu le 25 juil. 2026** (demande client) : toute l'app est en **nuances de bleu**, couleur principale `#1E40AF` (bleu roi). ⚠️ Le token Tailwind s'appelle toujours **`nexa`** mais vaut désormais `#1E40AF` (nom historique conservé pour ne pas casser les 23 fichiers qui l'utilisent — `bg-nexa`/`text-nexa`/`border-nexa`).
+- Dégradés : bannière profil `#3B82F6`→`#1E3A8A`, anneau de story `#60A5FA`→`#1E40AF`→`#1E3A8A`. Fonds de pastille = `bg-blue-50`/`bg-blue-100`.
+- **Point « en ligne » conservé en vert** (`bg-green-500`) : convention universelle de statut, volontairement pas bleu.
+- `lib/bubbleColors.ts` : palette de personnalisation (choix perso des bulles) — défaut désormais `#1E40AF`, mais la palette garde de la variété (dont des verts) car ce sont des choix utilisateur, pas la marque.
+- Tab bar : **native iOS** (`expo-router/unstable-native-tabs`) avec SF Symbols — pas de tab bar custom JS ; onglet actif teinté via `tintColor="#1E40AF"` sur `<NativeTabs>`.
+- ⚠️ Le renom `#128C7E`→`#1E40AF` a touché `app.json` (adaptiveIcon + splash sombre `#0f172a`) → **rebuild natif requis** pour voir ces changements-là (les couleurs JS suffisent d'un reload Metro).
 
 ### Planning
 
@@ -117,7 +119,7 @@ app/
 │   ├── index.tsx        # Liste conversations : filtres (Toutes/Non lues/Favoris/Groupes), avatars réels, horodatage, badge non-lus, épinglé/favori/muet, temps réel via `conversation_updated`, appui long → actions, FAB « + » ; StoriesBar en header (filtre « Toutes » uniquement)
 │   ├── search.tsx       # Onglet **« Contacts »** (fichier/route toujours `search`), segmenté « Recherche / Amis ». Recherche = par NUMÉRO (CountryPicker, debounce, carte → profil, cas limites, historique récent). Amis = `<FriendsPanel>` + pastille rouge des demandes en attente sur le segment. Ouverture sur un segment imposé via `consumeContactsSegment()`
 │   ├── saved.tsx        # Appels (à implémenter Mois 4)
-│   └── profile.tsx      # Profil (thème vert nexa) : avatar+photo (upload S3 ; appui = Changer/Supprimer → PATCH photoUrl:null = retour à l'initiale), édition nom + bio (modale combinée, bio 140 car.), sélecteur de langue i18n (PATCH + persistance), statut consentement confidentialité, déconnexion → welcome
+│   └── profile.tsx      # Profil (thème bleu nexa) : avatar+photo (upload S3 ; appui = Changer/Supprimer → PATCH photoUrl:null = retour à l'initiale), édition nom + bio (modale combinée, bio 140 car.), sélecteur de langue i18n (PATCH + persistance), statut consentement confidentialité, déconnexion → welcome
 ├── chat/
 │   ├── [id].tsx         # Écran chat temps réel (Socket.io) — header profil, présence/frappe, médias, vocal, épinglés/favoris (voir section Chat)
 │   ├── details.tsx      # Panneau de détails d'une conversation directe (UI en cartes, en-tête bannière + point de présence) : profil gated, actions rapides (appel/vidéo/favori/muet/recherche), personnalisation (fond/surnom/couleur de bulle/éphémère), **groupes (gated ami : créer un groupe avec / ajouter à un groupe admin)**, **amis en commun (avatars empilés → liste)**, médias (tuiles compteur), épinglés, favoris, gestion (effacer/bloquer/signaler)
@@ -141,7 +143,7 @@ components/
 ├── EmojiPicker.tsx      # Sélecteur d'emojis (grille) pour les stickers de story
 ├── BottomSheet.tsx      # Drawer bottom-sheet réutilisable (SHEET_SPRING partagé : montage différé piloté par `visible`, drag-to-dismiss sur la poignée, backdrop en fondu) — hauteur fixe (liste) ou auto (contenu)
 ├── CountryPicker.tsx    # Sélecteur pays + indicatif — utilise `BottomSheet` (hauteur fixe 85% + recherche + FlatList)
-├── UserAvatar.tsx       # Avatar circulaire réutilisable (photo ou initiale sur fond vert nexa, prop `size`)
+├── UserAvatar.tsx       # Avatar circulaire réutilisable (photo ou initiale sur fond bleu nexa, prop `size`)
 ├── FriendsPanel.tsx     # Panneau Amis (sous-onglets mes amis / reçues / envoyées, actions inline, badge demandes) — segment de l'onglet Recherche
 ├── ChatBackground.tsx   # Fond de conversation (asset nexa clair/sombre par défaut, preset couleur/dégradé, ou photo perso)
 ├── ChatWallpaperPicker.tsx # Sélecteur de fond de conversation (BottomSheet, presets + galerie, aperçu live)
@@ -347,8 +349,8 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 
 - Bouton **+** (coin de l'avatar) pour ajouter une story supplémentaire quand on en a déjà une — le tap sur l'avatar reste « visionner ma story »
 - Rafraîchissement : `useFocusEffect` (au focus) **+** `forwardRef`/`useImperativeHandle` exposant `refresh()` → le **pull-to-refresh** de l'écran Messages (`(tabs)/index.tsx`) recharge aussi les stories (`storiesRef.current?.refresh()`)
-- UI : `StoryRing` (anneau **dégradé vert nexa** `expo-linear-gradient` si non vu / **gris** si vu) + `Avatar` (photo de profil ou initiale) ; **« Ma story »** affiche **ta photo de profil** (via `/users/me`) + badge `+` nexa toujours visible. Tout harmonisé sur le vert nexa (plus de bleu)
-- **Anneau « non vu »** : bordure `border-nexa` (vert) si le groupe a au moins une story non vue, sinon `border-gray-300` (basé sur `hasUnviewed` renvoyé par `GET /stories`)
+- UI : `StoryRing` (anneau **dégradé bleu nexa** `expo-linear-gradient` si non vu / **gris** si vu) + `Avatar` (photo de profil ou initiale) ; **« Ma story »** affiche **ta photo de profil** (via `/users/me`) + badge `+` nexa toujours visible. Tout harmonisé sur le bleu nexa
+- **Anneau « non vu »** : bordure `border-nexa` (bleu) si le groupe a au moins une story non vue, sinon `border-gray-300` (basé sur `hasUnviewed` renvoyé par `GET /stories`)
 
 ### Données / backend
 
@@ -382,13 +384,13 @@ Principe transverse : **ce qui est cosmétique et personnel reste local** (Secur
 - **Réglages locaux** (`lib/storage.ts`, maps `{ conversationId → … }`, jamais partagés — la personne en face ne les voit pas) :
   - **fond de conversation** (`lib/chatWallpapers.ts` + `ChatBackground`) : défaut = asset nexa qui **suit le thème** de l'appareil ; presets `nexa_light`/`nexa_dark` = variante forcée ; presets couleur/dégradé ; ou **photo perso** (copiée dans `documentDirectory` — l'uri du picker vit en cache, donc purgeable)
   - **surnom** du contact (prime sur le vrai nom, affiché en sous-titre dans les détails)
-  - **couleur des bulles « moi »** (`lib/bubbleColors.ts`, défaut = vert nexa)
+  - **couleur des bulles « moi »** (`lib/bubbleColors.ts`, défaut = bleu nexa)
   - **« Effacer la conversation »** = horodatage local ; les messages antérieurs sont **filtrés côté app** (aucun appel backend, n'affecte pas l'autre)
 - Bulles : `BUBBLE_SHADOW` (ombre légère) pour rester lisibles sur n'importe quel fond.
 
 ### Phase B — Présence temps réel + indicateur de frappe
 
-- **Sous-titre dynamique** par priorité : `frappe` > `en ligne` > `vu le JJ/MM HH:MM` > rien ; vert nexa pour frappe/en ligne, gris sinon. **Point de statut** sur l'avatar (vert/gris).
+- **Sous-titre dynamique** par priorité : `frappe` > `en ligne` > `vu le JJ/MM HH:MM` > rien ; bleu nexa pour frappe/en ligne, gris sinon. **Point de statut** sur l'avatar (vert/gris).
 - Émission de `typing` à la 1ʳᵉ frappe puis **auto-stop après 3 s** sans saisie (+ stop à l'envoi et au démontage) ; côté réception, `peer_typing` avec **masquage auto après 5 s**.
 - `presence_update` filtré sur `otherUserIdRef` (une ref, pas un state — l'écouteur socket est monté une fois). `lastSeenAt` mis à jour serveur à la déconnexion, **gating `privacyLastSeen` appliqué serveur**.
 

@@ -1,7 +1,7 @@
 // Couleurs d'accent des bulles « moi » d'une conversation (réglage LOCAL et personnel).
-// `null` / absent = couleur par défaut de l'app (vert nexa). Stocké = la valeur hex.
+// `null` / absent = couleur par défaut de l'app (bleu). Stocké = la valeur hex.
 
-export const DEFAULT_BUBBLE_COLOR = '#128C7E'; // nexa
+export const DEFAULT_BUBBLE_COLOR = '#1E40AF'; // bleu principal de l'app
 
 export const BUBBLE_COLORS: string[] = [
   DEFAULT_BUBBLE_COLOR,

@@ -20,7 +20,7 @@ import BottomSheet from '../../components/BottomSheet';
 import StoriesBar, { type StoriesBarHandle } from '../../components/StoriesBar';
 import { UserAvatar } from '../../components/UserAvatar';
 
-const NEXA = '#128C7E';
+const NEXA = '#1E40AF';
 
 // La tab bar native flotte au-dessus du contenu et `SafeAreaView` ne la connaît
 // pas : on remonte le FAB de sa hauteur (~49pt) + une marge, sinon il passe dessous.
@@ -311,7 +311,7 @@ export default function ConversationsScreen() {
                 className="flex-row items-center px-4 py-3 border-b border-gray-100"
                 onPress={() => router.push('/requests' as any)}
               >
-                <View className="w-12 h-12 rounded-full bg-emerald-50 items-center justify-center mr-3">
+                <View className="w-12 h-12 rounded-full bg-blue-50 items-center justify-center mr-3">
                   <Ionicons name="mail-unread-outline" size={22} color={NEXA} />
                 </View>
                 <Text className="flex-1 font-semibold text-gray-900">
@@ -353,7 +353,7 @@ export default function ConversationsScreen() {
               delayLongPress={300}
             >
               {item.type === 'group' ? (
-                <View className="w-12 h-12 rounded-full bg-emerald-50 items-center justify-center">
+                <View className="w-12 h-12 rounded-full bg-blue-50 items-center justify-center">
                   <Ionicons name="people" size={22} color={NEXA} />
                 </View>
               ) : (
@@ -426,7 +426,7 @@ export default function ConversationsScreen() {
                 run(router);
               }}
             >
-              <View className="w-11 h-11 rounded-full bg-emerald-50 items-center justify-center mr-4">
+              <View className="w-11 h-11 rounded-full bg-blue-50 items-center justify-center mr-4">
                 <Ionicons name={icon} size={22} color={NEXA} />
               </View>
               <Text className="text-base font-semibold text-gray-900">{t(`fab.${key}`)}</Text>
@@ -492,7 +492,7 @@ function ConvAction({
 }) {
   return (
     <TouchableOpacity className="flex-row items-center px-5 py-4" onPress={onPress}>
-      <View className="w-11 h-11 rounded-full bg-emerald-50 items-center justify-center mr-4">
+      <View className="w-11 h-11 rounded-full bg-blue-50 items-center justify-center mr-4">
         <Ionicons name={icon} size={22} color={NEXA} />
       </View>
       <Text className="text-base font-semibold text-gray-900">{label}</Text>

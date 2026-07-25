@@ -25,7 +25,7 @@ export default function StepIndicator({ currentStep }: Props) {
             key={i}
             animate={{
               width: isActive ? activeWidth : inactiveWidth,
-              backgroundColor: isActive ? "#128C7E" : "#D1D5DB",
+              backgroundColor: isActive ? "#1E40AF" : "#D1D5DB",
             }}
             transition={{ type: "spring", stiffness: 180, damping: 20, mass: 1 }}
             style={{ height: 5, borderRadius: 99 }}

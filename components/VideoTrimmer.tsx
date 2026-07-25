@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     borderWidth: 3,
-    borderColor: "#128C7E",
+    borderColor: "#1E40AF",
     borderRadius: 6,
   },
   handle: {
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: HANDLE_W,
-    backgroundColor: "#128C7E",
+    backgroundColor: "#1E40AF",
     alignItems: "center",
     justifyContent: "center",
   },

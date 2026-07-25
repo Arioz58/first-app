@@ -19,12 +19,12 @@ type MyProfile = { name: string; photoUrl: string | null };
 const RING = 64;   // diamètre de l'anneau
 const INNER = 54;  // diamètre de l'avatar interne
 
-// Anneau autour d'un avatar : dégradé vert (non vu) ou gris fin (vu)
+// Anneau autour d'un avatar : dégradé bleu (non vu) ou gris fin (vu)
 function StoryRing({ unseen, children }: { unseen: boolean; children: ReactNode }) {
   if (unseen) {
     return (
       <LinearGradient
-        colors={['#34D399', '#128C7E', '#075E54']}
+        colors={['#60A5FA', '#1E40AF', '#1E3A8A']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={{ width: RING, height: RING, borderRadius: RING / 2, alignItems: 'center', justifyContent: 'center' }}
@@ -58,7 +58,7 @@ function Avatar({ photoUrl, name }: { photoUrl?: string | null; name?: string })
   return (
     <View
       style={{ width: INNER, height: INNER, borderRadius: INNER / 2, overflow: 'hidden' }}
-      className="bg-emerald-50 items-center justify-center"
+      className="bg-blue-50 items-center justify-center"
     >
       {photoUrl ? (
         <Image source={{ uri: photoUrl }} style={{ width: '100%', height: '100%' }} />
@@ -107,7 +107,7 @@ const StoriesBar = forwardRef<StoriesBarHandle>((_props, ref) => {
 
   if (loading) return (
     <View className="h-20 items-center justify-center">
-      <ActivityIndicator size="small" color="#128C7E" />
+      <ActivityIndicator size="small" color="#1E40AF" />
     </View>
   );
 

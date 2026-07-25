@@ -16,11 +16,11 @@ export default function IntroScreen() {
     >
       <View className="flex-row items-center justify-between px-4 py-3">
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={28} color="#128C7E" />
+          <Ionicons name="arrow-back" size={28} color="#1E40AF" />
         </TouchableOpacity>
         <Image
           source={require("../../assets/images/nexaLogo.png")}
-          style={{ width: 46, height: 46, opacity: 0.5, tintColor: "#128C7E" }}
+          style={{ width: 46, height: 46, opacity: 0.5, tintColor: "#1E40AF" }}
           resizeMode="contain"
         />
       </View>

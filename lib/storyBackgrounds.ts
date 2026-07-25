@@ -7,7 +7,7 @@ export type StoryBg = { id: string; colors: string[] };
 
 export const STORY_BACKGROUNDS: StoryBg[] = [
   { id: 'noir', colors: ['#000000'] },
-  { id: 'nexa', colors: ['#128C7E'] },
+  { id: 'nexa', colors: ['#1E40AF'] },
   { id: 'sunset', colors: ['#FF5F6D', '#FFC371'] },
   { id: 'ocean', colors: ['#2193B0', '#6DD5ED'] },
   { id: 'purple', colors: ['#667EEA', '#764BA2'] },

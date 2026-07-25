@@ -15,7 +15,7 @@ import { DismissKeyboard } from '../../components/DismissKeyboard';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
 
-const NEXA = '#128C7E';
+const NEXA = '#1E40AF';
 
 type Friend = { id: string; name: string; photoUrl: string | null };
 

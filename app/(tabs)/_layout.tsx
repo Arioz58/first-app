@@ -8,7 +8,7 @@ export default function TabLayout() {
   const pendingRequests = usePendingFriendRequests();
 
   return (
-    <NativeTabs tintColor="#128C7E">
+    <NativeTabs tintColor="#1E40AF">
       <NativeTabs.Trigger name="index">
         <Label>{t('tabs.messages')}</Label>
         <Icon sf="message.fill" />
@@ -31,9 +31,13 @@ export default function TabLayout() {
         <Icon sf="phone.fill" />
       </NativeTabs.Trigger>
 
+      {/* Onglet « Vous ». La photo de profil réelle n'est pas possible en icône :
+          la tab bar native iOS rend les images en mode template (teintées) →
+          une photo sortirait en silhouette unie. person.crop.circle.fill évoque
+          un avatar tout en restant natif. */}
       <NativeTabs.Trigger name="profile">
         <Label>{t('tabs.profile')}</Label>
-        <Icon sf="person.fill" />
+        <Icon sf="person.crop.circle.fill" />
       </NativeTabs.Trigger>
 
     </NativeTabs>

@@ -15,7 +15,7 @@ import { UserAvatar } from '../components/UserAvatar';
 import { apiRequest } from '../lib/api';
 import { getUserId } from '../lib/storage';
 
-const NEXA = '#128C7E';
+const NEXA = '#1E40AF';
 
 type Member = { userId: string; user: { id: string; name: string; photoUrl: string | null } };
 type Message = { content: string | null };
