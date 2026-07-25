@@ -14,6 +14,13 @@ export default function TabLayout() {
         <Icon sf="message.fill" />
       </NativeTabs.Trigger>
 
+      {/* Actus (stories + activité + communauté) — les stories vivent ici, plus
+          dans l'onglet Messages (comme l'onglet « Actus » de WhatsApp). */}
+      <NativeTabs.Trigger name="updates">
+        <Label>{t('tabs.updates')}</Label>
+        <Icon sf="sparkles" />
+      </NativeTabs.Trigger>
+
       {/* La route reste `search` (fichier search.tsx) — seul le libellé change. */}
       <NativeTabs.Trigger name="search">
         <Label>{t('tabs.contacts')}</Label>
