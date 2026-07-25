@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  TextInput,
+  ScrollView,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
@@ -17,7 +19,6 @@ import { getSocket } from '../../lib/socket';
 import { getUserId } from '../../lib/storage';
 import { requestContactsSegment } from '../../lib/tabsNav';
 import BottomSheet from '../../components/BottomSheet';
-import StoriesBar, { type StoriesBarHandle } from '../../components/StoriesBar';
 import { UserAvatar } from '../../components/UserAvatar';
 
 const NEXA = '#1E40AF';
@@ -56,6 +57,20 @@ const FAB_ACTIONS: {
 
 const FILTERS = ['all', 'unread', 'favorites', 'groups'] as const;
 type Filter = (typeof FILTERS)[number];
+
+// Résultat de recherche dans le contenu des messages (backend).
+type SearchMsg = {
+  id: string;
+  content: string | null;
+  createdAt: string;
+  conversationId: string;
+  conversation: {
+    type: 'direct' | 'group';
+    name: string | null;
+    members: { userId: string; user: { id: string; name: string; photoUrl: string | null } }[];
+  };
+};
+type FriendLite = { id: string; name: string; photoUrl: string | null };
 
 type Message = {
   id: string;
@@ -101,7 +116,12 @@ export default function ConversationsScreen() {
   const [fabOpen, setFabOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [actionTarget, setActionTarget] = useState<Conversation | null>(null);
-  const storiesRef = useRef<StoriesBarHandle>(null);
+  // Recherche (barre toujours visible)
+  const [query, setQuery] = useState('');
+  const [msgResults, setMsgResults] = useState<SearchMsg[]>([]);
+  const [friendResults, setFriendResults] = useState<FriendLite[]>([]);
+  const [searching, setSearching] = useState(false);
+  const searchReq = useRef(0);
   // L'écouteur socket est monté une seule fois : il lit l'id via une ref, pas via le state.
   const currentUserIdRef = useRef<string | null>(null);
 
@@ -212,6 +232,77 @@ export default function ConversationsScreen() {
     return true;
   });
 
+  // --- Recherche ---
+  const trimmed = query.trim();
+  const searchActive = trimmed.length > 0;
+
+  // Conversations : filtrées en local sur la liste déjà chargée (nom du contact/groupe).
+  const convMatches = searchActive
+    ? conversations.filter((c) => getConvName(c).toLowerCase().includes(trimmed.toLowerCase()))
+    : [];
+
+  // Messages + amis : côté serveur, débouncés (≥2 caractères).
+  useEffect(() => {
+    if (trimmed.length < 2) {
+      setMsgResults([]);
+      setFriendResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const id = ++searchReq.current;
+    const handle = setTimeout(async () => {
+      try {
+        const [msgs, friends] = await Promise.all([
+          apiRequest<SearchMsg[]>(`/conversations/search-messages?q=${encodeURIComponent(trimmed)}`),
+          apiRequest<FriendLite[]>(`/friends?q=${encodeURIComponent(trimmed)}`),
+        ]);
+        if (id !== searchReq.current) return; // réponse périmée (anti-race)
+        setMsgResults(msgs);
+        setFriendResults(friends);
+      } catch {
+        if (id === searchReq.current) {
+          setMsgResults([]);
+          setFriendResults([]);
+        }
+      } finally {
+        if (id === searchReq.current) setSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [trimmed]);
+
+  // Nom d'affichage d'une conversation issue d'un résultat de recherche.
+  const searchConvName = (conv: SearchMsg['conversation']) => {
+    if (conv.type === 'group') return conv.name ?? t('chat.group');
+    const other = conv.members.find((m) => m.userId !== currentUserId);
+    return other?.user.name ?? t('chat.unknown');
+  };
+  const searchConvAvatar = (conv: SearchMsg['conversation']) =>
+    conv.members.find((m) => m.userId !== currentUserId)?.user ?? null;
+
+  // Amis déjà présents dans une conversation directe → on ne les propose pas en « démarrer ».
+  const directPeerIds = new Set(
+    conversations
+      .filter((c) => c.type === 'direct')
+      .map((c) => c.members.find((m) => m.userId !== currentUserId)?.userId)
+      .filter(Boolean) as string[],
+  );
+  const friendMatches = friendResults.filter((f) => !directPeerIds.has(f.id));
+
+  const openFriendChat = async (friend: FriendLite) => {
+    try {
+      const conv = await apiRequest<{ id: string }>('/conversations/direct', {
+        method: 'POST',
+        body: { targetUserId: friend.id },
+      });
+      setQuery('');
+      router.push({ pathname: '/chat/[id]' as any, params: { id: conv.id, name: friend.name } });
+    } catch {
+      // silencieux
+    }
+  };
+
   // Mise à jour optimiste puis appel serveur : le toggle doit répondre à l'instant.
   const toggleFlag = async (conv: Conversation, flag: 'pinnedAt' | 'favoritedAt') => {
     const active = !!conv[flag];
@@ -265,10 +356,54 @@ export default function ConversationsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <View className="flex-row items-center justify-between px-4 py-3">
+      <View className="flex-row items-center justify-between px-4 py-4">
         <Text className="text-xl font-bold text-nexa">{t('messages')}</Text>
       </View>
 
+      {/* Barre de recherche — toujours visible. */}
+      <View className="px-4 pb-3">
+        <View className="flex-row items-center bg-gray-100 rounded-xl px-3">
+          <Ionicons name="search" size={18} color="#6B7280" />
+          <TextInput
+            className="flex-1 py-2.5 px-2 text-base"
+            placeholder={t('search.placeholder')}
+            placeholderTextColor="#6B7280"
+            value={query}
+            onChangeText={setQuery}
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {query.length > 0 && (
+            <TouchableOpacity onPress={() => setQuery('')}>
+              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {searchActive ? (
+        <SearchResults
+          searching={searching}
+          convMatches={convMatches}
+          msgResults={msgResults}
+          friendMatches={friendMatches}
+          getConvName={getConvName}
+          getOtherMember={getOtherMember}
+          searchConvName={searchConvName}
+          searchConvAvatar={searchConvAvatar}
+          formatDate={formatDate}
+          onOpenConv={openChat}
+          onOpenMessage={(m) =>
+            router.push({
+              pathname: '/chat/[id]' as any,
+              params: { id: m.conversationId, name: searchConvName(m.conversation) },
+            })
+          }
+          onOpenFriend={openFriendChat}
+          t={t}
+        />
+      ) : (
+      <>
       {/* Filtres façon WhatsApp. Le bouton « ajouter un filtre » reste à faire. */}
       <View className="flex-row px-4 pb-3">
         {FILTERS.map((f) => {
@@ -277,7 +412,7 @@ export default function ConversationsScreen() {
           return (
             <TouchableOpacity
               key={f}
-              className={`flex-row items-center rounded-full px-3.5 py-1.5 mr-2 ${
+              className={`flex-row items-center rounded-full px-4 py-2 mr-2 ${
                 active ? 'bg-nexa' : 'bg-gray-100'
               }`}
               onPress={() => setFilter(f)}
@@ -304,20 +439,19 @@ export default function ConversationsScreen() {
         keyExtractor={(item) => item.id}
         ListHeaderComponent={
           <>
-            {/* Les stories restent en tête de la liste non filtrée uniquement. */}
-            {filter === 'all' && <StoriesBar ref={storiesRef} />}
+            {/* Les stories ont migré vers l'onglet Actus (updates.tsx). */}
             {filter === 'all' && requestCount > 0 && (
               <TouchableOpacity
-                className="flex-row items-center px-4 py-3 border-b border-gray-100"
+                className="flex-row items-center px-4 py-3.5 border-b border-gray-100"
                 onPress={() => router.push('/requests' as any)}
               >
-                <View className="w-12 h-12 rounded-full bg-blue-50 items-center justify-center mr-3">
-                  <Ionicons name="mail-unread-outline" size={22} color={NEXA} />
+                <View className="w-14 h-14 rounded-full bg-blue-50 items-center justify-center mr-3.5">
+                  <Ionicons name="mail-unread-outline" size={26} color={NEXA} />
                 </View>
                 <Text className="flex-1 font-semibold text-gray-900">
                   {t('message_requests.title')}
                 </Text>
-                <View className="bg-red-500 rounded-full min-w-[22px] h-[22px] items-center justify-center px-1.5">
+                <View className="bg-red-500 rounded-full min-w-[24px] h-[24px] items-center justify-center px-1.5">
                   <Text className="text-white text-xs font-bold">{requestCount}</Text>
                 </View>
               </TouchableOpacity>
@@ -331,7 +465,6 @@ export default function ConversationsScreen() {
             onRefresh={() => {
               setRefreshing(true);
               fetchConversations();
-              storiesRef.current?.refresh();
             }}
           />
         }
@@ -347,34 +480,34 @@ export default function ConversationsScreen() {
           const other = getOtherMember(item);
           return (
             <TouchableOpacity
-              className="flex-row items-center px-4 py-3 border-b border-gray-50"
+              className="flex-row items-center px-4 py-3.5 border-b border-gray-50"
               onPress={() => openChat(item)}
               onLongPress={() => setActionTarget(item)}
               delayLongPress={300}
             >
               {item.type === 'group' ? (
-                <View className="w-12 h-12 rounded-full bg-blue-50 items-center justify-center">
-                  <Ionicons name="people" size={22} color={NEXA} />
+                <View className="w-14 h-14 rounded-full bg-blue-50 items-center justify-center">
+                  <Ionicons name="people" size={26} color={NEXA} />
                 </View>
               ) : (
-                <UserAvatar photoUrl={other?.user.photoUrl} name={other?.user.name} size={48} />
+                <UserAvatar photoUrl={other?.user.photoUrl} name={other?.user.name} size={56} />
               )}
 
-              <View className="flex-1 ml-3">
+              <View className="flex-1 ml-3.5">
                 <View className="flex-row items-center">
                   {item.pinnedAt && (
-                    <Ionicons name="pin" size={13} color="#9CA3AF" style={{ marginRight: 4 }} />
+                    <Ionicons name="pin" size={15} color="#9CA3AF" style={{ marginRight: 4 }} />
                   )}
                   <Text className="font-semibold text-gray-900 flex-shrink" numberOfLines={1}>
                     {getConvName(item)}
                   </Text>
                   {item.favoritedAt && (
-                    <Ionicons name="star" size={13} color="#F59E0B" style={{ marginLeft: 4 }} />
+                    <Ionicons name="star" size={15} color="#F59E0B" style={{ marginLeft: 4 }} />
                   )}
                   {isMuted(item) && (
                     <Ionicons
                       name="notifications-off"
-                      size={13}
+                      size={15}
                       color="#9CA3AF"
                       style={{ marginLeft: 4 }}
                     />
@@ -393,7 +526,7 @@ export default function ConversationsScreen() {
                   {formatDate(item.lastMessageAt)}
                 </Text>
                 {unread && (
-                  <View className="bg-nexa rounded-full min-w-[20px] h-[20px] items-center justify-center px-1.5 mt-1">
+                  <View className="bg-nexa rounded-full min-w-[24px] h-[24px] items-center justify-center px-1.5 mt-1">
                     <Text className="text-white text-xs font-bold">
                       {item.unreadCount > 99 ? '99+' : item.unreadCount}
                     </Text>
@@ -404,6 +537,8 @@ export default function ConversationsScreen() {
           );
         }}
       />
+      </>
+      )}
 
       {/* FAB « + » — remplace l'ancienne icône « nouveau groupe » du header. */}
       <TouchableOpacity
@@ -497,5 +632,142 @@ function ConvAction({
       </View>
       <Text className="text-base font-semibold text-gray-900">{label}</Text>
     </TouchableOpacity>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <Text className="text-xs font-semibold text-gray-400 uppercase px-4 pt-4 pb-1">{children}</Text>
+  );
+}
+
+function SearchResults({
+  searching,
+  convMatches,
+  msgResults,
+  friendMatches,
+  getConvName,
+  getOtherMember,
+  searchConvName,
+  searchConvAvatar,
+  formatDate,
+  onOpenConv,
+  onOpenMessage,
+  onOpenFriend,
+  t,
+}: {
+  searching: boolean;
+  convMatches: Conversation[];
+  msgResults: SearchMsg[];
+  friendMatches: FriendLite[];
+  getConvName: (c: Conversation) => string;
+  getOtherMember: (c: Conversation) => Conversation['members'][number] | undefined;
+  searchConvName: (c: SearchMsg['conversation']) => string;
+  searchConvAvatar: (c: SearchMsg['conversation']) => { name: string; photoUrl: string | null } | null;
+  formatDate: (iso: string) => string;
+  onOpenConv: (c: Conversation) => void;
+  onOpenMessage: (m: SearchMsg) => void;
+  onOpenFriend: (f: FriendLite) => void;
+  t: (k: string) => string;
+}) {
+  const nothing = convMatches.length === 0 && msgResults.length === 0 && friendMatches.length === 0;
+
+  return (
+    <ScrollView className="flex-1" keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      {/* Conversations (local) */}
+      {convMatches.length > 0 && (
+        <>
+          <SectionTitle>{t('search.conversations')}</SectionTitle>
+          {convMatches.map((c) => {
+            const other = getOtherMember(c);
+            return (
+              <TouchableOpacity
+                key={c.id}
+                className="flex-row items-center px-4 py-3 border-b border-gray-50"
+                onPress={() => onOpenConv(c)}
+              >
+                {c.type === 'group' ? (
+                  <View className="w-12 h-12 rounded-full bg-blue-50 items-center justify-center">
+                    <Ionicons name="people" size={22} color={NEXA} />
+                  </View>
+                ) : (
+                  <UserAvatar photoUrl={other?.user.photoUrl} name={other?.user.name} size={48} />
+                )}
+                <Text className="flex-1 ml-3 font-semibold text-gray-900" numberOfLines={1}>
+                  {getConvName(c)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </>
+      )}
+
+      {/* Messages (backend) */}
+      {msgResults.length > 0 && (
+        <>
+          <SectionTitle>{t('search.messages')}</SectionTitle>
+          {msgResults.map((m) => {
+            const avatar = m.conversation.type === 'group' ? null : searchConvAvatar(m.conversation);
+            return (
+              <TouchableOpacity
+                key={m.id}
+                className="flex-row items-center px-4 py-3 border-b border-gray-50"
+                onPress={() => onOpenMessage(m)}
+              >
+                {m.conversation.type === 'group' ? (
+                  <View className="w-12 h-12 rounded-full bg-blue-50 items-center justify-center">
+                    <Ionicons name="people" size={22} color={NEXA} />
+                  </View>
+                ) : (
+                  <UserAvatar photoUrl={avatar?.photoUrl} name={avatar?.name} size={48} />
+                )}
+                <View className="flex-1 ml-3">
+                  <Text className="font-semibold text-gray-900" numberOfLines={1}>
+                    {searchConvName(m.conversation)}
+                  </Text>
+                  <Text className="text-sm text-gray-500" numberOfLines={1}>
+                    {m.content}
+                  </Text>
+                </View>
+                <Text className="text-xs text-gray-400 ml-2">{formatDate(m.createdAt)}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </>
+      )}
+
+      {/* Amis — démarrer une discussion */}
+      {friendMatches.length > 0 && (
+        <>
+          <SectionTitle>{t('search.friends')}</SectionTitle>
+          {friendMatches.map((f) => (
+            <TouchableOpacity
+              key={f.id}
+              className="flex-row items-center px-4 py-3 border-b border-gray-50"
+              onPress={() => onOpenFriend(f)}
+            >
+              <UserAvatar photoUrl={f.photoUrl} name={f.name} size={48} />
+              <Text className="flex-1 ml-3 font-semibold text-gray-900" numberOfLines={1}>
+                {f.name}
+              </Text>
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color={NEXA} />
+            </TouchableOpacity>
+          ))}
+        </>
+      )}
+
+      {searching && nothing ? (
+        <View className="items-center mt-10">
+          <ActivityIndicator color={NEXA} />
+        </View>
+      ) : null}
+      {!searching && nothing ? (
+        <View className="items-center mt-16 px-10">
+          <Ionicons name="search-outline" size={44} color="#D1D5DB" />
+          <Text className="text-gray-400 text-center mt-3">{t('search.no_results')}</Text>
+        </View>
+      ) : null}
+      <View className="h-24" />
+    </ScrollView>
   );
 }

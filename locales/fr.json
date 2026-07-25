@@ -9,7 +9,13 @@
   "profile": "Profil",
   "settings": "Paramètres",
   "messages": "Messages",
-  "search": "Rechercher",
+  "search": {
+    "placeholder": "Rechercher",
+    "conversations": "Discussions",
+    "messages": "Messages",
+    "friends": "Contacts",
+    "no_results": "Aucun résultat"
+  },
   "saved": "Sauvegardés",
   "logout": "Se déconnecter",
   "save": "Enregistrer",
@@ -39,7 +45,8 @@
     "messages": "Messages",
     "calls": "Appels",
     "profile": "Vous",
-    "contacts": "Contacts"
+    "contacts": "Contacts",
+    "updates": "Actus"
   },
   "onboarding": {
     "welcome_title": "Bienvenue sur NEXA !",
@@ -337,5 +344,19 @@
   },
   "time": {
     "yesterday": "Hier"
+  },
+  "updates": {
+    "activity": "Activité",
+    "community": "Communauté"
+  },
+  "activity": {
+    "empty": "Rien de neuf pour le moment.",
+    "requests": "Demandes d'ami",
+    "suggestions": "Personnes que tu connais peut-être"
+  },
+  "community": {
+    "title": "Bientôt : ta communauté",
+    "description": "Points, classement et actus des commerces locaux arriveront prochainement.",
+    "badge": "En cours de développement"
   }
 }

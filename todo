@@ -18,3 +18,6 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 Dans les conversation mettre des messages automatique pour le chiffrement de bout en bout, quand une personne mets les chat en ephemere, etc.
 
 quand on ouvre une conversation on se retrouve tout en haut de la conversation (message le plus ancien) il faut que ce soit tout en bas
+
+[A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
+  → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.

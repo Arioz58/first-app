@@ -9,7 +9,13 @@
   "profile": "Profil",
   "settings": "Ayarlar",
   "messages": "Mesajlar",
-  "search": "Ara",
+  "search": {
+    "placeholder": "Ara",
+    "conversations": "Sohbetler",
+    "messages": "Mesajlar",
+    "friends": "Kişiler",
+    "no_results": "Sonuç yok"
+  },
   "saved": "Kaydedilenler",
   "logout": "Çıkış yap",
   "save": "Kaydet",
@@ -39,7 +45,8 @@
     "messages": "Mesajlar",
     "calls": "Aramalar",
     "profile": "Sen",
-    "contacts": "Kişiler"
+    "contacts": "Kişiler",
+    "updates": "Güncellemeler"
   },
   "onboarding": {
     "welcome_title": "NEXA'ya hoş geldiniz!",
@@ -337,5 +344,19 @@
   },
   "time": {
     "yesterday": "Dün"
+  },
+  "updates": {
+    "activity": "Aktivite",
+    "community": "Topluluk"
+  },
+  "activity": {
+    "empty": "Şimdilik yeni bir şey yok.",
+    "requests": "Arkadaşlık istekleri",
+    "suggestions": "Tanıyor olabileceğin kişiler"
+  },
+  "community": {
+    "title": "Yakında: topluluğun",
+    "description": "Puanlar, sıralama ve yerel işletme haberleri çok yakında.",
+    "badge": "Geliştiriliyor"
   }
 }

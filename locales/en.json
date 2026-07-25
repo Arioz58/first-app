@@ -9,7 +9,13 @@
   "profile": "Profile",
   "settings": "Settings",
   "messages": "Messages",
-  "search": "Search",
+  "search": {
+    "placeholder": "Search",
+    "conversations": "Chats",
+    "messages": "Messages",
+    "friends": "Contacts",
+    "no_results": "No results"
+  },
   "saved": "Saved",
   "logout": "Log out",
   "save": "Save",
@@ -39,7 +45,8 @@
     "messages": "Messages",
     "calls": "Calls",
     "profile": "You",
-    "contacts": "Contacts"
+    "contacts": "Contacts",
+    "updates": "Updates"
   },
   "onboarding": {
     "welcome_title": "Welcome to NEXA!",
@@ -337,5 +344,19 @@
   },
   "time": {
     "yesterday": "Yesterday"
+  },
+  "updates": {
+    "activity": "Activity",
+    "community": "Community"
+  },
+  "activity": {
+    "empty": "Nothing new right now.",
+    "requests": "Friend requests",
+    "suggestions": "People you may know"
+  },
+  "community": {
+    "title": "Coming soon: your community",
+    "description": "Points, leaderboard and local business news are on the way.",
+    "badge": "In development"
   }
 }

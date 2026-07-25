@@ -115,8 +115,9 @@ app/
 │   ├── login.tsx        # Saisie numéro + indicatif pays (CountryPicker, placeholder adaptatif via `Country.example`) — prénom + case consentement politique de confidentialité (lien PRIVACY_URL) si nouveau compte ; bouton désactivé tant que non coché
 │   └── verify.tsx       # Saisie OTP (6 champs individuels, auto-avance, coller) → JWT + socket + FCM ; renvoi du code après cooldown `RESEND_COOLDOWN` (45s, compte à rebours) ; si `isNew=1` → POST /users/me/privacy-consent (consentement + version PRIVACY_POLICY_VERSION)
 ├── (tabs)/
-│   ├── _layout.tsx      # NativeTabs (SF Symbols) — 4 onglets
-│   ├── index.tsx        # Liste conversations : filtres (Toutes/Non lues/Favoris/Groupes), avatars réels, horodatage, badge non-lus, épinglé/favori/muet, temps réel via `conversation_updated`, appui long → actions, FAB « + » ; StoriesBar en header (filtre « Toutes » uniquement)
+│   ├── _layout.tsx      # NativeTabs (SF Symbols) — 5 onglets : Messages · Actus (`sparkles`) · Contacts · Appels · Vous
+│   ├── index.tsx        # Liste conversations : **barre de recherche toujours visible** (résultats groupés Discussions [local] / Messages [GET /conversations/search-messages, débouncé] / Contacts [GET /friends?q=]), filtres (Toutes/Non lues/Favoris/Groupes), avatars réels, horodatage, badge non-lus, épinglé/favori/muet, temps réel via `conversation_updated`, appui long → actions, FAB « + ». ⚠️ Plus de StoriesBar ici (migrée vers Actus)
+│   ├── updates.tsx      # Onglet **Actus** : StoriesBar en tête (fixe) + 2 segments — **Activité** (demandes d'ami reçues + suggestions « personnes que tu connais peut-être ») et **Communauté** (coquille « en développement » : points/leaderboard/B2B au Mois 5)
 │   ├── search.tsx       # Onglet **« Contacts »** (fichier/route toujours `search`), segmenté « Recherche / Amis ». Recherche = par NUMÉRO (CountryPicker, debounce, carte → profil, cas limites, historique récent). Amis = `<FriendsPanel>` + pastille rouge des demandes en attente sur le segment. Ouverture sur un segment imposé via `consumeContactsSegment()`
 │   ├── saved.tsx        # Appels (à implémenter Mois 4)
 │   └── profile.tsx      # Profil (thème bleu nexa) : avatar+photo (upload S3 ; appui = Changer/Supprimer → PATCH photoUrl:null = retour à l'initiale), édition nom + bio (modale combinée, bio 140 car.), sélecteur de langue i18n (PATCH + persistance), statut consentement confidentialité, déconnexion → welcome
@@ -136,7 +137,7 @@ app/
     ├── [id].tsx         # Viewer stories (photo/vidéo, progress bar, pause au maintien, zoom, ordre chrono) — voir section Stories
     └── create.tsx       # Éditeur de story (photo/vidéo, textes stylables multiples, guides d'alignement, upload S3)
 components/
-├── StoriesBar.tsx       # Barre stories horizontale (style WhatsApp, useFocusEffect refresh)
+├── StoriesBar.tsx       # Barre stories horizontale (style WhatsApp, useFocusEffect refresh) — montée en tête de l'onglet **Actus** (`updates.tsx`), plus dans Messages
 ├── StoryBackground.tsx  # Fond de story texte (uni / dégradé via expo-linear-gradient)
 ├── StoryCamera.tsx      # Caméra in-app (photo tap / vidéo maintien, flash, switch)
 ├── VideoTrimmer.tsx     # Rognage vidéo : preview + timeline à miniatures (trim headless)
@@ -217,6 +218,7 @@ DELETE /friends/requests/:id                      → annuler sa demande (émett
 GET  /friends/requests/received                   → demandes reçues en attente (+ createdAt)
 GET  /friends/requests/sent                       → demandes envoyées en attente
 GET  /friends?q=                                  → mes amis (recherche par nom optionnelle)
+GET  /friends/suggestions                         → « personnes que tu connais peut-être » : amis d'amis non-amis, exclut soi/amis/bloqués/demandes en cours, triés par nb d'amis en commun (→ id/name/photoUrl/mutualFriendsCount)
 DELETE /friends/:userId                           → retirer un ami
 
 GET  /blocks                                      → mes utilisateurs bloqués
@@ -233,6 +235,7 @@ POST /conversations/direct                        → créer/récupérer conv di
 POST /conversations/group                         → créer groupe (admin = créateur)
 GET  /conversations                               → liste convs ACCEPTÉES (member.accepted=true), **triée épinglées d'abord puis par date du dernier message**, enrichie par membre : `unreadCount`, `pinnedAt`, `favoritedAt`, `mutedUntil`, `lastMessageAt`
 GET  /conversations/requests                      → demandes de messages reçues (member.accepted=false, ≥1 message)
+GET  /conversations/search-messages?q=            → recherche plein-texte dans le contenu des messages de MES conversations acceptées (exclut éphémères expirés, ≥2 car., max 40) → message + conversation (type/name/members ciblés)
 POST /conversations/:id/accept-request            → accepter une demande (rejoint les convs normales)
 DELETE /conversations/:id/request                 → refuser/supprimer une demande
 GET  /conversations/:id                           → métadonnées d'une conv (type, name, members, ephemeralDuration, myMutedUntil, myFavoritedAt)
