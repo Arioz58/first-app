@@ -303,5 +303,31 @@
   "new_chat": {
     "title": "Nouvelle conversation",
     "no_results": "Aucun résultat"
+  },
+  "filters": {
+    "all": "Toutes",
+    "unread": "Non lues",
+    "favorites": "Favoris",
+    "groups": "Groupes",
+    "empty_unread": "Aucune conversation non lue",
+    "empty_favorites": "Aucune conversation en favori",
+    "empty_groups": "Aucun groupe"
+  },
+  "conv_actions": {
+    "pin": "Épingler",
+    "unpin": "Désépingler",
+    "favorite": "Ajouter aux favoris",
+    "unfavorite": "Retirer des favoris",
+    "mark_read": "Marquer comme lu"
+  },
+  "preview": {
+    "image": "📷 Photo",
+    "video": "🎥 Vidéo",
+    "audio": "🎤 Message vocal",
+    "document": "📄 Document",
+    "gif": "GIF"
+  },
+  "time": {
+    "yesterday": "Hier"
   }
 }

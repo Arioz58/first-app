@@ -303,5 +303,31 @@
   "new_chat": {
     "title": "New chat",
     "no_results": "No results"
+  },
+  "filters": {
+    "all": "All",
+    "unread": "Unread",
+    "favorites": "Favourites",
+    "groups": "Groups",
+    "empty_unread": "No unread conversations",
+    "empty_favorites": "No favourite conversations",
+    "empty_groups": "No groups"
+  },
+  "conv_actions": {
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "favorite": "Add to favourites",
+    "unfavorite": "Remove from favourites",
+    "mark_read": "Mark as read"
+  },
+  "preview": {
+    "image": "📷 Photo",
+    "video": "🎥 Video",
+    "audio": "🎤 Voice message",
+    "document": "📄 Document",
+    "gif": "GIF"
+  },
+  "time": {
+    "yesterday": "Yesterday"
   }
 }

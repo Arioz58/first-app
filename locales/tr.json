@@ -303,5 +303,31 @@
   "new_chat": {
     "title": "Yeni sohbet",
     "no_results": "Sonuç bulunamadı"
+  },
+  "filters": {
+    "all": "Tümü",
+    "unread": "Okunmamış",
+    "favorites": "Favoriler",
+    "groups": "Gruplar",
+    "empty_unread": "Okunmamış sohbet yok",
+    "empty_favorites": "Favori sohbet yok",
+    "empty_groups": "Grup yok"
+  },
+  "conv_actions": {
+    "pin": "Sabitle",
+    "unpin": "Sabitlemeyi kaldır",
+    "favorite": "Favorilere ekle",
+    "unfavorite": "Favorilerden çıkar",
+    "mark_read": "Okundu olarak işaretle"
+  },
+  "preview": {
+    "image": "📷 Fotoğraf",
+    "video": "🎥 Video",
+    "audio": "🎤 Sesli mesaj",
+    "document": "📄 Belge",
+    "gif": "GIF"
+  },
+  "time": {
+    "yesterday": "Dün"
   }
 }

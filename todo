@@ -9,10 +9,11 @@ Utiliser un nom d'onglet plus pertinant pour "rechercher" et idem on pour l'icon
 Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir fermer tous les clavier qui s'ouvre en appuyant dans le vide dans l'app de maniere general) [fait le 23/07]
   → badge natif possible (Badge d'expo-router), affiche le nombre car le point muet est Android-only ; onglet renommé "Contacts" (person.2.fill) ; FAB "+" -> nouvelle conv / nouveau groupe / ajouter un contact ; nouvel ecran chat/new.tsx
 
-Page Messages : Faire un prompte qui explique que je souhaite une page qui se mets a jour tout seule sans rafraichir, que la conv avec le message le plus recents soit le plus haut, qu'on puisse epingler une conversation, et des choses au quelle je n'ai peut etre pas penser
+[FAIT 25/07] Page Messages : Faire un prompte qui explique que je souhaite une page qui se mets a jour tout seule sans rafraichir, que la conv avec le message le plus recents soit le plus haut, qu'on puisse epingler une conversation, et des choses au quelle je n'ai peut etre pas penser
+  → temps reel via conversation_updated (room user:) ; tri epingle puis dernier message ; non-lus via lastReadAt ; filtres Toutes/Non lues/Favoris/Groupes ; favoris de conversation ; avatars/horodatage/apercu media/icone muet. Reste: bouton "ajouter un filtre" perso. Fuite tel/token FCM dans GET /conversations corrigee.
 
 [FAIT 24/07] Dans les story affiché uniquement les story de ses amis.
 
-Dans les conversation mettre des messages automatique pour le chiffrement de bout en bout, quand une personne mes les chat en ephemere, etc.
+Dans les conversation mettre des messages automatique pour le chiffrement de bout en bout, quand une personne mets les chat en ephemere, etc.
 
 quand on ouvre une conversation on se retrouve tout en haut de la conversation (message le plus ancien) il faut que ce soit tout en bas

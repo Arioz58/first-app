@@ -216,12 +216,20 @@ export default function ChatScreen() {
         const history = await apiRequest<Message[]>(`/conversations/${id}/messages`);
         setMessages(history.reverse());
 
+        // La conversation est ouverte : tout ce qui précède est lu.
+        apiRequest(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
+
         const socket = await connectSocket();
         socket.emit('join_conversation', id);
 
         socket.on('new_message', (msg: Message) => {
           if (msg.conversationId === id || !msg.conversationId) {
             setMessages((prev) => [...prev, msg]);
+            // Message reçu alors qu'on lit la conversation → lu immédiatement,
+            // sinon il ressortirait comme non lu au retour sur la liste.
+            if (msg.sender?.id !== me.id) {
+              apiRequest(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
+            }
             // On ne ré-aimante en bas que si on y était déjà, ou si c'est notre propre message
             // (sinon on interromprait la lecture de l'historique).
             if (atBottomRef.current || msg.sender?.id === me.id) {

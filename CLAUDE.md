@@ -114,7 +114,7 @@ app/
 │   └── verify.tsx       # Saisie OTP (6 champs individuels, auto-avance, coller) → JWT + socket + FCM ; renvoi du code après cooldown `RESEND_COOLDOWN` (45s, compte à rebours) ; si `isNew=1` → POST /users/me/privacy-consent (consentement + version PRIVACY_POLICY_VERSION)
 ├── (tabs)/
 │   ├── _layout.tsx      # NativeTabs (SF Symbols) — 4 onglets
-│   ├── index.tsx        # Liste conversations + StoriesBar en header
+│   ├── index.tsx        # Liste conversations : filtres (Toutes/Non lues/Favoris/Groupes), avatars réels, horodatage, badge non-lus, épinglé/favori/muet, temps réel via `conversation_updated`, appui long → actions, FAB « + » ; StoriesBar en header (filtre « Toutes » uniquement)
 │   ├── search.tsx       # Onglet **« Contacts »** (fichier/route toujours `search`), segmenté « Recherche / Amis ». Recherche = par NUMÉRO (CountryPicker, debounce, carte → profil, cas limites, historique récent). Amis = `<FriendsPanel>` + pastille rouge des demandes en attente sur le segment. Ouverture sur un segment imposé via `consumeContactsSegment()`
 │   ├── saved.tsx        # Appels (à implémenter Mois 4)
 │   └── profile.tsx      # Profil (thème vert nexa) : avatar+photo (upload S3 ; appui = Changer/Supprimer → PATCH photoUrl:null = retour à l'initiale), édition nom + bio (modale combinée, bio 140 car.), sélecteur de langue i18n (PATCH + persistance), statut consentement confidentialité, déconnexion → welcome
@@ -228,12 +228,15 @@ POST /users/me/fcm-token                          → enregistrer/mettre à jour
 
 POST /conversations/direct                        → créer/récupérer conv directe (refus si bloqué ou privacyMessages l'interdit ; non-ami avec privacyMessages=everyone → conv en « demande » pour la cible)
 POST /conversations/group                         → créer groupe (admin = créateur)
-GET  /conversations                               → liste convs ACCEPTÉES de l'user (member.accepted=true)
+GET  /conversations                               → liste convs ACCEPTÉES (member.accepted=true), **triée épinglées d'abord puis par date du dernier message**, enrichie par membre : `unreadCount`, `pinnedAt`, `favoritedAt`, `mutedUntil`, `lastMessageAt`
 GET  /conversations/requests                      → demandes de messages reçues (member.accepted=false, ≥1 message)
 POST /conversations/:id/accept-request            → accepter une demande (rejoint les convs normales)
 DELETE /conversations/:id/request                 → refuser/supprimer une demande
 GET  /conversations/:id                           → métadonnées d'une conv (type, name, members, ephemeralDuration, myMutedUntil)
 GET  /conversations/:id/messages                  → historique paginé (cursor-based, 30/page)
+POST /conversations/:id/read                      → marquer la conv comme lue (`ConversationMember.lastReadAt = now`)
+PATCH /conversations/:id/pin                      → épingler/désépingler la conv pour MOI `{ pinned: bool }`
+PATCH /conversations/:id/favorite                 → mettre/retirer la conv des favoris pour MOI `{ favorite: bool }`
 PATCH /conversations/:id/mute                     → couper/réactiver mes notifications `{ mutedUntil }` (null = actives ; date lointaine = « toujours »)
 PATCH /conversations/:id/ephemeral                → durée des messages éphémères `{ duration }` en secondes (null = désactivé) — s'applique à toute la conv
 GET  /conversations/:id/pins                      → messages épinglés (niveau conversation, visibles par tous les membres)
@@ -269,6 +272,7 @@ leave_conversation(conversationId)
 // Serveur → Client
 new_message(message)                              → refus si blocage (conv directe) ; pièces jointes + `hasLink` (détection d'URL) + `expiresAt` si la conv est en éphémère ; + FCM push aux destinataires offline **acceptés** (pas de push aux membres en « demande » accepted=false → badge uniquement, ni aux membres ayant coupé les notifs `mutedUntil` dans le futur)
 peer_typing({ conversationId, userId, typing })   → le correspondant écrit (masquage auto après 5 s côté app)
+conversation_updated({ conversationId, message }) → **room `user:<id>`** (≠ `new_message` qui part dans `conv:<id>`) : met à jour la LISTE des conversations même si la conv n'a jamais été ouverte dans la session. Payload allégé volontairement (l'objet `message` complet embarque `sender` avec téléphone + token FCM). Émis à tous les membres, **émetteur inclus** (ses autres appareils)
 presence_update({ userId, online, lastSeenAt })   → connexion/déconnexion d'un contact (gating `privacyLastSeen` appliqué serveur)
 members_added({ conversationId, memberIds })      → + FCM push aux nouveaux membres
 member_removed({ conversationId, userId })        → + FCM push au membre expulsé
@@ -411,6 +415,18 @@ Principe transverse : **ce qui est cosmétique et personnel reste local** (Secur
 
 ---
 
+## Liste de conversations (page Messages) ✅
+
+Migration `conversation_list` : `ConversationMember.lastReadAt` / `pinnedAt` / `favoritedAt` (tout est **par membre**, donc personnel — épingler une conv ne l'épingle pas chez l'autre).
+
+- **Tri** : épinglées d'abord (la plus récemment épinglée en tête), puis par date du **dernier message**. Avant, `getUserConversations` triait par `conversation.createdAt` — la date de *création de la conversation*, jamais mise à jour. Le tri est fait **en mémoire** : il combine une relation (dernier message) et des colonnes du membre, ce que Prisma ne sait pas exprimer en un `orderBy`. La même fonction `sortConversations` est rejouée côté client après chaque event socket.
+- **Non-lus** : `lastReadAt` par membre + `COUNT` des messages postérieurs dont je ne suis pas l'auteur. Choisi contre un compteur incrémental, qui dérive dès qu'un event est manqué (crash, offline, éphémère purgé) sans moyen de se resynchroniser. Coût : un COUNT par conversation à chaque chargement de liste (en parallèle) — à surveiller si le nombre de conversations grossit.
+- **Marquage lu** : `POST /:id/read` à l'ouverture du chat **et** à chaque message reçu pendant qu'on y est (sinon il ressortirait non lu au retour sur la liste).
+- **Temps réel** : event `conversation_updated` sur la room `user:<id>` (voir section Socket.io). L'écran écoute **cet event et pas `new_message`** — écouter les deux double-compterait les non-lus des conversations ouvertes.
+- **Filtres** : Toutes / Non lues (avec compteur) / Favoris / Groupes, purement côté client sur la liste déjà chargée. La StoriesBar et la bannière de demandes ne s'affichent que sur « Toutes ». ⏳ **Reste à faire** : filtres personnalisés (bouton « + » façon WhatsApp), volontairement hors périmètre.
+- **Actions** : appui long sur une conversation → `BottomSheet` (épingler, favori, marquer comme lu). Mise à jour **optimiste** puis appel serveur ; en cas d'échec, refetch — le serveur fait foi.
+- ⚠️ `getUserConversations` renvoyait `members: { include: { user: true } }`, donc **le numéro de téléphone et le token FCM de tous les participants**. Remplacé par un `select` ciblé (`id`, `name`, `photoUrl`) — ne pas réintroduire `user: true` ici.
+
 ## Navigation : onglets, badges, FAB ✅
 
 - **Onglet « Contacts »** (`tabs.contacts`, SF Symbol `person.2.fill`). ⚠️ La **route reste `search`** (`app/(tabs)/search.tsx`) — seul le libellé a changé ; ne pas renommer le fichier sans mettre à jour `NativeTabs.Trigger name="search"` et tous les `router.navigate('/(tabs)/search')`.
@@ -501,9 +517,11 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 - **`lib/config.ts`** contient aussi `PRIVACY_URL` / `PRIVACY_POLICY_VERSION` (⚠️ URL placeholder) et `GIPHY_API_KEY` (⚠️ clé en dur, à sortir avant la prod).
 - **URL backend** : centralisée dans `lib/config.ts` (`BASE_URL = __DEV__ ? LOCAL_URL : CLOUD_URL`). En dev (Metro) → backend **local** (mettre à jour `LOCAL_URL` à chaque changement de réseau Wi-Fi) ; en build release/EAS → backend **Railway** (`CLOUD_URL`). `api.ts` et `socket.ts` importent `BASE_URL` depuis `config.ts`.
 - **Native tabs** : import depuis `expo-router/unstable-native-tabs` — API peut changer (alpha).
-- **Bundle ID iOS** : `com.berke.firstapp` (changé de `org.name.firstapp` pour signing perso).
+- **Bundle ID iOS** : `com.berke.nexa2` (rebranding Nexa ; historique `org.name.firstapp` → `com.berke.firstapp` → `com.berke.nexa2`).
+- **Signing iPhone physique** : `npx expo run:ios --device` échoue sur un bundle neuf (`No profiles for '…' were found`) car il ne passe pas `-allowProvisioningUpdates` à `xcodebuild`, seul moyen de faire créer l'App ID + le profil. Solution **une fois par bundle**, sans passer par Xcode : `xcodebuild -workspace ios/firstapp.xcworkspace -scheme firstapp -configuration Debug -destination "id=<UDID>" -allowProvisioningUpdates build`. ⚠️ L'iPhone doit être **branché, déverrouillé et écran allumé** pendant toute la commande, sinon elle échoue sur `Development services need to be enabled` / `Timed out waiting for all destinations` — un message trompeur qui ne parle pas de signature, et `xcodebuild` **sort alors en code 0** malgré l'échec.
 - **Icône iOS 26 (Liquid Glass)** : bundle **Icon Composer** `assets/images/Nexa-icon-comp.icon` référencé via `ios.icon` dans `app.json` (supporté SDK 54+). Fallback auto sur iOS ancien ; `icon.png` racine = Android + base. Modif **native** → rebuild EAS requis ; bien **committer le `.icon`** avant le build.
 - **expo-video** : module natif (plugin config) — après son install, **rebuild requis** (`npx expo run:ios`), un reload Metro ne suffit pas.
 - **Stories texts** : colonne `Json` côté backend → ajouter un champ de style ne nécessite **aucune migration** ni changement backend (passe par `lib/storyText.ts` côté app).
 - **Réglages locaux de conversation** (fond, surnom, couleur de bulle, « effacer ») : stockés en **SecureStore**, donc **aucun backend** — ne pas chercher d'endpoint côté serveur pour ces réglages.
-- **Migrations chat** : `phase_c_mute_ephemeral_pin_star` (mute, éphémères, `PinnedMessage`, `StarredMessage`) et `phase_d_message_media` (`mediaUrl`/`mediaType`/`fileName`/`fileSize`/`mimeType`/`durationMs`/`hasLink`).
+- **Migrations chat** : `phase_c_mute_ephemeral_pin_star` (mute, éphémères, `PinnedMessage`, `StarredMessage`), `phase_d_message_media` (`mediaUrl`/`mediaType`/`fileName`/`fileSize`/`mimeType`/`durationMs`/`hasLink`) et `conversation_list` (`lastReadAt`/`pinnedAt`/`favoritedAt` sur `ConversationMember`).
+- ⚠️ **Ne pas confondre** : `PinnedMessage`/`StarredMessage` = un **message** épinglé/favori dans une conversation (Phase C) ; `ConversationMember.pinnedAt`/`favoritedAt` = la **conversation entière** épinglée/favorite dans la liste. Endpoints voisins mais distincts (`/messages/:msgId/pin` vs `/:id/pin`).
