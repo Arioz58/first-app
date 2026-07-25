@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -30,6 +31,7 @@ import type { ChatWallpaper } from '../../lib/chatWallpapers';
 import {
   getChatWallpaper,
   getConversationCustomization,
+  getUserId,
   setChatWallpaper,
   setConversationClearedAt,
   setConversationCustomization,
@@ -38,6 +40,15 @@ import {
 
 const NEXA = '#128C7E';
 const MUTE_FOREVER = new Date('2999-12-31T00:00:00Z');
+
+// Ombre douce partagée des cartes (iOS + Android).
+const CARD_SHADOW = {
+  shadowColor: '#000',
+  shadowOpacity: 0.05,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 2,
+};
 
 type RelationStatus = 'self' | 'friends' | 'request_sent' | 'request_received' | 'none';
 
@@ -48,6 +59,7 @@ type ProfileData = {
   bio: string | null;
   phone: string | null;
   lastSeenAt: string | null;
+  online: boolean;
   mutualFriendsCount: number;
   relationStatus: RelationStatus;
   requestId: string | null;
@@ -75,6 +87,20 @@ type MediaCounts = {
   links: number;
 };
 
+// Groupe où je suis admin et où le contact n'est pas encore membre.
+type AdminGroup = { id: string; name: string; memberCount: number };
+
+type MiniUser = { id: string; name: string; photoUrl: string | null };
+
+// Membre tel que renvoyé par GET /conversations (select ciblé côté serveur).
+type ConvMember = { userId: string; role: string };
+type ConvListItem = {
+  id: string;
+  type: 'direct' | 'group';
+  name: string | null;
+  members: ConvMember[];
+};
+
 export default function ConversationDetailsScreen() {
   const router = useRouter();
   const { t } = useTranslation();
@@ -97,9 +123,21 @@ export default function ConversationDetailsScreen() {
   const [nicknameDraft, setNicknameDraft] = useState('');
   const [photoViewer, setPhotoViewer] = useState(false);
 
+  // Ajout à un groupe existant (gated ami)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [addGroupOpen, setAddGroupOpen] = useState(false);
+  const [adminGroups, setAdminGroups] = useState<AdminGroup[] | null>(null);
+  const [addingTo, setAddingTo] = useState<string | null>(null);
+
+  // Amis en commun (aperçu avatars + liste au tap)
+  const [mutualPreview, setMutualPreview] = useState<MiniUser[]>([]);
+  const [mutualOpen, setMutualOpen] = useState(false);
+  const [mutualList, setMutualList] = useState<MiniUser[] | null>(null);
+
   // Phase C — mute / éphémère / épinglés / favoris
   const [ephemeralDuration, setEphemeralDuration] = useState<number | null>(null);
   const [mutedUntil, setMutedUntil] = useState<string | null>(null);
+  const [favoritedAt, setFavoritedAt] = useState<string | null>(null);
   const [pins, setPins] = useState<PinnedMsg[]>([]);
   const [starred, setStarred] = useState<PinnedMsg[]>([]);
   const [mediaCounts, setMediaCounts] = useState<MediaCounts>({
@@ -132,12 +170,15 @@ export default function ConversationDetailsScreen() {
   }, [userId]);
 
   const loadConvData = useCallback(() => {
-    apiRequest<{ ephemeralDuration: number | null; myMutedUntil: string | null }>(
-      `/conversations/${conversationId}`,
-    )
+    apiRequest<{
+      ephemeralDuration: number | null;
+      myMutedUntil: string | null;
+      myFavoritedAt: string | null;
+    }>(`/conversations/${conversationId}`)
       .then((c) => {
         setEphemeralDuration(c.ephemeralDuration);
         setMutedUntil(c.myMutedUntil);
+        setFavoritedAt(c.myFavoritedAt);
       })
       .catch(() => {});
     apiRequest<PinnedMsg[]>(`/conversations/${conversationId}/pins`).then(setPins).catch(() => {});
@@ -156,13 +197,72 @@ export default function ConversationDetailsScreen() {
     });
   };
 
+  // --- Actions de groupe (gated ami) ---
+  const createGroupWith = () =>
+    router.push({
+      pathname: '/group/new' as any,
+      params: { prefillId: userId, prefillName: data?.name ?? name, prefillPhoto: data?.photoUrl ?? '' },
+    });
+
+  // Mes groupes où je suis admin ET où le contact n'est pas déjà membre.
+  // Filtré côté client depuis GET /conversations — pas d'endpoint dédié.
+  const openAddToGroup = async () => {
+    setAddGroupOpen(true);
+    if (adminGroups) return; // déjà chargé
+    try {
+      const convs = await apiRequest<ConvListItem[]>('/conversations');
+      const groups = convs
+        .filter((c) => c.type === 'group')
+        .filter((c) => {
+          const iAmAdmin = c.members.some(
+            (m) => m.userId === currentUserId && m.role === 'admin',
+          );
+          const contactAlreadyIn = c.members.some((m) => m.userId === userId);
+          return iAmAdmin && !contactAlreadyIn;
+        })
+        .map((c) => ({ id: c.id, name: c.name ?? '', memberCount: c.members.length }));
+      setAdminGroups(groups);
+    } catch {
+      setAdminGroups([]);
+    }
+  };
+
+  const addToGroup = async (group: AdminGroup) => {
+    setAddingTo(group.id);
+    try {
+      await apiRequest(`/conversations/${group.id}/members`, {
+        method: 'POST',
+        body: { memberIds: [userId] },
+      });
+      setAdminGroups((prev) => (prev ? prev.filter((g) => g.id !== group.id) : prev));
+      Alert.alert('', t('details.added_to_group', { group: group.name }));
+    } catch (e: any) {
+      Alert.alert(t('error'), e.message);
+    } finally {
+      setAddingTo(null);
+    }
+  };
+
+  // Aperçu des amis en commun (avatars) — la liste complète est chargée au tap.
+  const loadMutualPreview = useCallback(() => {
+    if (!userId) return;
+    apiRequest<MiniUser[]>(`/users/${userId}/mutual-friends`)
+      .then((list) => {
+        setMutualPreview(list.slice(0, 3));
+        setMutualList(list); // déjà complet : évite un 2e appel à l'ouverture
+      })
+      .catch(() => {});
+  }, [userId]);
+
   useEffect(() => {
     if (userId) load();
     else setLoading(false);
+    getUserId().then(setCurrentUserId);
     getConversationCustomization(conversationId).then(setCustom);
     getChatWallpaper(conversationId).then(setWallpaper);
     loadConvData();
-  }, [load, userId, conversationId, loadConvData]);
+    loadMutualPreview();
+  }, [load, userId, conversationId, loadConvData, loadMutualPreview]);
 
   const displayName = custom.nickname || data?.name || name || '';
   const isMuted = !!mutedUntil && new Date(mutedUntil) > new Date();
@@ -200,6 +300,17 @@ export default function ConversationDetailsScreen() {
       ...(isMuted ? [{ text: t('mute.unmute'), onPress: () => applyMute(null) }] : []),
       { text: t('cancel'), style: 'cancel' as const },
     ]);
+  };
+
+  // --- Favori (conversation entière, par membre — même endpoint que la liste) ---
+  const isFavorite = !!favoritedAt;
+  const toggleFavorite = () => {
+    const next = isFavorite ? null : new Date().toISOString();
+    setFavoritedAt(next); // optimiste
+    apiRequest(`/conversations/${conversationId}/favorite`, {
+      method: 'PATCH',
+      body: { favorite: !isFavorite },
+    }).catch(() => setFavoritedAt(favoritedAt)); // rollback
   };
 
   // --- Messages éphémères ---
@@ -303,50 +414,93 @@ export default function ConversationDetailsScreen() {
         <DetailsSkeleton />
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-          {/* 2.1 Bloc profil */}
-          <View className="items-center bg-white pt-8 pb-6 px-6">
-            <TouchableOpacity
-              disabled={!data?.photoUrl}
-              onPress={() => setPhotoViewer(true)}
-              activeOpacity={0.9}
-            >
-              <UserAvatar photoUrl={data?.photoUrl ?? null} name={displayName} size={104} />
-            </TouchableOpacity>
-            <Text className="text-2xl font-bold text-gray-900 mt-4">{displayName}</Text>
-            {custom.nickname ? (
-              <Text className="text-gray-400 text-sm mt-0.5">{data?.name ?? name}</Text>
-            ) : null}
-
-            {data && !data.isSelf ? <RelationBadge status={data.relationStatus} t={t} /> : null}
-
-            {data?.bio ? (
-              <Text className="text-gray-600 text-center mt-3">{data.bio}</Text>
-            ) : null}
-            {data?.phone ? (
-              <Text className="text-gray-500 mt-2">{data.phone}</Text>
-            ) : null}
-            {data?.lastSeenAt ? (
-              <Text className="text-gray-400 text-xs mt-1">
-                {t('details.last_seen', { value: formatLastSeen(data.lastSeenAt) })}
-              </Text>
-            ) : null}
-            {data && data.mutualFriendsCount > 0 ? (
-              <TouchableOpacity onPress={comingSoon} className="mt-2">
-                <Text className="text-nexa text-sm">
-                  {t(
-                    data.mutualFriendsCount === 1
-                      ? 'profile_view.mutual_one'
-                      : 'profile_view.mutual_other',
-                    { count: data.mutualFriendsCount },
-                  )}
-                </Text>
+          {/* 2.1 Bloc profil — bannière dégradée + avatar en débord */}
+          <View className="bg-white rounded-2xl mx-4 mt-3 overflow-hidden" style={CARD_SHADOW}>
+            <LinearGradient
+              colors={['#17A793', '#0E7A6C']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ height: 76 }}
+            />
+            <View className="items-center -mt-11 pb-6 px-6">
+              <TouchableOpacity
+                disabled={!data?.photoUrl}
+                onPress={() => setPhotoViewer(true)}
+                activeOpacity={0.9}
+              >
+                {/* Anneau blanc + point de présence */}
+                <View className="rounded-full bg-white p-1">
+                  <UserAvatar photoUrl={data?.photoUrl ?? null} name={displayName} size={96} />
+                </View>
+                {data && !data.isSelf && data.online ? (
+                  <View
+                    className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-green-500 border-2 border-white"
+                  />
+                ) : null}
               </TouchableOpacity>
-            ) : null}
+
+              <Text className="text-2xl font-bold text-gray-900 mt-3">{displayName}</Text>
+              {custom.nickname ? (
+                <Text className="text-gray-400 text-sm mt-0.5">{data?.name ?? name}</Text>
+              ) : null}
+
+              {data && !data.isSelf ? <RelationBadge status={data.relationStatus} t={t} /> : null}
+
+              {data?.bio ? (
+                <Text className="text-gray-600 text-center mt-3">{data.bio}</Text>
+              ) : null}
+              {data?.phone ? (
+                <View className="flex-row items-center mt-2">
+                  <Ionicons name="call-outline" size={13} color="#9CA3AF" />
+                  <Text className="text-gray-500 ml-1.5">{data.phone}</Text>
+                </View>
+              ) : null}
+              {data && !data.isSelf && !data.online && data.lastSeenAt ? (
+                <Text className="text-gray-400 text-xs mt-1">
+                  {t('details.last_seen', { value: formatLastSeen(data.lastSeenAt) })}
+                </Text>
+              ) : null}
+              {data && data.mutualFriendsCount > 0 ? (
+                <TouchableOpacity
+                  onPress={() => setMutualOpen(true)}
+                  className="flex-row items-center mt-3 bg-emerald-50 rounded-full pl-1.5 pr-3 py-1"
+                >
+                  {/* Avatars empilés des amis en commun */}
+                  {mutualPreview.length > 0 ? (
+                    <View className="flex-row mr-1.5">
+                      {mutualPreview.map((f, i) => (
+                        <View
+                          key={f.id}
+                          style={{ marginLeft: i === 0 ? 0 : -8 }}
+                          className="rounded-full border border-emerald-50"
+                        >
+                          <UserAvatar photoUrl={f.photoUrl} name={f.name} size={20} />
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Ionicons name="people" size={13} color={NEXA} style={{ marginRight: 6 }} />
+                  )}
+                  <Text className="text-nexa text-xs font-medium">
+                    {t(
+                      data.mutualFriendsCount === 1
+                        ? 'profile_view.mutual_one'
+                        : 'profile_view.mutual_other',
+                      { count: data.mutualFriendsCount },
+                    )}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={12} color={NEXA} style={{ marginLeft: 2 }} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
 
-          {/* 2.2 Actions rapides */}
+          {/* 2.2 Actions rapides — tuiles */}
           {data && !data.isSelf ? (
-            <View className="flex-row justify-around bg-white mt-3 py-4">
+            <View
+              className="flex-row justify-around bg-white rounded-2xl mx-4 mt-3 py-4"
+              style={CARD_SHADOW}
+            >
               <QuickAction
                 icon="call"
                 label={t('details.call_audio')}
@@ -364,8 +518,15 @@ export default function ConversationDetailsScreen() {
                 }
               />
               <QuickAction
+                icon={isFavorite ? 'star' : 'star-outline'}
+                label={t('details.favorite')}
+                active={isFavorite}
+                onPress={toggleFavorite}
+              />
+              <QuickAction
                 icon={isMuted ? 'notifications-off' : 'notifications-outline'}
                 label={t('details.mute')}
+                active={isMuted}
                 onPress={muteMenu}
               />
               <QuickAction icon="search" label={t('details.search')} onPress={comingSoon} />
@@ -403,30 +564,57 @@ export default function ConversationDetailsScreen() {
             />
           </Section>
 
-          {/* 2.4 Médias, liens et documents */}
-          <Section title={t('details.media')}>
-            {(
-              [
-                ['images', 'section_media', 'media', mediaCounts.images + mediaCounts.videos],
-                ['link', 'section_links', 'links', mediaCounts.links],
-                ['document-text', 'section_docs', 'documents', mediaCounts.documents],
-                ['musical-notes', 'section_audio', 'audio', mediaCounts.audio],
-                ['happy', 'section_gifs', 'gifs', mediaCounts.gifs],
-              ] as const
-            ).map(([icon, key, category, count]) => (
+          {/* 2.35 Groupes — gated ami */}
+          {data && !data.isSelf && data.isFriend ? (
+            <Section title={t('details.groups')}>
               <Row
-                key={category}
-                icon={icon}
-                label={`${t(`details.${key}`)} · ${count}`}
-                onPress={() => openMedia(category, t(`details.${key}`))}
+                icon="people"
+                label={t('details.create_group_with', { name: data.name })}
+                onPress={createGroupWith}
               />
-            ))}
+              <Row
+                icon="person-add"
+                label={t('details.add_to_group')}
+                onPress={openAddToGroup}
+              />
+            </Section>
+          ) : null}
+
+          {/* 2.4 Médias, liens et documents — tuiles */}
+          <Section title={t('details.media')}>
+            <View className="flex-row flex-wrap px-3 pt-1 pb-3">
+              {(
+                [
+                  ['images', 'section_media', 'media', mediaCounts.images + mediaCounts.videos],
+                  ['link', 'section_links', 'links', mediaCounts.links],
+                  ['document-text', 'section_docs', 'documents', mediaCounts.documents],
+                  ['musical-notes', 'section_audio', 'audio', mediaCounts.audio],
+                  ['happy', 'section_gifs', 'gifs', mediaCounts.gifs],
+                ] as const
+              ).map(([icon, key, category, count]) => (
+                <TouchableOpacity
+                  key={category}
+                  className="items-center py-3 rounded-xl"
+                  style={{ width: '33.33%' }}
+                  onPress={() => openMedia(category, t(`details.${key}`))}
+                  activeOpacity={0.7}
+                >
+                  <View className="w-12 h-12 rounded-2xl bg-emerald-50 items-center justify-center">
+                    <Ionicons name={icon} size={22} color={NEXA} />
+                  </View>
+                  <Text className="text-gray-900 font-semibold mt-1.5">{count}</Text>
+                  <Text className="text-gray-400 text-[11px]" numberOfLines={1}>
+                    {t(`details.${key}`)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </Section>
 
           {/* 2.5 Messages épinglés */}
           <Section title={`${t('details.pinned')} · ${pins.length}`}>
             {pins.length === 0 ? (
-              <Text className="text-gray-400 text-sm px-5 py-4">{t('details.no_pinned')}</Text>
+              <Text className="text-gray-400 text-sm px-4 py-4">{t('details.no_pinned')}</Text>
             ) : (
               pins.map((m) => (
                 <MessageRow
@@ -443,7 +631,7 @@ export default function ConversationDetailsScreen() {
           {/* 2.6 Messages favoris */}
           <Section title={`${t('details.starred')} · ${starred.length}`}>
             {starred.length === 0 ? (
-              <Text className="text-gray-400 text-sm px-5 py-4">{t('details.no_starred')}</Text>
+              <Text className="text-gray-400 text-sm px-4 py-4">{t('details.no_starred')}</Text>
             ) : (
               starred.map((m) => (
                 <MessageRow
@@ -544,6 +732,75 @@ export default function ConversationDetailsScreen() {
         </Pressable>
       </Modal>
 
+      {/* Amis en commun */}
+      <BottomSheet visible={mutualOpen} onClose={() => setMutualOpen(false)}>
+        <View className="px-5 pb-8 pt-1">
+          <Text className="text-lg font-bold text-gray-900 mb-3">
+            {t('details.mutual_friends')}
+          </Text>
+          {mutualList === null ? (
+            <ActivityIndicator color={NEXA} className="my-6" />
+          ) : (
+            mutualList.map((f) => (
+              <TouchableOpacity
+                key={f.id}
+                className="flex-row items-center py-3"
+                onPress={() => {
+                  setMutualOpen(false);
+                  router.push({ pathname: '/user/[id]' as any, params: { id: f.id } });
+                }}
+              >
+                <UserAvatar photoUrl={f.photoUrl} name={f.name} size={44} />
+                <Text className="ml-3 flex-1 text-base font-medium text-gray-900" numberOfLines={1}>
+                  {f.name}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+      </BottomSheet>
+
+      {/* Ajouter à un groupe */}
+      <BottomSheet visible={addGroupOpen} onClose={() => setAddGroupOpen(false)}>
+        <View className="px-5 pb-8 pt-1">
+          <Text className="text-lg font-bold text-gray-900 mb-3">{t('details.add_to_group')}</Text>
+          {adminGroups === null ? (
+            <ActivityIndicator color={NEXA} className="my-6" />
+          ) : adminGroups.length === 0 ? (
+            <Text className="text-gray-400 text-sm py-6 text-center">
+              {t('details.no_admin_group')}
+            </Text>
+          ) : (
+            adminGroups.map((g) => (
+              <TouchableOpacity
+                key={g.id}
+                className="flex-row items-center py-3"
+                onPress={() => addToGroup(g)}
+                disabled={!!addingTo}
+              >
+                <View className="w-11 h-11 rounded-full bg-emerald-50 items-center justify-center mr-3">
+                  <Ionicons name="people" size={20} color={NEXA} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-gray-900 font-semibold" numberOfLines={1}>
+                    {g.name || t('chat.group')}
+                  </Text>
+                  <Text className="text-gray-400 text-xs">
+                    {t('details.member_count', { count: g.memberCount })}
+                  </Text>
+                </View>
+                {addingTo === g.id ? (
+                  <ActivityIndicator size="small" color={NEXA} />
+                ) : (
+                  <Ionicons name="add-circle-outline" size={22} color={NEXA} />
+                )}
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+      </BottomSheet>
+
       {/* Photo plein écran */}
       <Modal visible={photoViewer} transparent animationType="fade" onRequestClose={() => setPhotoViewer(false)}>
         <Pressable className="flex-1 bg-black items-center justify-center" onPress={() => setPhotoViewer(false)}>
@@ -588,27 +845,33 @@ function QuickAction({
   label,
   onPress,
   disabled,
+  active,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  active?: boolean;
 }) {
   return (
     <TouchableOpacity className="items-center" onPress={onPress} style={{ opacity: disabled ? 0.4 : 1 }}>
-      <View className="w-12 h-12 rounded-full bg-emerald-50 items-center justify-center">
-        <Ionicons name={icon} size={22} color={NEXA} />
+      <View
+        className={`w-12 h-12 rounded-2xl items-center justify-center ${active ? 'bg-nexa' : 'bg-emerald-50'}`}
+      >
+        <Ionicons name={icon} size={22} color={active ? 'white' : NEXA} />
       </View>
-      <Text className="text-[11px] text-gray-600 mt-1">{label}</Text>
+      <Text className="text-[11px] text-gray-600 mt-1.5">{label}</Text>
     </TouchableOpacity>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <View className="mt-3 bg-white">
-      <Text className="text-xs font-semibold text-gray-400 uppercase px-5 pt-4 pb-1">{title}</Text>
-      {children}
+    <View className="mt-5">
+      <Text className="text-xs font-semibold text-gray-400 uppercase px-6 pb-2">{title}</Text>
+      <View className="bg-white rounded-2xl mx-4 overflow-hidden" style={CARD_SHADOW}>
+        {children}
+      </View>
     </View>
   );
 }
@@ -632,12 +895,16 @@ function Row({
 }) {
   return (
     <TouchableOpacity
-      className="flex-row items-center px-5 py-3.5 border-b border-gray-50"
+      className="flex-row items-center px-4 py-3 border-b border-gray-50"
       onPress={onPress}
       style={{ opacity: disabled ? 0.45 : 1 }}
     >
-      <Ionicons name={icon} size={20} color={danger ? '#EF4444' : '#6B7280'} />
-      <Text className={`flex-1 ml-4 ${danger ? 'text-red-500' : 'text-gray-800'}`}>{label}</Text>
+      <View
+        className={`w-9 h-9 rounded-full items-center justify-center ${danger ? 'bg-red-50' : 'bg-emerald-50'}`}
+      >
+        <Ionicons name={icon} size={18} color={danger ? '#EF4444' : NEXA} />
+      </View>
+      <Text className={`flex-1 ml-3.5 ${danger ? 'text-red-500' : 'text-gray-800'}`}>{label}</Text>
       {right ?? (value ? <Text className="text-gray-400 text-sm" numberOfLines={1}>{value}</Text> : null)}
       <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 6 }} />
     </TouchableOpacity>
@@ -659,7 +926,7 @@ function MessageRow({
 }) {
   const preview = msg.content?.trim() || (msg.storyMediaUrl ? '📷' : '…');
   return (
-    <View className="flex-row items-center px-5 py-3 border-b border-gray-50">
+    <View className="flex-row items-center px-4 py-3 border-b border-gray-50">
       <Ionicons name={icon} size={18} color={iconColor} />
       <TouchableOpacity className="flex-1 ml-3" onPress={onPress} activeOpacity={0.7}>
         <Text className="text-gray-800" numberOfLines={1}>
@@ -677,13 +944,13 @@ function MessageRow({
 function DetailsSkeleton() {
   return (
     <View>
-      <View className="items-center bg-white pt-8 pb-6">
-        <View style={{ width: 104, height: 104 }} className="rounded-full bg-gray-200" />
+      <View className="items-center bg-white rounded-2xl mx-4 mt-3 pt-8 pb-6" style={CARD_SHADOW}>
+        <View style={{ width: 96, height: 96 }} className="rounded-full bg-gray-200" />
         <View className="w-40 h-5 bg-gray-200 rounded mt-4" />
         <View className="w-24 h-3 bg-gray-100 rounded mt-3" />
       </View>
       {[0, 1, 2].map((i) => (
-        <View key={i} className="mt-3 bg-white px-5 py-4">
+        <View key={i} className="mt-5 bg-white rounded-2xl mx-4 px-4 py-4" style={CARD_SHADOW}>
           <View className="w-32 h-3 bg-gray-100 rounded mb-4" />
           <View className="w-full h-4 bg-gray-100 rounded mb-3" />
           <View className="w-3/4 h-4 bg-gray-100 rounded" />

@@ -1,7 +1,8 @@
 todo :
 
-1 - Dans la carte afficher : ameliorer les visuels (couleurs, dipositions des boutons, etc)
+[FAIT 25/07] 1 - Dans la carte afficher : ameliorer les visuels (couleurs, dipositions des boutons, etc)
 Ajouter des infos/fonctionnalitées complementaires (Medias/documents envoyé/theme de la discussion/Creer un groupe/ Ajouter au groupe). Ces ajouts la seront uniquement si la personne est deja amies avec nous
+  → refonte visuelle details.tsx (banniere/cartes/tuiles/point presence) ; medias+theme existaient deja ; section Groupes gated ami (creer groupe avec X / ajouter a un groupe admin) ; amis en commun avatars empiles + liste (endpoint GET /users/:id/mutual-friends) ; favori en action rapide. Reste "bientot" : recherche dans la conversation.
 
 [FAIT 24/07] 2 - Lors de l'ajout d'un amis, afficher une pastille rouge dans la navbar en bas au niveau de "recherche" (verifier si c'est possible d'abord car c'est une Navbar native). Ajouter cette meme pastille dans l'onglet "Amis" a coter de l'onglet "Recherche".
 Lorsque cette personne est ajouter en amies je voudrais que pour ouvrir la conversation avec lui il y ai un bouton en bas a droite avec un "+" quand on clique dessus je veux que ca nous propose de crée un groupe ou bien lancer une conversation ou ajouter une personne (qui renvoie directement sur l'onglet "rechercher").

@@ -136,7 +136,15 @@
     "star": "Add to favorites",
     "unstar": "Remove from favorites",
     "no_pinned": "No pinned messages",
-    "no_starred": "No starred messages"
+    "no_starred": "No starred messages",
+    "groups": "Groups",
+    "create_group_with": "Create a group with {{name}}",
+    "add_to_group": "Add to a group",
+    "no_admin_group": "You don't manage any group to add this contact to.",
+    "member_count": "{{count}} members",
+    "added_to_group": "Added to {{group}}",
+    "favorite": "Favourite",
+    "mutual_friends": "Mutual friends"
   },
   "mute": {
     "8h": "8 hours",

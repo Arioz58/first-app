@@ -120,7 +120,7 @@ app/
 │   └── profile.tsx      # Profil (thème vert nexa) : avatar+photo (upload S3 ; appui = Changer/Supprimer → PATCH photoUrl:null = retour à l'initiale), édition nom + bio (modale combinée, bio 140 car.), sélecteur de langue i18n (PATCH + persistance), statut consentement confidentialité, déconnexion → welcome
 ├── chat/
 │   ├── [id].tsx         # Écran chat temps réel (Socket.io) — header profil, présence/frappe, médias, vocal, épinglés/favoris (voir section Chat)
-│   ├── details.tsx      # Panneau de détails d'une conversation directe : profil gated, actions rapides, personnalisation (fond/surnom/couleur de bulle/éphémère), sections médias, épinglés, favoris, gestion (effacer/bloquer/signaler)
+│   ├── details.tsx      # Panneau de détails d'une conversation directe (UI en cartes, en-tête bannière + point de présence) : profil gated, actions rapides (appel/vidéo/favori/muet/recherche), personnalisation (fond/surnom/couleur de bulle/éphémère), **groupes (gated ami : créer un groupe avec / ajouter à un groupe admin)**, **amis en commun (avatars empilés → liste)**, médias (tuiles compteur), épinglés, favoris, gestion (effacer/bloquer/signaler)
 │   ├── media.tsx        # Galerie par catégorie (media/links/documents/audio/gifs) — grille ou liste, pagination curseur, téléchargement groupé
 │   └── new.tsx          # Sélecteur d'ami pour démarrer une conversation (GET /friends + filtre local) → POST /conversations/direct → `router.replace` vers le chat
 ├── user/
@@ -205,7 +205,8 @@ POST /auth/refresh                                → renouvelle access token
 
 GET  /users/search?q=                             → recherche d'utilisateurs (nom/numéro, ≥2 car., exclut soi-même, max 20 → id/name/photoUrl) — usage interne (membres de groupe)
 POST /users/search-by-phone                       → recherche contact par numéro exact `{ phone }` (rate limit Redis 20/h, block-aware = compte masqué si bloqué, self-detection, photo gated) → `{ found, self?, user: { id, name, phone, photoUrl, relationStatus } }`
-GET  /users/:id/profile                           → profil complet gated (404 si bloqué) → champs filtrés selon la matrice de confidentialité + `relationStatus`, `requestId`, `isFriend`, `mutualFriendsCount`, `canMessage`, `canCall`, `canFriendRequest`
+GET  /users/:id/profile                           → profil complet gated (404 si bloqué) → champs filtrés selon la matrice de confidentialité + `relationStatus`, `requestId`, `isFriend`, `mutualFriendsCount`, `canMessage`, `canCall`, `canFriendRequest`, `online`
+GET  /users/:id/mutual-friends                    → liste des amis en commun (id/name/photoUrl, triés par nom ; 404 si bloqué)
 
 POST /friends/requests                            → envoyer une demande `{ toUserId }` (respecte privacyFriendRequests everyone/friends_of_friends/nobody, cooldown 7j après refus, auto-accept si demande inverse en attente)
 POST /friends/requests/:id/accept                 → accepter (destinataire) → crée l'amitié
@@ -232,7 +233,7 @@ GET  /conversations                               → liste convs ACCEPTÉES (me
 GET  /conversations/requests                      → demandes de messages reçues (member.accepted=false, ≥1 message)
 POST /conversations/:id/accept-request            → accepter une demande (rejoint les convs normales)
 DELETE /conversations/:id/request                 → refuser/supprimer une demande
-GET  /conversations/:id                           → métadonnées d'une conv (type, name, members, ephemeralDuration, myMutedUntil)
+GET  /conversations/:id                           → métadonnées d'une conv (type, name, members, ephemeralDuration, myMutedUntil, myFavoritedAt)
 GET  /conversations/:id/messages                  → historique paginé (cursor-based, 30/page)
 POST /conversations/:id/read                      → marquer la conv comme lue (`ConversationMember.lastReadAt = now`)
 PATCH /conversations/:id/pin                      → épingler/désépingler la conv pour MOI `{ pinned: bool }`

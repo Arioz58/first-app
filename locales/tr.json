@@ -136,7 +136,15 @@
     "star": "Favorilere ekle",
     "unstar": "Favorilerden çıkar",
     "no_pinned": "Sabitlenmiş mesaj yok",
-    "no_starred": "Yıldızlı mesaj yok"
+    "no_starred": "Yıldızlı mesaj yok",
+    "groups": "Gruplar",
+    "create_group_with": "{{name}} ile grup oluştur",
+    "add_to_group": "Bir gruba ekle",
+    "no_admin_group": "Bu kişiyi ekleyebileceğiniz bir grup yönetmiyorsunuz.",
+    "member_count": "{{count}} üye",
+    "added_to_group": "{{group}} grubuna eklendi",
+    "favorite": "Favori",
+    "mutual_friends": "Ortak arkadaşlar"
   },
   "mute": {
     "8h": "8 saat",

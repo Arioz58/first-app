@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -20,9 +20,19 @@ import { SearchUser, useUserSearch } from '../../lib/useUserSearch';
 export default function NewGroupScreen() {
   const router = useRouter();
   const { t } = useTranslation();
+  // Pré-remplissage depuis un profil de conversation (« créer un groupe avec X »).
+  const { prefillId, prefillName, prefillPhoto } = useLocalSearchParams<{
+    prefillId?: string;
+    prefillName?: string;
+    prefillPhoto?: string;
+  }>();
   const [name, setName] = useState('');
   const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<SearchUser[]>([]);
+  const [selected, setSelected] = useState<SearchUser[]>(
+    prefillId
+      ? [{ id: prefillId, name: prefillName ?? '', photoUrl: prefillPhoto || null }]
+      : [],
+  );
   const [loading, setLoading] = useState(false);
   const { results, loading: searching } = useUserSearch(query);
 
