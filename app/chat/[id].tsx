@@ -645,7 +645,7 @@ export default function ChatScreen() {
             </View>
           ) : (
             <View>
-              <UserAvatar photoUrl={header?.photoUrl ?? null} name={displayName} size={40} />
+              <UserAvatar photoUrl={header?.photoUrl ?? null} name={displayName} size={48} />
               {/* vert = en ligne / gris = hors ligne */}
               <View
                 className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${online ? 'bg-green-500' : 'bg-gray-400'}`}

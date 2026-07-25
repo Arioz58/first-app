@@ -106,7 +106,7 @@ export default function NewChatScreen() {
               onPress={() => openChat(item)}
               disabled={!!opening}
             >
-              <UserAvatar photoUrl={item.photoUrl} name={item.name} size={48} />
+              <UserAvatar photoUrl={item.photoUrl} name={item.name} size={56} />
               <Text className="flex-1 ml-3 font-semibold text-gray-900">{item.name}</Text>
               {opening === item.id && <ActivityIndicator size="small" color={NEXA} />}
             </TouchableOpacity>

@@ -228,7 +228,7 @@ export default function SearchScreen() {
             onPress={() => openProfile(result.id)}
             disabled={isSelf}
           >
-            <UserAvatar photoUrl={result.photoUrl} name={result.name} size={52} />
+            <UserAvatar photoUrl={result.photoUrl} name={result.name} size={60} />
             <View className="flex-1 ml-3">
               <Text className="text-base font-semibold text-gray-900">
                 {result.name}
@@ -270,7 +270,7 @@ export default function SearchScreen() {
               className="flex-row items-center px-4 py-3 border-b border-gray-50"
               onPress={() => openProfile(item.id)}
             >
-              <UserAvatar photoUrl={item.photoUrl} name={item.name} size={44} />
+              <UserAvatar photoUrl={item.photoUrl} name={item.name} size={52} />
               <View className="flex-1 ml-3">
                 <Text className="text-base font-medium text-gray-900">
                   {item.name}

@@ -430,7 +430,7 @@ export default function ConversationDetailsScreen() {
               >
                 {/* Anneau blanc + point de présence */}
                 <View className="rounded-full bg-white p-1">
-                  <UserAvatar photoUrl={data?.photoUrl ?? null} name={displayName} size={96} />
+                  <UserAvatar photoUrl={data?.photoUrl ?? null} name={displayName} size={108} />
                 </View>
                 {data && !data.isSelf && data.online ? (
                   <View
@@ -474,7 +474,7 @@ export default function ConversationDetailsScreen() {
                           style={{ marginLeft: i === 0 ? 0 : -8 }}
                           className="rounded-full border border-blue-50"
                         >
-                          <UserAvatar photoUrl={f.photoUrl} name={f.name} size={20} />
+                          <UserAvatar photoUrl={f.photoUrl} name={f.name} size={24} />
                         </View>
                       ))}
                     </View>
@@ -750,7 +750,7 @@ export default function ConversationDetailsScreen() {
                   router.push({ pathname: '/user/[id]' as any, params: { id: f.id } });
                 }}
               >
-                <UserAvatar photoUrl={f.photoUrl} name={f.name} size={44} />
+                <UserAvatar photoUrl={f.photoUrl} name={f.name} size={52} />
                 <Text className="ml-3 flex-1 text-base font-medium text-gray-900" numberOfLines={1}>
                   {f.name}
                 </Text>

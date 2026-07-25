@@ -99,7 +99,7 @@ export default function NewGroupScreen() {
                 className="flex-row items-center bg-blue-50 rounded-full pl-1 pr-2 py-1"
                 onPress={() => toggleMember(m)}
               >
-                <UserAvatar photoUrl={m.photoUrl} name={m.name} size={24} />
+                <UserAvatar photoUrl={m.photoUrl} name={m.name} size={28} />
                 <Text className="text-nexa text-sm font-medium ml-1.5 mr-1">
                   {m.name}
                 </Text>
@@ -140,7 +140,7 @@ export default function NewGroupScreen() {
               className="flex-row items-center px-4 py-3 border-b border-gray-50"
               onPress={() => toggleMember(item)}
             >
-              <UserAvatar photoUrl={item.photoUrl} name={item.name} size={44} />
+              <UserAvatar photoUrl={item.photoUrl} name={item.name} size={52} />
               <Text className="ml-3 flex-1 text-base font-medium text-gray-900">
                 {item.name}
               </Text>

@@ -231,7 +231,7 @@ function Row({
       className="flex-row items-center px-4 py-3 border-b border-gray-50"
       onPress={onPress}
     >
-      <UserAvatar photoUrl={user.photoUrl} name={user.name} size={44} />
+      <UserAvatar photoUrl={user.photoUrl} name={user.name} size={52} />
       <View className="flex-1 ml-3">
         <Text className="text-base font-medium text-gray-900">{user.name}</Text>
         {subtitle ? <Text className="text-gray-400 text-xs">{subtitle}</Text> : null}

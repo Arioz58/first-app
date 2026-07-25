@@ -178,7 +178,7 @@ export default function UserProfileScreen() {
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
           <View className="items-center pt-8 pb-6">
-            <UserAvatar photoUrl={data.photoUrl} name={data.name} size={104} />
+            <UserAvatar photoUrl={data.photoUrl} name={data.name} size={118} />
             <Text className="text-2xl font-bold text-gray-900 mt-4">{data.name}</Text>
             {data.mutualFriendsCount > 0 && (
               <Text className="text-gray-500 mt-1">

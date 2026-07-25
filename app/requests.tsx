@@ -94,7 +94,7 @@ export default function RequestsScreen() {
                     })
                   }
                 >
-                  <UserAvatar photoUrl={u?.photoUrl} name={u?.name} size={48} />
+                  <UserAvatar photoUrl={u?.photoUrl} name={u?.name} size={56} />
                   <View className="flex-1 ml-3">
                     <Text className="text-base font-semibold text-gray-900">
                       {u?.name}

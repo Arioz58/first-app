@@ -66,7 +66,7 @@ export default function BlockedScreen() {
           }
           renderItem={({ item }) => (
             <View className="flex-row items-center px-4 py-3 border-b border-gray-50">
-              <UserAvatar photoUrl={item.photoUrl} name={item.name} size={44} />
+              <UserAvatar photoUrl={item.photoUrl} name={item.name} size={52} />
               <Text className="flex-1 ml-3 text-base font-medium text-gray-900">
                 {item.name}
               </Text>

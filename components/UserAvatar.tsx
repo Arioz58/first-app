@@ -4,7 +4,7 @@ import { Image, Text, View } from 'react-native';
 export function UserAvatar({
   photoUrl,
   name,
-  size = 44,
+  size = 52,
 }: {
   photoUrl?: string | null;
   name?: string;
