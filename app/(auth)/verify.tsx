@@ -238,10 +238,10 @@ export default function VerifyScreen() {
               opacity: { type: "timing", duration: 400, delay: 100 },
             }}
           >
-            <Text className=" font-black text-nexa italic" style={{ fontSize: 48, lineHeight: 48 }}>
+            <Text className="text-5xl font-black text-nexa italic">
               {t("auth.verification")}
             </Text>
-            <Text className=" font-medium italic text-nexa mb-6" style={{ fontSize: 24, lineHeight: 32 }}>
+            <Text className="text-2xl font-medium italic text-nexa mb-6">
               {t("auth.code_sent_to", { phone })}
             </Text>
           </MotiView>
@@ -283,14 +283,13 @@ export default function VerifyScreen() {
                 ref={(el) => {
                   inputRefs.current[index] = el;
                 }}
-                className={`w-14 h-16 border-2 rounded-2xl text-center font-bold ${
+                className={`w-14 h-16 border-2 rounded-2xl text-center text-3xl font-bold ${
                   expired
                     ? "border-gray-200 text-gray-300"
                     : digit
                       ? "border-nexa text-nexa"
                       : "border-gray-300 text-gray-900"
                 }`}
-                style={{ fontSize: 30, lineHeight: 36 }}
                 keyboardType="number-pad"
                 maxLength={6}
                 value={digit}
@@ -310,7 +309,7 @@ export default function VerifyScreen() {
               transition={{ type: "timing", duration: 300 }}
               className="mb-4"
             >
-              <Text className="text-red-500 text-center font-medium " style={{ fontSize: 16, lineHeight: 24 }}>
+              <Text className="text-red-500 text-center font-medium text-base">
                 {error}
               </Text>
             </MotiView>
@@ -324,8 +323,7 @@ export default function VerifyScreen() {
           >
             {!expired && (
               <Text
-                className={`font-medium ${timeLeft <= 30 ? "text-red-400" : "text-gray-400"}`}
-                style={{ fontSize: 16, lineHeight: 24 }}
+                className={`text-base font-medium ${timeLeft <= 30 ? "text-red-400" : "text-gray-400"}`}
               >
                 {t("auth.code_valid_for")}{" "}
                 <Text className="font-bold">{formatTime(timeLeft)}</Text>
@@ -335,12 +333,12 @@ export default function VerifyScreen() {
               {resending ? (
                 <ActivityIndicator color="#1E40AF" />
               ) : resendIn > 0 ? (
-                <Text className="text-gray-400 " style={{ fontSize: 16, lineHeight: 24 }}>
+                <Text className="text-gray-400 text-base">
                   {t("auth.resend_in", { time: formatTime(resendIn) })}
                 </Text>
               ) : (
                 <TouchableOpacity onPress={handleResend}>
-                  <Text className="text-nexa font-semibold " style={{ fontSize: 16, lineHeight: 24 }}>
+                  <Text className="text-nexa font-semibold text-base">
                     {t("auth.resend_code")}
                   </Text>
                 </TouchableOpacity>
@@ -362,8 +360,7 @@ export default function VerifyScreen() {
                 <ActivityIndicator color="white" />
               ) : (
                 <Text
-                  className={`font-semibold italic ${code.length === 6 && !expired ? "text-white" : "text-gray-400"}`}
-                  style={{ fontSize: 24, lineHeight: 32 }}
+                  className={`font-semibold text-2xl italic ${code.length === 6 && !expired ? "text-white" : "text-gray-400"}`}
                 >
                   {t("auth.confirm")} →
                 </Text>

@@ -158,7 +158,7 @@ export default function UserProfileScreen() {
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900 flex-1" numberOfLines={1}>
+        <Text className="text-xl font-semibold text-gray-900 flex-1" numberOfLines={1}>
           {data?.name ?? ''}
         </Text>
         {data && !data.isSelf && (
@@ -179,7 +179,7 @@ export default function UserProfileScreen() {
         <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
           <View className="items-center pt-8 pb-6">
             <UserAvatar photoUrl={data.photoUrl} name={data.name} size={118} />
-            <Text className="text-2xl font-bold text-gray-900 mt-4">{data.name}</Text>
+            <Text className="text-3xl font-bold text-gray-900 mt-4">{data.name}</Text>
             {data.mutualFriendsCount > 0 && (
               <Text className="text-gray-500 mt-1">
                 {t(
@@ -259,7 +259,7 @@ export default function UserProfileScreen() {
                 </View>
               </View>
               {!data.canMessage && (
-                <Text className="text-gray-400 text-xs text-center mt-2">
+                <Text className="text-gray-400 text-sm text-center mt-2">
                   {t('profile_view.message_friends_only')}
                 </Text>
               )}
@@ -334,7 +334,7 @@ function InfoRow({
     <View className="flex-row items-center">
       <Ionicons name={icon} size={20} color="#6B7280" />
       <View className="ml-3">
-        {label ? <Text className="text-gray-400 text-xs">{label}</Text> : null}
+        {label ? <Text className="text-gray-400 text-sm">{label}</Text> : null}
         <Text className="text-gray-800">{value}</Text>
       </View>
     </View>

@@ -63,7 +63,7 @@ export default function NewChatScreen() {
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
-        <Text className="text-xl font-bold text-nexa">{t('new_chat.title')}</Text>
+        <Text className="text-2xl font-bold text-nexa">{t('new_chat.title')}</Text>
       </View>
 
       {/* `flex: 0` : sinon le Pressable (flex:1 par défaut) mangerait la place de la liste. */}
@@ -72,7 +72,7 @@ export default function NewChatScreen() {
           <View className="flex-row items-center bg-gray-100 rounded-xl px-3">
             <Ionicons name="search" size={18} color="#6B7280" />
             <TextInput
-              className="flex-1 py-2.5 px-2 text-base"
+              className="flex-1 py-2.5 px-2 text-lg"
               placeholder={t('friends.search_friends')}
               placeholderTextColor="#6B7280"
               value={query}

@@ -41,7 +41,7 @@ export default function UpdatesScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
       <View className="px-4 pt-3 pb-2">
-        <Text className="text-2xl font-bold text-nexa">{t('tabs.updates')}</Text>
+        <Text className="text-3xl font-bold text-nexa">{t('tabs.updates')}</Text>
       </View>
 
       {/* Stories — toujours en tête, hors du contenu qui défile. */}
@@ -57,7 +57,7 @@ export default function UpdatesScreen() {
               className={`flex-1 items-center py-2 rounded-full mx-1 ${active ? 'bg-nexa' : 'bg-gray-100'}`}
               onPress={() => setSeg(s)}
             >
-              <Text className={`text-sm font-semibold ${active ? 'text-white' : 'text-gray-600'}`}>
+              <Text className={`text-base font-semibold ${active ? 'text-white' : 'text-gray-600'}`}>
                 {t(`updates.${s}`)}
               </Text>
             </TouchableOpacity>
@@ -163,7 +163,7 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
       {/* Demandes d'ami reçues */}
       {received.length > 0 ? (
         <View className="mt-2">
-          <Text className="text-xs font-semibold text-gray-400 uppercase px-5 pb-2">
+          <Text className="text-sm font-semibold text-gray-400 uppercase px-5 pb-2">
             {t('activity.requests')}
           </Text>
           {received.map((r) => (
@@ -179,14 +179,14 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
                 disabled={acting === r.requestId}
                 onPress={() => accept(r.requestId)}
               >
-                <Text className="text-white text-sm font-semibold">{t('relation.accept')}</Text>
+                <Text className="text-white text-base font-semibold">{t('relation.accept')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 className="bg-gray-100 rounded-full px-4 py-2"
                 disabled={acting === r.requestId}
                 onPress={() => refuse(r.requestId)}
               >
-                <Text className="text-gray-600 text-sm font-semibold">{t('relation.refuse')}</Text>
+                <Text className="text-gray-600 text-base font-semibold">{t('relation.refuse')}</Text>
               </TouchableOpacity>
             </View>
           ))}
@@ -196,7 +196,7 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
       {/* Suggestions : personnes que tu connais peut-être */}
       {suggestions.length > 0 ? (
         <View className="mt-4">
-          <Text className="text-xs font-semibold text-gray-400 uppercase px-5 pb-2">
+          <Text className="text-sm font-semibold text-gray-400 uppercase px-5 pb-2">
             {t('activity.suggestions')}
           </Text>
           {suggestions.map((s) => (
@@ -207,7 +207,7 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
               <View className="flex-1 ml-3">
                 <Text className="font-semibold text-gray-900" numberOfLines={1}>{s.name}</Text>
                 {s.mutualFriendsCount > 0 ? (
-                  <Text className="text-gray-400 text-xs">
+                  <Text className="text-gray-400 text-sm">
                     {t(
                       s.mutualFriendsCount === 1
                         ? 'profile_view.mutual_one'
@@ -223,7 +223,7 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
                 onPress={() => addFriend(s.id)}
               >
                 <Ionicons name="person-add" size={15} color={NEXA} />
-                <Text className="text-nexa text-sm font-semibold ml-1.5">{t('relation.add_friend')}</Text>
+                <Text className="text-nexa text-base font-semibold ml-1.5">{t('relation.add_friend')}</Text>
               </TouchableOpacity>
             </View>
           ))}
@@ -242,14 +242,14 @@ function CommunityTab() {
         <View className="w-20 h-20 rounded-3xl bg-blue-50 items-center justify-center">
           <Ionicons name="trophy" size={36} color={NEXA} />
         </View>
-        <Text className="text-lg font-bold text-gray-900 mt-4 text-center">
+        <Text className="text-xl font-bold text-gray-900 mt-4 text-center">
           {t('community.title')}
         </Text>
         <Text className="text-gray-500 text-center mt-2 leading-5">
           {t('community.description')}
         </Text>
         <View className="bg-blue-50 rounded-full px-4 py-1.5 mt-5">
-          <Text className="text-nexa text-xs font-semibold">{t('community.badge')}</Text>
+          <Text className="text-nexa text-sm font-semibold">{t('community.badge')}</Text>
         </View>
       </View>
     </ScrollView>

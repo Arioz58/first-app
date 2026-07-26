@@ -62,7 +62,7 @@ function SettingRow({
         <Ionicons name={icon} size={20} color={danger ? '#EF4444' : NEXA} />
       </View>
       <Text
-        className={`ml-3 flex-1 text-base ${danger ? 'text-red-500 font-semibold' : 'text-gray-900'}`}
+        className={`ml-3 flex-1 text-lg ${danger ? 'text-red-500 font-semibold' : 'text-gray-900'}`}
       >
         {label}
       </Text>
@@ -244,7 +244,7 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top', 'left', 'right']}>
       <View className="px-5 py-3 bg-white">
-        <Text className="text-2xl font-bold" style={{ color: NEXA }}>
+        <Text className="text-3xl font-bold" style={{ color: NEXA }}>
           {t('profile')}
         </Text>
       </View>
@@ -263,7 +263,7 @@ export default function ProfileScreen() {
                 style={{ width: '100%', height: '100%' }}
               />
             ) : (
-              <Text className="text-5xl font-bold" style={{ color: NEXA }}>
+              <Text className="text-6xl font-bold" style={{ color: NEXA }}>
                 {user?.name?.charAt(0).toUpperCase() ?? '?'}
               </Text>
             )}
@@ -282,7 +282,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         <View className="flex-row items-center mt-4">
-          <Text className="text-2xl font-bold text-gray-900">{user?.name}</Text>
+          <Text className="text-3xl font-bold text-gray-900">{user?.name}</Text>
           <TouchableOpacity className="ml-2 p-1" onPress={openEditModal}>
             <Ionicons name="pencil" size={18} color={NEXA} />
           </TouchableOpacity>
@@ -300,7 +300,7 @@ export default function ProfileScreen() {
 
       {/* Réglages */}
       <View className="bg-white">
-        <Text className="px-4 pt-4 pb-1 text-xs font-semibold uppercase text-gray-400">
+        <Text className="px-4 pt-4 pb-1 text-sm font-semibold uppercase text-gray-400">
           {t('settings')}
         </Text>
         <SettingRow
@@ -341,11 +341,11 @@ export default function ProfileScreen() {
           onPress={() => setEditModal(false)}
         >
           <Pressable className="w-full bg-white rounded-2xl p-5" onPress={() => Keyboard.dismiss()}>
-            <Text className="text-lg font-bold text-gray-900 mb-3">
+            <Text className="text-xl font-bold text-gray-900 mb-3">
               {t('edit_profile')}
             </Text>
             <TextInput
-              className={`border rounded-xl px-4 py-3 text-lg ${nameError ? 'border-red-400' : 'border-gray-300'}`}
+              className={`border rounded-xl px-4 py-3 text-xl ${nameError ? 'border-red-400' : 'border-gray-300'}`}
               placeholder={t('your_name')}
               placeholderTextColor="#9CA3AF"
               value={nameDraft}
@@ -357,11 +357,11 @@ export default function ProfileScreen() {
               maxLength={40}
             />
             {nameError ? (
-              <Text className="text-red-500 text-sm mt-1 ml-1">{nameError}</Text>
+              <Text className="text-red-500 text-base mt-1 ml-1">{nameError}</Text>
             ) : null}
 
             <TextInput
-              className="border border-gray-300 rounded-xl px-4 py-3 text-base mt-3 h-24"
+              className="border border-gray-300 rounded-xl px-4 py-3 text-lg mt-3 h-24"
               placeholder={t('bio_placeholder')}
               placeholderTextColor="#9CA3AF"
               value={bioDraft}
@@ -370,7 +370,7 @@ export default function ProfileScreen() {
               textAlignVertical="top"
               maxLength={140}
             />
-            <Text className="text-gray-400 text-xs mt-1 ml-1 self-end">
+            <Text className="text-gray-400 text-sm mt-1 ml-1 self-end">
               {bioDraft.length}/140
             </Text>
 
@@ -400,7 +400,7 @@ export default function ProfileScreen() {
 
       {/* Drawer sélection de langue */}
       <BottomSheet visible={langVisible} onClose={() => setLangVisible(false)}>
-        <Text className="text-lg font-bold text-gray-900 px-5 pt-1 pb-2">
+        <Text className="text-xl font-bold text-gray-900 px-5 pt-1 pb-2">
           {t('language')}
         </Text>
         {SUPPORTED_LANGUAGES.map((l) => {
@@ -411,9 +411,9 @@ export default function ProfileScreen() {
               className="flex-row items-center px-5 py-4"
               onPress={() => selectLanguage(l.code)}
             >
-              <Text className="text-2xl mr-3">{l.flag}</Text>
+              <Text className="text-3xl mr-3">{l.flag}</Text>
               <Text
-                className={`flex-1 text-base ${active ? 'font-bold' : 'text-gray-900'}`}
+                className={`flex-1 text-lg ${active ? 'font-bold' : 'text-gray-900'}`}
                 style={active ? { color: NEXA } : undefined}
               >
                 {l.label}

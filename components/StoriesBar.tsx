@@ -63,7 +63,7 @@ function Avatar({ photoUrl, name }: { photoUrl?: string | null; name?: string })
       {photoUrl ? (
         <Image source={{ uri: photoUrl }} style={{ width: '100%', height: '100%' }} />
       ) : (
-        <Text className="text-nexa font-bold text-xl">
+        <Text className="text-nexa font-bold text-2xl">
           {(name?.[0] ?? '?').toUpperCase()}
         </Text>
       )}
@@ -142,7 +142,7 @@ const StoriesBar = forwardRef<StoriesBarHandle>((_props, ref) => {
           <Ionicons name="add" size={14} color="white" />
         </TouchableOpacity>
       </View>
-      <Text className="text-xs text-gray-600 mt-1 text-center" style={{ width: RING }} numberOfLines={1}>
+      <Text className="text-sm text-gray-600 mt-1 text-center" style={{ width: RING }} numberOfLines={1}>
         {hasMyStory ? t('stories.my_story') : t('stories.add')}
       </Text>
     </View>
@@ -160,7 +160,7 @@ const StoriesBar = forwardRef<StoriesBarHandle>((_props, ref) => {
         ListEmptyComponent={
           groups.length === 0 ? (
             <View className="items-center justify-center ml-4">
-              <Text className="text-gray-400 text-xs">{t('stories.empty')}</Text>
+              <Text className="text-gray-400 text-sm">{t('stories.empty')}</Text>
             </View>
           ) : null
         }
@@ -175,7 +175,7 @@ const StoriesBar = forwardRef<StoriesBarHandle>((_props, ref) => {
             <StoryRing unseen={item.hasUnviewed}>
               <Avatar photoUrl={item.user.photoUrl} name={item.user.name} />
             </StoryRing>
-            <Text className="text-xs text-gray-700 mt-1 text-center" style={{ width: RING }} numberOfLines={1}>
+            <Text className="text-sm text-gray-700 mt-1 text-center" style={{ width: RING }} numberOfLines={1}>
               {item.user.name}
             </Text>
           </TouchableOpacity>

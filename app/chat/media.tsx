@@ -114,7 +114,7 @@ export default function MediaScreen() {
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900 flex-1">{title}</Text>
+        <Text className="text-xl font-semibold text-gray-900 flex-1">{title}</Text>
         {category !== 'links' && items.some((m) => m.mediaUrl) ? (
           <TouchableOpacity onPress={downloadAll}>
             <Ionicons name="download-outline" size={22} color={NEXA} />
@@ -182,7 +182,7 @@ export default function MediaScreen() {
                       : item.fileName || 'Document'}
                   </Text>
                   {category !== 'links' && item.fileSize ? (
-                    <Text className="text-gray-400 text-xs">{formatFileSize(item.fileSize)}</Text>
+                    <Text className="text-gray-400 text-sm">{formatFileSize(item.fileSize)}</Text>
                   ) : null}
                 </View>
               </TouchableOpacity>

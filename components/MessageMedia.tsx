@@ -76,7 +76,7 @@ export function MessageMedia({
           {message.fileName || 'Document'}
         </Text>
         {message.fileSize ? (
-          <Text className="text-gray-400 text-xs">{formatFileSize(message.fileSize)}</Text>
+          <Text className="text-gray-400 text-sm">{formatFileSize(message.fileSize)}</Text>
         ) : null}
       </View>
     </TouchableOpacity>

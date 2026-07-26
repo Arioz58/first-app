@@ -149,7 +149,7 @@ export default function SearchScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="px-4 pt-3 pb-2">
-        <Text className="text-2xl font-bold text-nexa mb-3">{t('tabs.contacts')}</Text>
+        <Text className="text-3xl font-bold text-nexa mb-3">{t('tabs.contacts')}</Text>
         {/* Segmented Recherche / Amis */}
         <View className="flex-row bg-gray-100 rounded-full p-1">
           {(['search', 'friends'] as const).map((s) => {
@@ -163,7 +163,7 @@ export default function SearchScreen() {
                 onPress={() => setSeg(s)}
               >
                 <Text
-                  className={`text-sm font-semibold ${active ? 'text-nexa' : 'text-gray-500'}`}
+                  className={`text-base font-semibold ${active ? 'text-nexa' : 'text-gray-500'}`}
                 >
                   {s === 'search' ? t('search_phone.segment') : t('friends.title')}
                 </Text>
@@ -189,7 +189,7 @@ export default function SearchScreen() {
               <CountryPicker selected={country} onSelect={setCountry} />
           <View className="flex-1 flex-row items-center bg-gray-100 rounded-xl px-3">
             <TextInput
-              className="flex-1 py-3 px-1 text-base"
+              className="flex-1 py-3 px-1 text-lg"
               placeholder={t('search_phone.placeholder')}
               placeholderTextColor="#6B7280"
               keyboardType="phone-pad"
@@ -208,7 +208,7 @@ export default function SearchScreen() {
 
         {/* Erreur inline (introuvable / invalide / propre numéro / échec) */}
         {error && !isSelf ? (
-          <Text className="text-gray-500 text-sm mt-3 ml-1">
+          <Text className="text-gray-500 text-base mt-3 ml-1">
             {t(`search_phone.${error}`)}
           </Text>
         ) : null}
@@ -218,7 +218,7 @@ export default function SearchScreen() {
       {result ? (
         <View className="px-4">
           {isSelf ? (
-            <Text className="text-nexa text-sm mb-2 ml-1">
+            <Text className="text-nexa text-base mb-2 ml-1">
               {t('search_phone.own_number')}
             </Text>
           ) : null}
@@ -230,14 +230,14 @@ export default function SearchScreen() {
           >
             <UserAvatar photoUrl={result.photoUrl} name={result.name} size={60} />
             <View className="flex-1 ml-3">
-              <Text className="text-base font-semibold text-gray-900">
+              <Text className="text-lg font-semibold text-gray-900">
                 {result.name}
               </Text>
-              <Text className="text-gray-500 text-sm">{result.phone}</Text>
+              <Text className="text-gray-500 text-base">{result.phone}</Text>
             </View>
             {!isSelf && (
               <View className="bg-blue-50 rounded-full px-3 py-1.5">
-                <Text className="text-nexa text-xs font-semibold">
+                <Text className="text-nexa text-sm font-semibold">
                   {relationLabel(result.relationStatus)}
                 </Text>
               </View>
@@ -255,11 +255,11 @@ export default function SearchScreen() {
           keyboardDismissMode="on-drag"
           ListHeaderComponent={
             <View className="flex-row items-center justify-between px-4 pt-4 pb-1">
-              <Text className="text-xs font-semibold uppercase text-gray-400">
+              <Text className="text-sm font-semibold uppercase text-gray-400">
                 {t('search_phone.recent')}
               </Text>
               <TouchableOpacity onPress={clearHistory}>
-                <Text className="text-nexa text-xs font-semibold">
+                <Text className="text-nexa text-sm font-semibold">
                   {t('search_phone.clear')}
                 </Text>
               </TouchableOpacity>
@@ -272,10 +272,10 @@ export default function SearchScreen() {
             >
               <UserAvatar photoUrl={item.photoUrl} name={item.name} size={52} />
               <View className="flex-1 ml-3">
-                <Text className="text-base font-medium text-gray-900">
+                <Text className="text-lg font-medium text-gray-900">
                   {item.name}
                 </Text>
-                <Text className="text-gray-500 text-sm">{item.phone}</Text>
+                <Text className="text-gray-500 text-base">{item.phone}</Text>
               </View>
             </TouchableOpacity>
           )}

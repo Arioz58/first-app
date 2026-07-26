@@ -71,8 +71,8 @@ export default function ChatWallpaperPicker({ visible, current, onClose, onSelec
   return (
     <BottomSheet visible={visible} onClose={onClose} backdropOpacity={0.12}>
       <View className="px-5 pb-10 pt-1">
-        <Text className="text-lg font-bold text-gray-900">{t('chat.wallpaper')}</Text>
-        <Text className="text-sm text-gray-500 mt-1 mb-4">{t('chat.wallpaper_hint')}</Text>
+        <Text className="text-xl font-bold text-gray-900">{t('chat.wallpaper')}</Text>
+        <Text className="text-base text-gray-500 mt-1 mb-4">{t('chat.wallpaper_hint')}</Text>
 
         <View className="flex-row flex-wrap gap-3">
           {/* Défaut (asset nexa selon le thème) */}

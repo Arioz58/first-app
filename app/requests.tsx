@@ -65,7 +65,7 @@ export default function RequestsScreen() {
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900">
+        <Text className="text-xl font-semibold text-gray-900">
           {t('message_requests.title')}
         </Text>
       </View>
@@ -96,10 +96,10 @@ export default function RequestsScreen() {
                 >
                   <UserAvatar photoUrl={u?.photoUrl} name={u?.name} size={56} />
                   <View className="flex-1 ml-3">
-                    <Text className="text-base font-semibold text-gray-900">
+                    <Text className="text-lg font-semibold text-gray-900">
                       {u?.name}
                     </Text>
-                    <Text className="text-gray-500 text-sm" numberOfLines={1}>
+                    <Text className="text-gray-500 text-base" numberOfLines={1}>
                       {item.messages[0]?.content ?? ''}
                     </Text>
                   </View>
@@ -109,7 +109,7 @@ export default function RequestsScreen() {
                     className="bg-nexa rounded-full px-5 py-1.5"
                     onPress={() => accept(item.id)}
                   >
-                    <Text className="text-white text-sm font-semibold">
+                    <Text className="text-white text-base font-semibold">
                       {t('relation.accept')}
                     </Text>
                   </TouchableOpacity>
@@ -117,7 +117,7 @@ export default function RequestsScreen() {
                     className="border border-gray-300 rounded-full px-5 py-1.5"
                     onPress={() => decline(item.id)}
                   >
-                    <Text className="text-gray-600 text-sm font-semibold">
+                    <Text className="text-gray-600 text-base font-semibold">
                       {t('message_requests.decline')}
                     </Text>
                   </TouchableOpacity>

@@ -48,7 +48,7 @@ export default function BlockedScreen() {
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900">
+        <Text className="text-xl font-semibold text-gray-900">
           {t('moderation.blocked_users')}
         </Text>
       </View>
@@ -67,14 +67,14 @@ export default function BlockedScreen() {
           renderItem={({ item }) => (
             <View className="flex-row items-center px-4 py-3 border-b border-gray-50">
               <UserAvatar photoUrl={item.photoUrl} name={item.name} size={52} />
-              <Text className="flex-1 ml-3 text-base font-medium text-gray-900">
+              <Text className="flex-1 ml-3 text-lg font-medium text-gray-900">
                 {item.name}
               </Text>
               <TouchableOpacity
                 className="border border-gray-300 rounded-full px-4 py-1.5"
                 onPress={() => unblock(item.id)}
               >
-                <Text className="text-gray-700 text-sm font-semibold">
+                <Text className="text-gray-700 text-base font-semibold">
                   {t('moderation.unblock')}
                 </Text>
               </TouchableOpacity>

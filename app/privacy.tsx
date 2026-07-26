@@ -83,7 +83,7 @@ export default function PrivacyScreen() {
       className="flex-row items-center px-4 py-4 border-b border-gray-50"
       onPress={() => setPicker({ key: field, options })}
     >
-      <Text className="flex-1 text-base text-gray-900">
+      <Text className="flex-1 text-lg text-gray-900">
         {t(`privacy_settings.${LABEL_KEY[field]}` as any)}
       </Text>
       <Text className="text-gray-400 mr-1">
@@ -99,13 +99,13 @@ export default function PrivacyScreen() {
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900">
+        <Text className="text-xl font-semibold text-gray-900">
           {t('privacy_settings.title')}
         </Text>
       </View>
 
       <ScrollView>
-        <Text className="px-4 pt-5 pb-1 text-xs font-semibold uppercase text-gray-400">
+        <Text className="px-4 pt-5 pb-1 text-sm font-semibold uppercase text-gray-400">
           {t('privacy_settings.section_visibility')}
         </Text>
         <View className="bg-white">
@@ -116,7 +116,7 @@ export default function PrivacyScreen() {
 
           {/* Localisation : toggle de partage + qui peut la voir */}
           <View className="flex-row items-center px-4 py-4 border-b border-gray-50">
-            <Text className="flex-1 text-base text-gray-900">
+            <Text className="flex-1 text-lg text-gray-900">
               {t('privacy_settings.location_enabled')}
             </Text>
             <Switch
@@ -128,7 +128,7 @@ export default function PrivacyScreen() {
           {privacy.locationEnabled && <Row field="privacyLocation" options={TRIPLE} />}
         </View>
 
-        <Text className="px-4 pt-5 pb-1 text-xs font-semibold uppercase text-gray-400">
+        <Text className="px-4 pt-5 pb-1 text-sm font-semibold uppercase text-gray-400">
           {t('privacy_settings.section_contact')}
         </Text>
         <View className="bg-white">
@@ -144,7 +144,7 @@ export default function PrivacyScreen() {
             onPress={() => router.push('/blocked' as any)}
           >
             <Ionicons name="ban-outline" size={20} color="#EF4444" />
-            <Text className="flex-1 ml-3 text-base text-gray-900">
+            <Text className="flex-1 ml-3 text-lg text-gray-900">
               {t('moderation.blocked_users')}
             </Text>
             <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
@@ -155,7 +155,7 @@ export default function PrivacyScreen() {
 
       {/* Sélecteur de valeur */}
       <BottomSheet visible={picker !== null} onClose={() => setPicker(null)}>
-        <Text className="text-lg font-bold text-gray-900 px-5 pt-1 pb-2">
+        <Text className="text-xl font-bold text-gray-900 px-5 pt-1 pb-2">
           {picker ? t(`privacy_settings.${LABEL_KEY[picker.key]}` as any) : ''}
         </Text>
         {picker?.options.map((opt) => {
@@ -167,7 +167,7 @@ export default function PrivacyScreen() {
               onPress={() => selectValue(opt)}
             >
               <Text
-                className={`flex-1 text-base ${active ? 'font-bold' : 'text-gray-900'}`}
+                className={`flex-1 text-lg ${active ? 'font-bold' : 'text-gray-900'}`}
                 style={active ? { color: NEXA } : undefined}
               >
                 {t(`privacy_settings.${opt}` as any)}

@@ -662,7 +662,7 @@ export default function ChatScreen() {
         >
           <View className="flex-row items-center">
             <Text
-              className="text-base font-semibold text-gray-900 flex-shrink"
+              className="text-lg font-semibold text-gray-900 flex-shrink"
               numberOfLines={1}
             >
               {displayName}
@@ -681,7 +681,7 @@ export default function ChatScreen() {
           </View>
           {subtitle ? (
             <Text
-              className={`text-xs ${subtitleAccent ? 'text-nexa' : 'text-gray-400'}`}
+              className={`text-sm ${subtitleAccent ? 'text-nexa' : 'text-gray-400'}`}
               numberOfLines={1}
             >
               {subtitle}
@@ -827,7 +827,7 @@ export default function ChatScreen() {
                 ) : item.mediaUrl ? (
                   <>
                     {!isMe && (
-                      <Text className="text-xs text-gray-400 mb-1 ml-1">{item.sender?.name}</Text>
+                      <Text className="text-sm text-gray-400 mb-1 ml-1">{item.sender?.name}</Text>
                     )}
                     {isImageLike(item.mediaType) ? (
                       <View>
@@ -838,7 +838,7 @@ export default function ChatScreen() {
                           onOpenVideo={(url) => setViewer({ type: 'video', url })}
                         />
                         {item.content ? (
-                          <Text className="text-xs text-gray-500 mt-1 px-1">{item.content}</Text>
+                          <Text className="text-sm text-gray-500 mt-1 px-1">{item.content}</Text>
                         ) : null}
                       </View>
                     ) : (
@@ -855,7 +855,7 @@ export default function ChatScreen() {
                 ) : (
                   <>
                     {!isMe && (
-                      <Text className="text-xs text-gray-400 mb-1 ml-1">{item.sender?.name}</Text>
+                      <Text className="text-sm text-gray-400 mb-1 ml-1">{item.sender?.name}</Text>
                     )}
                     <Pressable
                       onPress={
@@ -895,7 +895,7 @@ export default function ChatScreen() {
                   >
                     <Ionicons name={it.icon} size={26} color="white" />
                   </View>
-                  <Text className="text-xs text-gray-600 mt-1.5">{it.label}</Text>
+                  <Text className="text-sm text-gray-600 mt-1.5">{it.label}</Text>
                 </TouchableOpacity>
               </Animated.View>
             ))}
@@ -903,7 +903,7 @@ export default function ChatScreen() {
         )}
 
         {uploading && (
-          <Text className="text-xs text-gray-400 px-4 pt-1">{t('media.uploading')}</Text>
+          <Text className="text-sm text-gray-400 px-4 pt-1">{t('media.uploading')}</Text>
         )}
 
         {/* Barre d'enregistrement vocal */}
@@ -932,7 +932,7 @@ export default function ChatScreen() {
               </Animated.View>
             </TouchableOpacity>
             <TextInput
-              className="flex-1 bg-gray-100 rounded-full px-4 py-2 mr-2 text-base"
+              className="flex-1 bg-gray-100 rounded-full px-4 py-2 mr-2 text-lg"
               placeholder={t('chat.message_placeholder')}
               value={text}
               onChangeText={handleChangeText}

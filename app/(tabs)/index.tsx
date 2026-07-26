@@ -357,7 +357,7 @@ export default function ConversationsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-row items-center justify-between px-4 py-4">
-        <Text className="text-xl font-bold text-nexa">{t('messages')}</Text>
+        <Text className="text-2xl font-bold text-nexa">{t('messages')}</Text>
       </View>
 
       {/* Barre de recherche — toujours visible. */}
@@ -365,7 +365,7 @@ export default function ConversationsScreen() {
         <View className="flex-row items-center bg-gray-100 rounded-xl px-3">
           <Ionicons name="search" size={18} color="#6B7280" />
           <TextInput
-            className="flex-1 py-2.5 px-2 text-base"
+            className="flex-1 py-2.5 px-2 text-lg"
             placeholder={t('search.placeholder')}
             placeholderTextColor="#6B7280"
             value={query}
@@ -418,13 +418,13 @@ export default function ConversationsScreen() {
               onPress={() => setFilter(f)}
             >
               <Text
-                className={`text-sm font-semibold ${active ? 'text-white' : 'text-gray-600'}`}
+                className={`text-base font-semibold ${active ? 'text-white' : 'text-gray-600'}`}
               >
                 {t(`filters.${f}`)}
               </Text>
               {badge !== null && (
                 <Text
-                  className={`text-sm font-bold ml-1 ${active ? 'text-white' : 'text-nexa'}`}
+                  className={`text-base font-bold ml-1 ${active ? 'text-white' : 'text-nexa'}`}
                 >
                   {badge}
                 </Text>
@@ -452,7 +452,7 @@ export default function ConversationsScreen() {
                   {t('message_requests.title')}
                 </Text>
                 <View className="bg-red-500 rounded-full min-w-[24px] h-[24px] items-center justify-center px-1.5">
-                  <Text className="text-white text-xs font-bold">{requestCount}</Text>
+                  <Text className="text-white text-sm font-bold">{requestCount}</Text>
                 </View>
               </TouchableOpacity>
             )}
@@ -514,7 +514,7 @@ export default function ConversationsScreen() {
                   )}
                 </View>
                 <Text
-                  className={`text-sm ${unread ? 'text-gray-900 font-medium' : 'text-gray-500'}`}
+                  className={`text-base ${unread ? 'text-gray-900 font-medium' : 'text-gray-500'}`}
                   numberOfLines={1}
                 >
                   {getLastMessage(item)}
@@ -522,12 +522,12 @@ export default function ConversationsScreen() {
               </View>
 
               <View className="items-end ml-2">
-                <Text className={`text-xs ${unread ? 'text-nexa font-semibold' : 'text-gray-400'}`}>
+                <Text className={`text-sm ${unread ? 'text-nexa font-semibold' : 'text-gray-400'}`}>
                   {formatDate(item.lastMessageAt)}
                 </Text>
                 {unread && (
                   <View className="bg-nexa rounded-full min-w-[24px] h-[24px] items-center justify-center px-1.5 mt-1">
-                    <Text className="text-white text-xs font-bold">
+                    <Text className="text-white text-sm font-bold">
                       {item.unreadCount > 99 ? '99+' : item.unreadCount}
                     </Text>
                   </View>
@@ -564,7 +564,7 @@ export default function ConversationsScreen() {
               <View className="w-11 h-11 rounded-full bg-blue-50 items-center justify-center mr-4">
                 <Ionicons name={icon} size={22} color={NEXA} />
               </View>
-              <Text className="text-base font-semibold text-gray-900">{t(`fab.${key}`)}</Text>
+              <Text className="text-lg font-semibold text-gray-900">{t(`fab.${key}`)}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -575,7 +575,7 @@ export default function ConversationsScreen() {
         <View className="pb-6 pt-2">
           {actionTarget && (
             <>
-              <Text className="px-5 pb-2 text-sm text-gray-400" numberOfLines={1}>
+              <Text className="px-5 pb-2 text-base text-gray-400" numberOfLines={1}>
                 {getConvName(actionTarget)}
               </Text>
               <ConvAction
@@ -630,14 +630,14 @@ function ConvAction({
       <View className="w-11 h-11 rounded-full bg-blue-50 items-center justify-center mr-4">
         <Ionicons name={icon} size={22} color={NEXA} />
       </View>
-      <Text className="text-base font-semibold text-gray-900">{label}</Text>
+      <Text className="text-lg font-semibold text-gray-900">{label}</Text>
     </TouchableOpacity>
   );
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <Text className="text-xs font-semibold text-gray-400 uppercase px-4 pt-4 pb-1">{children}</Text>
+    <Text className="text-sm font-semibold text-gray-400 uppercase px-4 pt-4 pb-1">{children}</Text>
   );
 }
 
@@ -725,11 +725,11 @@ function SearchResults({
                   <Text className="font-semibold text-gray-900" numberOfLines={1}>
                     {searchConvName(m.conversation)}
                   </Text>
-                  <Text className="text-sm text-gray-500" numberOfLines={1}>
+                  <Text className="text-base text-gray-500" numberOfLines={1}>
                     {m.content}
                   </Text>
                 </View>
-                <Text className="text-xs text-gray-400 ml-2">{formatDate(m.createdAt)}</Text>
+                <Text className="text-sm text-gray-400 ml-2">{formatDate(m.createdAt)}</Text>
               </TouchableOpacity>
             );
           })}

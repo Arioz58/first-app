@@ -407,7 +407,7 @@ export default function ConversationDetailsScreen() {
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900 flex-1">{t('details.title')}</Text>
+        <Text className="text-xl font-semibold text-gray-900 flex-1">{t('details.title')}</Text>
       </View>
 
       {loading ? (
@@ -439,9 +439,9 @@ export default function ConversationDetailsScreen() {
                 ) : null}
               </TouchableOpacity>
 
-              <Text className="text-2xl font-bold text-gray-900 mt-3">{displayName}</Text>
+              <Text className="text-3xl font-bold text-gray-900 mt-3">{displayName}</Text>
               {custom.nickname ? (
-                <Text className="text-gray-400 text-sm mt-0.5">{data?.name ?? name}</Text>
+                <Text className="text-gray-400 text-base mt-0.5">{data?.name ?? name}</Text>
               ) : null}
 
               {data && !data.isSelf ? <RelationBadge status={data.relationStatus} t={t} /> : null}
@@ -456,7 +456,7 @@ export default function ConversationDetailsScreen() {
                 </View>
               ) : null}
               {data && !data.isSelf && !data.online && data.lastSeenAt ? (
-                <Text className="text-gray-400 text-xs mt-1">
+                <Text className="text-gray-400 text-sm mt-1">
                   {t('details.last_seen', { value: formatLastSeen(data.lastSeenAt) })}
                 </Text>
               ) : null}
@@ -481,7 +481,7 @@ export default function ConversationDetailsScreen() {
                   ) : (
                     <Ionicons name="people" size={13} color={NEXA} style={{ marginRight: 6 }} />
                   )}
-                  <Text className="text-nexa text-xs font-medium">
+                  <Text className="text-nexa text-sm font-medium">
                     {t(
                       data.mutualFriendsCount === 1
                         ? 'profile_view.mutual_one'
@@ -614,7 +614,7 @@ export default function ConversationDetailsScreen() {
           {/* 2.5 Messages épinglés */}
           <Section title={`${t('details.pinned')} · ${pins.length}`}>
             {pins.length === 0 ? (
-              <Text className="text-gray-400 text-sm px-4 py-4">{t('details.no_pinned')}</Text>
+              <Text className="text-gray-400 text-base px-4 py-4">{t('details.no_pinned')}</Text>
             ) : (
               pins.map((m) => (
                 <MessageRow
@@ -631,7 +631,7 @@ export default function ConversationDetailsScreen() {
           {/* 2.6 Messages favoris */}
           <Section title={`${t('details.starred')} · ${starred.length}`}>
             {starred.length === 0 ? (
-              <Text className="text-gray-400 text-sm px-4 py-4">{t('details.no_starred')}</Text>
+              <Text className="text-gray-400 text-base px-4 py-4">{t('details.no_starred')}</Text>
             ) : (
               starred.map((m) => (
                 <MessageRow
@@ -662,7 +662,7 @@ export default function ConversationDetailsScreen() {
           </Section>
 
           {notFound && !blockedByMe ? (
-            <Text className="text-gray-400 text-center text-xs mt-4 px-8">
+            <Text className="text-gray-400 text-center text-sm mt-4 px-8">
               {t('profile_view.not_found')}
             </Text>
           ) : null}
@@ -679,8 +679,8 @@ export default function ConversationDetailsScreen() {
 
       <BottomSheet visible={colorSheet} onClose={() => setColorSheet(false)}>
         <View className="px-5 pb-10 pt-1">
-          <Text className="text-lg font-bold text-gray-900 mb-1">{t('details.bubble_color')}</Text>
-          <Text className="text-sm text-gray-500 mb-4">{t('details.nickname_hint')}</Text>
+          <Text className="text-xl font-bold text-gray-900 mb-1">{t('details.bubble_color')}</Text>
+          <Text className="text-base text-gray-500 mb-4">{t('details.nickname_hint')}</Text>
           <View className="flex-row flex-wrap gap-4">
             {BUBBLE_COLORS.map((c) => {
               const active = resolveBubbleColor(custom.bubbleColor) === c;
@@ -710,15 +710,15 @@ export default function ConversationDetailsScreen() {
       <Modal visible={nicknameOpen} transparent animationType="fade" onRequestClose={() => setNicknameOpen(false)}>
         <Pressable className="flex-1 bg-black/40 justify-center px-8" onPress={() => setNicknameOpen(false)}>
           <Pressable className="bg-white rounded-2xl p-5" onPress={() => Keyboard.dismiss()}>
-            <Text className="text-lg font-bold text-gray-900">{t('details.nickname')}</Text>
-            <Text className="text-sm text-gray-500 mt-1 mb-3">{t('details.nickname_hint')}</Text>
+            <Text className="text-xl font-bold text-gray-900">{t('details.nickname')}</Text>
+            <Text className="text-base text-gray-500 mt-1 mb-3">{t('details.nickname_hint')}</Text>
             <TextInput
               value={nicknameDraft}
               onChangeText={setNicknameDraft}
               placeholder={t('details.nickname_placeholder')}
               autoFocus
               maxLength={40}
-              className="border border-gray-200 rounded-xl px-4 py-3 text-base"
+              className="border border-gray-200 rounded-xl px-4 py-3 text-lg"
             />
             <View className="flex-row justify-end gap-3 mt-4">
               <TouchableOpacity onPress={() => setNicknameOpen(false)} className="px-4 py-2">
@@ -735,7 +735,7 @@ export default function ConversationDetailsScreen() {
       {/* Amis en commun */}
       <BottomSheet visible={mutualOpen} onClose={() => setMutualOpen(false)}>
         <View className="px-5 pb-8 pt-1">
-          <Text className="text-lg font-bold text-gray-900 mb-3">
+          <Text className="text-xl font-bold text-gray-900 mb-3">
             {t('details.mutual_friends')}
           </Text>
           {mutualList === null ? (
@@ -751,7 +751,7 @@ export default function ConversationDetailsScreen() {
                 }}
               >
                 <UserAvatar photoUrl={f.photoUrl} name={f.name} size={52} />
-                <Text className="ml-3 flex-1 text-base font-medium text-gray-900" numberOfLines={1}>
+                <Text className="ml-3 flex-1 text-lg font-medium text-gray-900" numberOfLines={1}>
                   {f.name}
                 </Text>
                 <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
@@ -764,11 +764,11 @@ export default function ConversationDetailsScreen() {
       {/* Ajouter à un groupe */}
       <BottomSheet visible={addGroupOpen} onClose={() => setAddGroupOpen(false)}>
         <View className="px-5 pb-8 pt-1">
-          <Text className="text-lg font-bold text-gray-900 mb-3">{t('details.add_to_group')}</Text>
+          <Text className="text-xl font-bold text-gray-900 mb-3">{t('details.add_to_group')}</Text>
           {adminGroups === null ? (
             <ActivityIndicator color={NEXA} className="my-6" />
           ) : adminGroups.length === 0 ? (
-            <Text className="text-gray-400 text-sm py-6 text-center">
+            <Text className="text-gray-400 text-base py-6 text-center">
               {t('details.no_admin_group')}
             </Text>
           ) : (
@@ -786,7 +786,7 @@ export default function ConversationDetailsScreen() {
                   <Text className="text-gray-900 font-semibold" numberOfLines={1}>
                     {g.name || t('chat.group')}
                   </Text>
-                  <Text className="text-gray-400 text-xs">
+                  <Text className="text-gray-400 text-sm">
                     {t('details.member_count', { count: g.memberCount })}
                   </Text>
                 </View>
@@ -833,7 +833,7 @@ function RelationBadge({ status, t }: { status: RelationStatus; t: (k: string) =
           : t('relation.add_friend');
   return (
     <View className={`mt-3 px-3 py-1 rounded-full ${accent ? 'bg-blue-50' : 'bg-gray-100'}`}>
-      <Text className={`text-xs font-semibold ${accent ? 'text-nexa' : 'text-gray-600'}`}>
+      <Text className={`text-sm font-semibold ${accent ? 'text-nexa' : 'text-gray-600'}`}>
         {label}
       </Text>
     </View>
@@ -868,7 +868,7 @@ function QuickAction({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View className="mt-5">
-      <Text className="text-xs font-semibold text-gray-400 uppercase px-6 pb-2">{title}</Text>
+      <Text className="text-sm font-semibold text-gray-400 uppercase px-6 pb-2">{title}</Text>
       <View className="bg-white rounded-2xl mx-4 overflow-hidden" style={CARD_SHADOW}>
         {children}
       </View>
@@ -905,7 +905,7 @@ function Row({
         <Ionicons name={icon} size={18} color={danger ? '#EF4444' : NEXA} />
       </View>
       <Text className={`flex-1 ml-3.5 ${danger ? 'text-red-500' : 'text-gray-800'}`}>{label}</Text>
-      {right ?? (value ? <Text className="text-gray-400 text-sm" numberOfLines={1}>{value}</Text> : null)}
+      {right ?? (value ? <Text className="text-gray-400 text-base" numberOfLines={1}>{value}</Text> : null)}
       <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 6 }} />
     </TouchableOpacity>
   );
@@ -932,7 +932,7 @@ function MessageRow({
         <Text className="text-gray-800" numberOfLines={1}>
           {preview}
         </Text>
-        <Text className="text-gray-400 text-xs mt-0.5">{msg.sender?.name}</Text>
+        <Text className="text-gray-400 text-sm mt-0.5">{msg.sender?.name}</Text>
       </TouchableOpacity>
       <TouchableOpacity onPress={onRemove} className="p-1 ml-2">
         <Ionicons name="close" size={18} color="#9CA3AF" />

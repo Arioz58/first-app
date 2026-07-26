@@ -111,7 +111,7 @@ export function FriendsPanel({
               className={`flex-row items-center px-3 py-1.5 rounded-full ${active ? 'bg-nexa' : 'bg-gray-100'}`}
               onPress={() => setSub(tab.key)}
             >
-              <Text className={`text-sm font-medium ${active ? 'text-white' : 'text-gray-600'}`}>
+              <Text className={`text-base font-medium ${active ? 'text-white' : 'text-gray-600'}`}>
                 {tab.label}
               </Text>
               {tab.badge ? (
@@ -129,7 +129,7 @@ export function FriendsPanel({
           <View className="flex-row items-center bg-gray-100 rounded-full px-4">
             <Ionicons name="search" size={16} color="#6B7280" />
             <TextInput
-              className="flex-1 py-2 px-2 text-base"
+              className="flex-1 py-2 px-2 text-lg"
               placeholder={t('friends.search_friends')}
               placeholderTextColor="#6B7280"
               value={query}
@@ -174,7 +174,7 @@ export function FriendsPanel({
                   className="bg-nexa rounded-full px-3 py-1.5"
                   onPress={() => accept(item.requestId)}
                 >
-                  <Text className="text-white text-xs font-semibold">
+                  <Text className="text-white text-sm font-semibold">
                     {t('relation.accept')}
                   </Text>
                 </TouchableOpacity>
@@ -182,7 +182,7 @@ export function FriendsPanel({
                   className="border border-gray-300 rounded-full px-3 py-1.5"
                   onPress={() => refuse(item.requestId)}
                 >
-                  <Text className="text-gray-600 text-xs font-semibold">
+                  <Text className="text-gray-600 text-sm font-semibold">
                     {t('relation.refuse')}
                   </Text>
                 </TouchableOpacity>
@@ -203,7 +203,7 @@ export function FriendsPanel({
                 className="border border-gray-300 rounded-full px-3 py-1.5"
                 onPress={() => cancel(item.requestId)}
               >
-                <Text className="text-gray-600 text-xs font-semibold">
+                <Text className="text-gray-600 text-sm font-semibold">
                   {t('relation.cancel_request')}
                 </Text>
               </TouchableOpacity>
@@ -233,8 +233,8 @@ function Row({
     >
       <UserAvatar photoUrl={user.photoUrl} name={user.name} size={52} />
       <View className="flex-1 ml-3">
-        <Text className="text-base font-medium text-gray-900">{user.name}</Text>
-        {subtitle ? <Text className="text-gray-400 text-xs">{subtitle}</Text> : null}
+        <Text className="text-lg font-medium text-gray-900">{user.name}</Text>
+        {subtitle ? <Text className="text-gray-400 text-sm">{subtitle}</Text> : null}
       </View>
       {children}
     </TouchableOpacity>
