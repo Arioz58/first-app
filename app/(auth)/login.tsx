@@ -234,10 +234,10 @@ export default function LoginScreen() {
               opacity: { type: "timing", duration: 400, delay: 210 },
             }}
           >
-            <Text className="text-4xl font-black text-nexa italic">
+            <Text className=" font-black text-nexa italic" style={{ fontSize: 36 }}>
               {isNewUser ? t("auth.create_account") : t("auth.connection")}
             </Text>
-            <Text className="text-2xl font-medium italic text-nexa mb-4">
+            <Text className=" font-medium italic text-nexa mb-4" style={{ fontSize: 24 }}>
               {isNewUser ? t("auth.enter_info") : t("auth.enter_phone")}
             </Text>
           </MotiView>
@@ -245,7 +245,8 @@ export default function LoginScreen() {
           {isNewUser && (
             <View className="mb-4 mt-4">
               <TextInput
-                className={`border rounded-xl px-4 py-3 text-xl ${nameError ? "border-red-400" : "border-gray-300"}`}
+                className={`border rounded-xl px-4 py-3 ${nameError ? "border-red-400" : "border-gray-300"}`}
+                style={{ fontSize: 20 }}
                 placeholder={t("auth.first_name_placeholder")}
                 placeholderTextColor="#6B7280"
                 value={name}
@@ -257,7 +258,7 @@ export default function LoginScreen() {
                 returnKeyType="next"
               />
               {nameError ? (
-                <Text className="text-red-500 text-sm mt-1 ml-1">
+                <Text className="text-red-500 mt-1 ml-1" style={{ fontSize: 14 }}>
                   {nameError}
                 </Text>
               ) : null}
@@ -268,7 +269,8 @@ export default function LoginScreen() {
             <View className="flex-row">
               <CountryPicker selected={country} onSelect={setCountry} />
               <TextInput
-                className={`flex-1 border rounded-xl px-4 py-3 text-xl ${phoneError ? "border-red-400" : "border-gray-300"}`}
+                className={`flex-1 border rounded-xl px-4 py-3 ${phoneError ? "border-red-400" : "border-gray-300"}`}
+                style={{ fontSize: 20 }}
                 placeholder={country.example ?? t("phone")}
                 placeholderTextColor="#6B7280"
                 keyboardType="phone-pad"
@@ -281,14 +283,14 @@ export default function LoginScreen() {
               />
             </View>
             {phoneError ? (
-              <Text className="text-red-500 text-sm mt-1 ml-1">
+              <Text className="text-red-500 mt-1 ml-1" style={{ fontSize: 14 }}>
                 {phoneError}
               </Text>
             ) : null}
           </View>
 
           {serverError ? (
-            <Text className="text-red-500 text-sm text-center mb-3">
+            <Text className="text-red-500 text-center mb-3" style={{ fontSize: 14 }}>
               {serverError}
             </Text>
           ) : null}
@@ -304,7 +306,7 @@ export default function LoginScreen() {
                 size={24}
                 color={accepted ? "#1E40AF" : "#9CA3AF"}
               />
-              <Text className="ml-2 flex-1 text-base text-gray-600 leading-6">
+              <Text className="ml-2 flex-1 text-gray-600 leading-6" style={{ fontSize: 16 }}>
                 {(() => {
                   const parts = t("auth.consent").split("{{link}}");
                   return (
@@ -340,9 +342,10 @@ export default function LoginScreen() {
                 <ActivityIndicator color="white" />
               ) : (
                 <Text
-                  className={`font-semibold text-2xl italic ${
+                  className={`font-semibold italic ${
                     isNewUser && !accepted ? "text-gray-400" : "text-white"
                   }`}
+                  style={{ fontSize: 24 }}
                 >
                   {t("auth.receive_code")} →
                 </Text>
