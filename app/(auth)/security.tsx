@@ -38,7 +38,7 @@ export default function SecurityScreen() {
         }}
       >
         <MotiText
-          className="text-6xl font-black text-nexa italic"
+          className=" font-black text-nexa italic" style={{ fontSize: 60, lineHeight: 60 }}
           from={{ opacity: 0, translateY: 30 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{
@@ -53,7 +53,7 @@ export default function SecurityScreen() {
         </MotiText>
 
         <MotiText
-          className="text-3xl font-medium italic text-nexa"
+          className=" font-medium italic text-nexa" style={{ fontSize: 30, lineHeight: 36 }}
           from={{ opacity: 0, translateY: 24 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{
@@ -107,7 +107,7 @@ export default function SecurityScreen() {
           onPress={() => router.push("/(auth)/intro" as any)}
         >
           <MotiText
-            className="text-white font-semibold text-2xl italic"
+            className="text-white font-semibold italic" style={{ fontSize: 24, lineHeight: 32 }}
             from={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ type: "timing", duration: 300, delay: 560 }}
