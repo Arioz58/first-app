@@ -9,21 +9,10 @@ module.exports = {
           primary: "#1E40AF",
           nexa: "#1E40AF",
         },
-        // Échelle typographique légèrement agrandie (25 juil. 2026).
-        // ~+1px par palier — un cran plus doux que la 1re version (jugée trop grande),
-        // les avatars/éléments restant à leur taille validée. Un seul endroit à régler.
-        fontSize: {
-          xs: ["13px", "17px"],
-          sm: ["15px", "21px"],
-          base: ["17px", "24px"],
-          lg: ["19px", "26px"],
-          xl: ["22px", "28px"],
-          "2xl": ["26px", "32px"],
-          "3xl": ["32px", "38px"],
-          "4xl": ["38px", "44px"],
-          "5xl": ["51px", "52px"],
-          "6xl": ["63px", "63px"],
-        },
+        // Pas d'override de fontSize : la police reste à l'échelle Tailwind
+        // d'origine partout. L'agrandissement « +1 cran » n'a été gardé que
+        // sur les AVATARS/éléments (agrandir la police seule cassait les
+        // proportions — le texte grossit mais pas les paddings/hauteurs).
       },
     },
   plugins: [],
