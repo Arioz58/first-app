@@ -199,9 +199,23 @@ export default function ConversationsScreen() {
     conv.members.find((m) => m.userId !== currentUserId);
 
   // Aperçu du dernier message : les pièces jointes n'ont pas de texte.
+  // Traduit un message système (content JSON { k, by, ... }) pour l'aperçu.
+  const systemText = (raw?: string | null): string => {
+    if (!raw) return '';
+    try {
+      const { k, dur, ...params } = JSON.parse(raw);
+      if (dur) params.duration = t(`ephemeral.${dur}`) as string;
+      if (params.role) params.role = t(`roles.${params.role}`) as string;
+      return t(`system.${k}`, params) as string;
+    } catch {
+      return '';
+    }
+  };
+
   const getLastMessage = (conv: Conversation) => {
     const msg = conv.messages[0];
     if (!msg) return t('chat.no_messages');
+    if (msg.type === 'system') return systemText(msg.content);
     if (msg.mediaType) return t(`preview.${msg.mediaType}`, { defaultValue: t('chat.media') });
     return msg.content ?? t('chat.media');
   };

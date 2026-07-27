@@ -100,6 +100,7 @@ export default function RootLayout() {
       <Stack.Screen name="blocked" options={{ headerShown: false }} />
       <Stack.Screen name="requests" options={{ headerShown: false }} />
       <Stack.Screen name="group/new" options={{ headerShown: false }} />
+      <Stack.Screen name="group/[id]" options={{ headerShown: false, animation: "slide_from_right" }} />
       <Stack.Screen
         name="story/[id]"
         options={{

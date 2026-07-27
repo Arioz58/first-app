@@ -133,7 +133,8 @@ app/
 ├── blocked.tsx          # Page Utilisateurs bloqués (liste + débloquer) → GET/DELETE /blocks
 ├── requests.tsx         # Demandes de messages (liste convs en attente + accepter/supprimer) → /conversations/requests
 ├── group/
-│   └── new.tsx          # Création de groupe : nom + recherche de membres (useUserSearch, chips sélectionnés) — plus de saisie d'ID bruts
+│   ├── new.tsx          # Création de groupe : nom + recherche de membres (useUserSearch, chips sélectionnés) — plus de saisie d'ID bruts
+│   └── [id].tsx         # **Détails d'un groupe** (ouvert au tap sur le header d'un chat de groupe) : en-tête éditable admin (photo/nom/description), liste des membres avec **rôles** (admin/modérateur/membre) + menu d'actions selon droits (promouvoir/rétrograder/retirer), ajouter des membres, médias, mute/éphémères, **paramètre « qui peut envoyer »** (admin), quitter
 └── story/
     ├── [id].tsx         # Viewer stories (photo/vidéo, progress bar, pause au maintien, zoom, ordre chrono) — voir section Stories
     └── create.tsx       # Éditeur de story (photo/vidéo, textes stylables multiples, guides d'alignement, upload S3)
@@ -253,10 +254,13 @@ POST/DELETE /conversations/:id/messages/:msgId/pin   → épingler / désépingl
 POST/DELETE /conversations/:id/messages/:msgId/star  → mettre / retirer des favoris
 GET  /conversations/:id/media?category=&cursor=   → pièces jointes paginées (30/page) — `category` : media | images | videos | documents | audio | gifs | links
 GET  /conversations/:id/media-counts              → compteurs par catégorie (images, videos, documents, audio, gifs, links)
-POST /conversations/:id/members                   → ajouter membres (admin requis)
+POST /conversations/:id/members                   → ajouter membres (admin **ou modérateur**)
+PATCH /conversations/:id/members/:userId/role     → changer le rôle d'un membre `{ role: admin|moderator|member }` (**admin requis**) + bandeau système
+PATCH /conversations/:id/settings                 → réglage groupe `{ whoCanSend: all|admins }` (admin requis)
+DELETE /conversations/:id/messages/:messageId     → supprimer un message (l'**auteur**, ou **admin/modérateur** en groupe) → socket `message_deleted`
 DELETE /conversations/:id/members/:userId         → expulser un membre (admin requis)
 POST /conversations/:id/leave                     → quitter (promeut prochain admin si besoin)
-PATCH /conversations/:id                          → renommer groupe (admin requis)
+PATCH /conversations/:id                          → éditer groupe (admin requis) : `name` / `photoUrl` / `description` (bandeau système « renommé » si name)
 
 POST /upload/presigned-url                        → URL S3 presignée (contentType → ext/folder) + publicUrl CloudFront ; `folder` optionnel (`chat` | `stories`) pour surcharger le dossier par défaut du type. Types autorisés : images, gif, vidéos, audio (m4a/mp3), documents (pdf/doc/docx/xls/xlsx/txt)
 POST /stories                                     → créer story (mediaUrl + texts[] JSON, expire dans 24h)
@@ -277,7 +281,7 @@ typing({ conversationId, typing })                → relayé aux autres membres
 leave_conversation(conversationId)
 
 // Serveur → Client
-new_message(message)                              → refus si blocage (conv directe) ; pièces jointes + `hasLink` (détection d'URL) + `expiresAt` si la conv est en éphémère ; + FCM push aux destinataires offline **acceptés** (pas de push aux membres en « demande » accepted=false → badge uniquement, ni aux membres ayant coupé les notifs `mutedUntil` dans le futur)
+new_message(message)                              → refus si blocage (conv directe) ; pièces jointes + `hasLink` (détection d'URL) + `expiresAt` si la conv est en éphémère ; + FCM push aux destinataires offline **acceptés** (pas de push aux membres en « demande » accepted=false → badge uniquement, ni aux membres ayant coupé les notifs `mutedUntil` dans le futur). ⚠️ **Messages système** (`type:'system'`, `content` = JSON `{ k: clé i18n, by, ...params }`) émis via `createSystemMessage` (`messages.service`) sur événements groupe/éphémère (member_added/removed/left, group_created/renamed, ephemeral_on/off) : rendus en **bandeau centré** côté app (traduits via `system.*` selon la langue du lecteur), **exclus des non-lus** (`type != 'system'` dans le COUNT), exclus de la recherche, pas de push. Pas de message « chiffrement bout en bout » tant que l'E2E n'existe pas (V2).
 peer_typing({ conversationId, userId, typing })   → le correspondant écrit (masquage auto après 5 s côté app)
 conversation_updated({ conversationId, message }) → **room `user:<id>`** (≠ `new_message` qui part dans `conv:<id>`) : met à jour la LISTE des conversations même si la conv n'a jamais été ouverte dans la session. Payload allégé volontairement (l'objet `message` complet embarque `sender` avec téléphone + token FCM). Émis à tous les membres, **émetteur inclus** (ses autres appareils)
 presence_update({ userId, online, lastSeenAt })   → connexion/déconnexion d'un contact (gating `privacyLastSeen` appliqué serveur)
@@ -532,3 +536,4 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 - **Réglages locaux de conversation** (fond, surnom, couleur de bulle, « effacer ») : stockés en **SecureStore**, donc **aucun backend** — ne pas chercher d'endpoint côté serveur pour ces réglages.
 - **Migrations chat** : `phase_c_mute_ephemeral_pin_star` (mute, éphémères, `PinnedMessage`, `StarredMessage`), `phase_d_message_media` (`mediaUrl`/`mediaType`/`fileName`/`fileSize`/`mimeType`/`durationMs`/`hasLink`) et `conversation_list` (`lastReadAt`/`pinnedAt`/`favoritedAt` sur `ConversationMember`).
 - ⚠️ **Ne pas confondre** : `PinnedMessage`/`StarredMessage` = un **message** épinglé/favori dans une conversation (Phase C) ; `ConversationMember.pinnedAt`/`favoritedAt` = la **conversation entière** épinglée/favorite dans la liste. Endpoints voisins mais distincts (`/messages/:msgId/pin` vs `/:id/pin`).
+- **Groupes enrichis** (migration `group_roles_info`) : `Conversation.photoUrl`/`description`/`whoCanSend` (`all`|`admins`) ; `ConversationMember.role` accepte `admin`|`moderator`|`member` (String, pas de migration schéma). Permissions : **admin** = tout ; **modérateur** = ajouter/retirer membres (pas un admin), épingler/supprimer messages ; **membre** = poster (sauf groupe `whoCanSend:admins`) + supprimer ses propres messages. Rôles gérés dans `messages.service` (helper `canManage`), `GET /conversations/:id` renvoie `whoCanSend`/`myRole`/membres+rôles. Le socket `send_message` refuse si `whoCanSend:admins` et pas admin/mod. Écran = `app/group/[id].tsx`.

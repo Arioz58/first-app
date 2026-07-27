@@ -106,7 +106,9 @@
     "wallpaper_error": "Bu görsel yüklenemedi.",
     "seen_at": "Son görülme {{value}}",
     "typing": "Yazıyor…",
-    "online": "Çevrimiçi"
+    "online": "Çevrimiçi",
+    "delete": "Sil",
+    "delete_confirm": "Bu mesaj silinsin mi?"
   },
   "details": {
     "title": "Ayrıntılar",
@@ -179,12 +181,31 @@
     "downloaded": "{{count}} dosya indirildi"
   },
   "group": {
-    "new_group": "Yeni grup",
-    "group_name": "Grup adı",
-    "member_id": "Üye kimliği",
+    "title": "Grup bilgisi",
+    "member_count": "{{count}} üye",
+    "members": "Üyeler",
+    "add": "Ekle",
     "add_members": "Üye ekle",
-    "create": "Grup oluştur",
-    "name_member_required": "Ad ve en az bir üye gerekli"
+    "you": "(sen)",
+    "view_profile": "Profili gör",
+    "make_admin": "Yönetici yap",
+    "make_moderator": "Moderatör yap",
+    "make_member": "Rolü kaldır",
+    "remove": "Gruptan çıkar",
+    "remove_confirm": "{{name}} gruptan çıkarılsın mı?",
+    "leave": "Gruptan ayrıl",
+    "leave_confirm": "Bu gruptan ayrılınsın mı?",
+    "settings": "Ayarlar",
+    "who_can_send": "Kimler mesaj gönderebilir",
+    "only_admins": "Sadece yöneticiler",
+    "everyone": "Herkes",
+    "only_admins_can_send": "Bu grupta yalnızca yöneticiler yazabilir",
+    "edit_info": "Bilgileri düzenle",
+    "group_name": "Grup adı",
+    "description_placeholder": "Açıklama (isteğe bağlı)",
+    "add_description": "Açıklama ekle",
+    "show_all": "{{count}} üyenin tümünü göster",
+    "search_member": "Üye ara"
   },
   "user_search": {
     "placeholder": "Kişi ara",
@@ -358,5 +379,21 @@
     "title": "Yakında: topluluğun",
     "description": "Puanlar, sıralama ve yerel işletme haberleri çok yakında.",
     "badge": "Geliştiriliyor"
+  },
+  "system": {
+    "member_added": "{{by}}, {{who}} kişisini ekledi",
+    "member_removed": "{{by}}, {{who}} kişisini çıkardı",
+    "member_left": "{{by}} gruptan ayrıldı",
+    "group_created": "{{by}} « {{name}} » grubunu oluşturdu",
+    "group_renamed": "{{by}} grubu « {{name}} » olarak yeniden adlandırdı",
+    "ephemeral_on": "{{by}} kaybolan mesajları açtı ({{duration}})",
+    "ephemeral_off": "{{by}} kaybolan mesajları kapattı",
+    "role_set": "{{by}}, {{who}} kişisini {{role}} yaptı",
+    "role_removed": "{{by}}, {{who}} kişisinin rolünü kaldırdı"
+  },
+  "roles": {
+    "admin": "Yönetici",
+    "moderator": "Moderatör",
+    "member": "Üye"
   }
 }

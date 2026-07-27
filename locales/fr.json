@@ -106,7 +106,9 @@
     "wallpaper_error": "Impossible de charger cette image.",
     "seen_at": "Vu le {{value}}",
     "typing": "En train d'écrire…",
-    "online": "En ligne"
+    "online": "En ligne",
+    "delete": "Supprimer",
+    "delete_confirm": "Supprimer ce message ?"
   },
   "details": {
     "title": "Détails",
@@ -179,12 +181,31 @@
     "downloaded": "{{count}} fichier(s) téléchargé(s)"
   },
   "group": {
-    "new_group": "Nouveau groupe",
-    "group_name": "Nom du groupe",
-    "member_id": "ID d'un membre",
+    "title": "Infos du groupe",
+    "member_count": "{{count}} membres",
+    "members": "Membres",
+    "add": "Ajouter",
     "add_members": "Ajouter des membres",
-    "create": "Créer le groupe",
-    "name_member_required": "Nom et au moins un membre requis"
+    "you": "(vous)",
+    "view_profile": "Voir le profil",
+    "make_admin": "Nommer administrateur",
+    "make_moderator": "Nommer modérateur",
+    "make_member": "Retirer le rôle",
+    "remove": "Retirer du groupe",
+    "remove_confirm": "Retirer {{name}} du groupe ?",
+    "leave": "Quitter le groupe",
+    "leave_confirm": "Quitter ce groupe ?",
+    "settings": "Paramètres",
+    "who_can_send": "Qui peut envoyer des messages",
+    "only_admins": "Admins seulement",
+    "everyone": "Tout le monde",
+    "only_admins_can_send": "Seuls les admins peuvent écrire dans ce groupe",
+    "edit_info": "Modifier les infos",
+    "group_name": "Nom du groupe",
+    "description_placeholder": "Description (optionnel)",
+    "add_description": "Ajouter une description",
+    "show_all": "Afficher les {{count}} membres",
+    "search_member": "Rechercher un membre"
   },
   "user_search": {
     "placeholder": "Rechercher des personnes",
@@ -358,5 +379,21 @@
     "title": "Bientôt : ta communauté",
     "description": "Points, classement et actus des commerces locaux arriveront prochainement.",
     "badge": "En cours de développement"
+  },
+  "system": {
+    "member_added": "{{by}} a ajouté {{who}}",
+    "member_removed": "{{by}} a retiré {{who}}",
+    "member_left": "{{by}} a quitté le groupe",
+    "group_created": "{{by}} a créé le groupe « {{name}} »",
+    "group_renamed": "{{by}} a renommé le groupe en « {{name}} »",
+    "ephemeral_on": "{{by}} a activé les messages éphémères ({{duration}})",
+    "ephemeral_off": "{{by}} a désactivé les messages éphémères",
+    "role_set": "{{by}} a nommé {{who}} {{role}}",
+    "role_removed": "{{by}} a retiré le rôle de {{who}}"
+  },
+  "roles": {
+    "admin": "Admin",
+    "moderator": "Modérateur",
+    "member": "Membre"
   }
 }

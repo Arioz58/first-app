@@ -106,7 +106,9 @@
     "wallpaper_error": "Couldn't load this image.",
     "seen_at": "Last seen {{value}}",
     "typing": "Typing…",
-    "online": "Online"
+    "online": "Online",
+    "delete": "Delete",
+    "delete_confirm": "Delete this message?"
   },
   "details": {
     "title": "Details",
@@ -179,12 +181,31 @@
     "downloaded": "{{count}} file(s) downloaded"
   },
   "group": {
-    "new_group": "New group",
-    "group_name": "Group name",
-    "member_id": "Member ID",
+    "title": "Group info",
+    "member_count": "{{count}} members",
+    "members": "Members",
+    "add": "Add",
     "add_members": "Add members",
-    "create": "Create group",
-    "name_member_required": "Name and at least one member required"
+    "you": "(you)",
+    "view_profile": "View profile",
+    "make_admin": "Make admin",
+    "make_moderator": "Make moderator",
+    "make_member": "Remove role",
+    "remove": "Remove from group",
+    "remove_confirm": "Remove {{name}} from the group?",
+    "leave": "Leave group",
+    "leave_confirm": "Leave this group?",
+    "settings": "Settings",
+    "who_can_send": "Who can send messages",
+    "only_admins": "Admins only",
+    "everyone": "Everyone",
+    "only_admins_can_send": "Only admins can post in this group",
+    "edit_info": "Edit info",
+    "group_name": "Group name",
+    "description_placeholder": "Description (optional)",
+    "add_description": "Add a description",
+    "show_all": "Show all {{count}} members",
+    "search_member": "Search a member"
   },
   "user_search": {
     "placeholder": "Search for people",
@@ -358,5 +379,21 @@
     "title": "Coming soon: your community",
     "description": "Points, leaderboard and local business news are on the way.",
     "badge": "In development"
+  },
+  "system": {
+    "member_added": "{{by}} added {{who}}",
+    "member_removed": "{{by}} removed {{who}}",
+    "member_left": "{{by}} left the group",
+    "group_created": "{{by}} created the group “{{name}}”",
+    "group_renamed": "{{by}} renamed the group to “{{name}}”",
+    "ephemeral_on": "{{by}} turned on disappearing messages ({{duration}})",
+    "ephemeral_off": "{{by}} turned off disappearing messages",
+    "role_set": "{{by}} made {{who}} {{role}}",
+    "role_removed": "{{by}} removed {{who}}'s role"
+  },
+  "roles": {
+    "admin": "Admin",
+    "moderator": "Moderator",
+    "member": "Member"
   }
 }

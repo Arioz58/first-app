@@ -56,6 +56,8 @@ type ConvMeta = {
   members: ConvMember[];
   ephemeralDuration: number | null;
   myMutedUntil: string | null;
+  whoCanSend?: 'all' | 'admins';
+  myRole?: 'admin' | 'moderator' | 'member';
 };
 type Flags = { pinned: string[]; starred: string[] };
 type HeaderProfile = {
@@ -117,11 +119,26 @@ export default function ChatScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
+
+  // Traduit un message système (content JSON { k, by, ... }) selon la langue du lecteur.
+  const systemText = (raw?: string | null): string => {
+    if (!raw) return '';
+    try {
+      const { k, dur, ...params } = JSON.parse(raw);
+      if (dur) params.duration = t(`ephemeral.${dur}`) as string;
+      if (params.role) params.role = t(`roles.${params.role}`) as string;
+      return t(`system.${k}`, params) as string;
+    } catch {
+      return '';
+    }
+  };
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [convType, setConvType] = useState<'direct' | 'group'>('direct');
+  const [whoCanSend, setWhoCanSend] = useState<'all' | 'admins'>('all');
+  const [myRole, setMyRole] = useState<'admin' | 'moderator' | 'member'>('member');
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
   const [header, setHeader] = useState<HeaderProfile | null>(null);
   const [custom, setCustom] = useState<ConversationCustomization>({});
@@ -192,6 +209,8 @@ export default function ChatScreen() {
         setConvType(meta.type);
         setEphemeralDuration(meta.ephemeralDuration);
         setMutedUntil(meta.myMutedUntil);
+        setWhoCanSend(meta.whoCanSend ?? 'all');
+        setMyRole(meta.myRole ?? 'member');
         if (meta.type === 'direct') {
           const other = meta.members.find((m) => m.userId !== me.id);
           if (other) {
@@ -242,6 +261,16 @@ export default function ChatScreen() {
           if (conversationId === id) router.replace('/(tabs)');
         });
 
+        // Message supprimé (par l'auteur ou un admin/modérateur) → le retirer.
+        socket.on(
+          'message_deleted',
+          ({ conversationId, messageId }: { conversationId: string; messageId: string }) => {
+            if (conversationId === id) {
+              setMessages((prev) => prev.filter((m) => m.id !== messageId));
+            }
+          },
+        );
+
         // Frappe du correspondant → affichage + masquage auto après 5 s d'inactivité.
         socket.on(
           'peer_typing',
@@ -279,6 +308,7 @@ export default function ChatScreen() {
       const socket = getSocket();
       socket?.off('new_message');
       socket?.off('removed_from_group');
+      socket?.off('message_deleted');
       socket?.off('peer_typing');
       socket?.off('presence_update');
       // On arrête proprement notre propre indicateur de frappe.
@@ -502,9 +532,27 @@ export default function ChatScreen() {
     })
       .then(loadFlags)
       .catch((e: any) => Alert.alert(t('error'), e.message));
+  const confirmDelete = (messageId: string) =>
+    Alert.alert(t('chat.delete_confirm'), '', [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('chat.delete'),
+        style: 'destructive',
+        onPress: () =>
+          apiRequest(`/conversations/${id}/messages/${messageId}`, { method: 'DELETE' })
+            .then(() => setMessages((prev) => prev.filter((m) => m.id !== messageId)))
+            .catch((e: any) => Alert.alert(t('error'), e.message)),
+      },
+    ]);
+
   const openMessageMenu = (messageId: string) => {
     const pinned = flags.pinned.includes(messageId);
     const starred = flags.starred.includes(messageId);
+    const msg = messages.find((m) => m.id === messageId);
+    const isMine = msg?.sender?.id === currentUserId;
+    // Supprimer : mon message, ou admin/modérateur en groupe.
+    const canDelete =
+      isMine || (convType === 'group' && (myRole === 'admin' || myRole === 'moderator'));
     Alert.alert('', undefined, [
       {
         text: pinned ? t('details.unpin') : t('details.pin'),
@@ -514,6 +562,9 @@ export default function ChatScreen() {
         text: starred ? t('details.unstar') : t('details.star'),
         onPress: () => toggleStar(messageId, starred),
       },
+      ...(canDelete
+        ? [{ text: t('chat.delete'), style: 'destructive' as const, onPress: () => confirmDelete(messageId) }]
+        : []),
       { text: t('cancel'), style: 'cancel' as const },
     ]);
   };
@@ -549,7 +600,11 @@ export default function ChatScreen() {
   }, [scrollTarget, visibleMessages]);
 
   const openDetails = () => {
-    if (convType !== 'direct' || !otherUserId) return;
+    if (convType === 'group') {
+      router.push({ pathname: '/group/[id]' as any, params: { id } });
+      return;
+    }
+    if (!otherUserId) return;
     router.push({
       pathname: '/chat/details' as any,
       params: { conversationId: id, userId: otherUserId, name: displayName },
@@ -638,7 +693,7 @@ export default function ChatScreen() {
         </TouchableOpacity>
 
         {/* Avatar + point de statut */}
-        <TouchableOpacity onPress={openDetails} disabled={convType !== 'direct'} className="ml-1">
+        <TouchableOpacity onPress={openDetails} className="ml-1">
           {convType === 'group' ? (
             <View className="w-10 h-10 rounded-full bg-blue-50 items-center justify-center">
               <Ionicons name="people" size={20} color={NEXA} />
@@ -655,11 +710,7 @@ export default function ChatScreen() {
         </TouchableOpacity>
 
         {/* Nom (tronqué) + sous-titre dynamique */}
-        <TouchableOpacity
-          className="flex-1 ml-3"
-          onPress={openDetails}
-          disabled={convType !== 'direct'}
-        >
+        <TouchableOpacity className="flex-1 ml-3" onPress={openDetails}>
           <View className="flex-row items-center">
             <Text
               className="text-lg font-semibold text-gray-900 flex-shrink"
@@ -755,6 +806,16 @@ export default function ChatScreen() {
             if (atBottomRef.current) listRef.current?.scrollToEnd({ animated: false });
           }}
           renderItem={({ item }) => {
+            // Bandeau système centré (rejoint le groupe, éphémères, etc.)
+            if (item.type === 'system') {
+              return (
+                <View className="items-center my-2 px-6">
+                  <Text className="text-xs text-gray-500 bg-gray-100 rounded-full px-3 py-1 text-center">
+                    {systemText(item.content)}
+                  </Text>
+                </View>
+              );
+            }
             const isMe = item.sender?.id === currentUserId;
             const isStoryReply = item.type === 'story_reply' || !!item.storyMediaUrl;
             const reaction = isStoryReply && isEmojiOnly(item.content);
@@ -906,8 +967,17 @@ export default function ChatScreen() {
           <Text className="text-sm text-gray-400 px-4 pt-1">{t('media.uploading')}</Text>
         )}
 
-        {/* Barre d'enregistrement vocal */}
-        {isRecording ? (
+        {/* Groupe réservé aux admins : simple membre → saisie bloquée */}
+        {convType === 'group' &&
+        whoCanSend === 'admins' &&
+        myRole !== 'admin' &&
+        myRole !== 'moderator' ? (
+          <View className="px-4 py-4 border-t border-gray-100 items-center">
+            <Text className="text-sm text-gray-400 text-center">
+              {t('group.only_admins_can_send')}
+            </Text>
+          </View>
+        ) : isRecording ? (
           <View className="flex-row items-center px-3 py-3 border-t border-gray-100">
             <TouchableOpacity onPress={cancelRecording} className="px-2">
               <Ionicons name="trash-outline" size={22} color="#EF4444" />
