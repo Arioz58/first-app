@@ -373,7 +373,8 @@
   "activity": {
     "empty": "Şimdilik yeni bir şey yok.",
     "requests": "Arkadaşlık istekleri",
-    "suggestions": "Tanıyor olabileceğin kişiler"
+    "suggestions": "Tanıyor olabileceğin kişiler",
+    "see_all": "{{count}} kişinin tümünü gör"
   },
   "community": {
     "title": "Yakında: topluluğun",

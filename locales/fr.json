@@ -373,7 +373,8 @@
   "activity": {
     "empty": "Rien de neuf pour le moment.",
     "requests": "Demandes d'ami",
-    "suggestions": "Personnes que tu connais peut-être"
+    "suggestions": "Personnes que tu connais peut-être",
+    "see_all": "Voir les {{count}} personnes"
   },
   "community": {
     "title": "Bientôt : ta communauté",

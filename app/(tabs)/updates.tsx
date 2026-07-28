@@ -12,6 +12,8 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import BottomSheet from '../../components/BottomSheet';
+import FloatingSuggestions from '../../components/FloatingSuggestions';
 import StoriesBar, { type StoriesBarHandle } from '../../components/StoriesBar';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
@@ -79,18 +81,23 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
   const router = useRouter();
   const [received, setReceived] = useState<RequestItem[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [me, setMe] = useState<{ name: string; photoUrl: string | null }>({ name: '', photoUrl: null });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
+  const [suggOpen, setSuggOpen] = useState(false); // drawer « voir tout »
+  const [focusTick, setFocusTick] = useState(0); // rejoue l'anim des suggestions à l'arrivée sur l'onglet
 
   const load = useCallback(async () => {
     try {
-      const [r, s] = await Promise.all([
+      const [r, s, profile] = await Promise.all([
         apiRequest<RequestItem[]>('/friends/requests/received'),
         apiRequest<Suggestion[]>('/friends/suggestions'),
+        apiRequest<{ name: string; photoUrl: string | null }>('/users/me'),
       ]);
       setReceived(r);
       setSuggestions(s);
+      setMe({ name: profile.name, photoUrl: profile.photoUrl });
       setPendingFriendRequests(r.length); // resynchronise le badge de l'onglet Contacts
     } catch {
       // silencieux
@@ -103,6 +110,7 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
   useFocusEffect(
     useCallback(() => {
       load();
+      setFocusTick((x) => x + 1); // relance l'animation d'apparition des suggestions
     }, [load]),
   );
 
@@ -160,7 +168,17 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
         </View>
       ) : null}
 
-      {/* Demandes d'ami reçues */}
+      {/* Suggestions — affichage flottant façon iCloud (moi au centre), EN HAUT */}
+      <FloatingSuggestions
+        suggestions={suggestions}
+        myPhotoUrl={me.photoUrl}
+        myName={me.name}
+        replayKey={focusTick}
+        onOpenProfile={(uid) => router.push({ pathname: '/user/[id]' as any, params: { id: uid } })}
+        onSeeAll={() => setSuggOpen(true)}
+      />
+
+      {/* Demandes d'ami reçues — en dessous des suggestions */}
       {received.length > 0 ? (
         <View className="mt-2">
           <Text className="text-sm font-semibold text-gray-400 uppercase px-5 pb-2">
@@ -193,25 +211,26 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
         </View>
       ) : null}
 
-      {/* Suggestions : personnes que tu connais peut-être */}
-      {suggestions.length > 0 ? (
-        <View className="mt-4">
-          <Text className="text-sm font-semibold text-gray-400 uppercase px-5 pb-2">
-            {t('activity.suggestions')}
-          </Text>
+      {/* Drawer « voir tout » : liste complète + Ajouter */}
+      <BottomSheet visible={suggOpen} onClose={() => setSuggOpen(false)}>
+        <View className="pb-6 pt-1">
+          <Text className="text-lg font-bold text-gray-900 px-5 pb-2">{t('activity.suggestions')}</Text>
           {suggestions.map((s) => (
             <View key={s.id} className="flex-row items-center px-4 py-3">
-              <TouchableOpacity onPress={() => router.push({ pathname: '/user/[id]' as any, params: { id: s.id } })}>
-                <UserAvatar photoUrl={s.photoUrl} name={s.name} size={56} />
+              <TouchableOpacity
+                onPress={() => {
+                  setSuggOpen(false);
+                  router.push({ pathname: '/user/[id]' as any, params: { id: s.id } });
+                }}
+              >
+                <UserAvatar photoUrl={s.photoUrl} name={s.name} size={52} />
               </TouchableOpacity>
               <View className="flex-1 ml-3">
                 <Text className="font-semibold text-gray-900" numberOfLines={1}>{s.name}</Text>
                 {s.mutualFriendsCount > 0 ? (
                   <Text className="text-gray-400 text-sm">
                     {t(
-                      s.mutualFriendsCount === 1
-                        ? 'profile_view.mutual_one'
-                        : 'profile_view.mutual_other',
+                      s.mutualFriendsCount === 1 ? 'profile_view.mutual_one' : 'profile_view.mutual_other',
                       { count: s.mutualFriendsCount },
                     )}
                   </Text>
@@ -228,7 +247,7 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
             </View>
           ))}
         </View>
-      ) : null}
+      </BottomSheet>
     </ScrollView>
   );
 }

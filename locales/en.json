@@ -373,7 +373,8 @@
   "activity": {
     "empty": "Nothing new right now.",
     "requests": "Friend requests",
-    "suggestions": "People you may know"
+    "suggestions": "People you may know",
+    "see_all": "See all {{count}} people"
   },
   "community": {
     "title": "Coming soon: your community",
