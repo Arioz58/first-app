@@ -405,5 +405,25 @@
     "system": "Sistem",
     "light": "Açık",
     "dark": "Koyu"
-  }
+  },
+  "sections": {
+    "preferences": "Tercihler",
+    "privacy": "Gizlilik",
+    "about": "Hakkında"
+  },
+  "profile_stats": {
+    "friends": "Arkadaşlar",
+    "groups": "Gruplar",
+    "stories": "Durumlar"
+  },
+  "about": {
+    "version": "Sürüm"
+  },
+  "share": {
+    "message": "Beni Nexa'da ekle: {{name}} ({{phone}})",
+    "qr_title": "QR kodum",
+    "qr_hint": "Eklenmek için bu kodu okut",
+    "button": "Profilimi paylaş"
+  },
+  "blocked_title": "Engellenen kullanıcılar"
 }

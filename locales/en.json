@@ -405,5 +405,25 @@
     "system": "System",
     "light": "Light",
     "dark": "Dark"
-  }
+  },
+  "sections": {
+    "preferences": "Preferences",
+    "privacy": "Privacy",
+    "about": "About"
+  },
+  "profile_stats": {
+    "friends": "Friends",
+    "groups": "Groups",
+    "stories": "Stories"
+  },
+  "about": {
+    "version": "Version"
+  },
+  "share": {
+    "message": "Add me on Nexa: {{name}} ({{phone}})",
+    "qr_title": "My QR code",
+    "qr_hint": "Have this code scanned to get added",
+    "button": "Share my profile"
+  },
+  "blocked_title": "Blocked users"
 }
