@@ -425,5 +425,12 @@
     "qr_hint": "Have this code scanned to get added",
     "button": "Share my profile"
   },
-  "blocked_title": "Blocked users"
+  "blocked_title": "Blocked users",
+  "scan": {
+    "title": "Scan a QR",
+    "permission": "Allow camera access to scan a QR code.",
+    "allow": "Allow",
+    "hint": "Point at a profile QR code",
+    "not_recognized": "QR code not recognized"
+  }
 }

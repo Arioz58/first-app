@@ -89,6 +89,7 @@ export default function RootLayout() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="chat/new" options={{ headerShown: false }} />
+      <Stack.Screen name="scan" options={{ headerShown: false, animation: "slide_from_bottom" }} />
       <Stack.Screen
         name="chat/details"
         options={{ headerShown: false, animation: "slide_from_right" }}

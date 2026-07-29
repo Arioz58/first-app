@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "firstapp",
+    "scheme": "nexa",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -27,7 +27,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.arzwebconcept.firstapp",
+      "package": "com.berke.nexa2",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"

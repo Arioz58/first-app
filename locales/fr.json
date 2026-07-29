@@ -425,5 +425,12 @@
     "qr_hint": "Fais scanner ce code pour être ajouté",
     "button": "Partager mon profil"
   },
-  "blocked_title": "Utilisateurs bloqués"
+  "blocked_title": "Utilisateurs bloqués",
+  "scan": {
+    "title": "Scanner un QR",
+    "permission": "Autorise l'accès à la caméra pour scanner un QR code.",
+    "allow": "Autoriser",
+    "hint": "Vise le QR code d'un profil",
+    "not_recognized": "QR code non reconnu"
+  }
 }

@@ -204,6 +204,13 @@ export default function SearchScreen() {
               </TouchableOpacity>
             ) : null}
           </View>
+          {/* Scanner un QR de profil */}
+          <TouchableOpacity
+            className="ml-2 w-11 h-11 rounded-xl bg-blue-50 dark:bg-blue-950 items-center justify-center"
+            onPress={() => router.push('/scan' as any)}
+          >
+            <Ionicons name="scan-outline" size={22} color="#1E40AF" />
+          </TouchableOpacity>
         </View>
 
         {/* Erreur inline (introuvable / invalide / propre numéro / échec) */}

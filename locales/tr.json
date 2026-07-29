@@ -425,5 +425,12 @@
     "qr_hint": "Eklenmek için bu kodu okut",
     "button": "Profilimi paylaş"
   },
-  "blocked_title": "Engellenen kullanıcılar"
+  "blocked_title": "Engellenen kullanıcılar",
+  "scan": {
+    "title": "QR tara",
+    "permission": "QR kodu taramak için kamera erişimine izin ver.",
+    "allow": "İzin ver",
+    "hint": "Bir profil QR kodunu hedefle",
+    "not_recognized": "QR kodu tanınmadı"
+  }
 }

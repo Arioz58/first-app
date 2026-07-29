@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import * as ExpoLinking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -261,7 +262,9 @@ export default function ProfileScreen() {
   const currentLang = SUPPORTED_LANGUAGES.find((l) => l.code === user?.language);
   const themeLabel =
     themePref === 'light' ? t('theme.light') : themePref === 'dark' ? t('theme.dark') : t('theme.system');
-  const profileValue = `nexa://user/${user?.id}`;
+  // Lien deep link avec le scheme de l'app (nexa://user/<id> en build) →
+  // scannable in-app ET par l'appareil photo natif, routé par expo-router.
+  const profileValue = user ? ExpoLinking.createURL(`/user/${user.id}`) : '';
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-zinc-950" edges={['top', 'left', 'right']}>
