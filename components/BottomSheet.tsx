@@ -123,7 +123,7 @@ export default function BottomSheet({
           <Animated.View
             onLayout={height ? undefined : onLayout}
             style={[height ? { height } : null, sheetStyle]}
-            className="absolute left-0 right-0 bottom-0 bg-white rounded-t-3xl"
+            className="absolute left-0 right-0 bottom-0 bg-white dark:bg-zinc-900 rounded-t-3xl"
           >
             <GestureDetector gesture={pan}>
               <View className="pt-3 pb-1">

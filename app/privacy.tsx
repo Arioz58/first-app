@@ -72,7 +72,7 @@ export default function PrivacyScreen() {
 
   if (loading || !privacy) {
     return (
-      <View className="flex-1 items-center justify-center bg-white">
+      <View className="flex-1 items-center justify-center bg-white dark:bg-zinc-900">
         <ActivityIndicator size="large" color={NEXA} />
       </View>
     );
@@ -80,13 +80,13 @@ export default function PrivacyScreen() {
 
   const Row = ({ field, options }: { field: FieldKey; options: readonly string[] }) => (
     <TouchableOpacity
-      className="flex-row items-center px-4 py-4 border-b border-gray-50"
+      className="flex-row items-center px-4 py-4 border-b border-gray-50 dark:border-zinc-800"
       onPress={() => setPicker({ key: field, options })}
     >
-      <Text className="flex-1 text-lg text-gray-900">
+      <Text className="flex-1 text-lg text-gray-900 dark:text-zinc-100">
         {t(`privacy_settings.${LABEL_KEY[field]}` as any)}
       </Text>
-      <Text className="text-gray-400 mr-1">
+      <Text className="text-gray-400 dark:text-zinc-500 mr-1">
         {t(`privacy_settings.${privacy[field]}` as any)}
       </Text>
       <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
@@ -94,29 +94,29 @@ export default function PrivacyScreen() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      <View className="flex-row items-center px-4 py-3 bg-white border-b border-gray-100">
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-zinc-950">
+      <View className="flex-row items-center px-4 py-3 bg-white dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-800">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
-        <Text className="text-xl font-semibold text-gray-900">
+        <Text className="text-xl font-semibold text-gray-900 dark:text-zinc-100">
           {t('privacy_settings.title')}
         </Text>
       </View>
 
       <ScrollView>
-        <Text className="px-4 pt-5 pb-1 text-sm font-semibold uppercase text-gray-400">
+        <Text className="px-4 pt-5 pb-1 text-sm font-semibold uppercase text-gray-400 dark:text-zinc-500">
           {t('privacy_settings.section_visibility')}
         </Text>
-        <View className="bg-white">
+        <View className="bg-white dark:bg-zinc-900">
           <Row field="privacyPhoto" options={TRIPLE} />
           <Row field="privacyBio" options={TRIPLE} />
           <Row field="privacyLastSeen" options={TRIPLE} />
           <Row field="privacyPhone" options={TRIPLE} />
 
           {/* Localisation : toggle de partage + qui peut la voir */}
-          <View className="flex-row items-center px-4 py-4 border-b border-gray-50">
-            <Text className="flex-1 text-lg text-gray-900">
+          <View className="flex-row items-center px-4 py-4 border-b border-gray-50 dark:border-zinc-800">
+            <Text className="flex-1 text-lg text-gray-900 dark:text-zinc-100">
               {t('privacy_settings.location_enabled')}
             </Text>
             <Switch
@@ -128,23 +128,23 @@ export default function PrivacyScreen() {
           {privacy.locationEnabled && <Row field="privacyLocation" options={TRIPLE} />}
         </View>
 
-        <Text className="px-4 pt-5 pb-1 text-sm font-semibold uppercase text-gray-400">
+        <Text className="px-4 pt-5 pb-1 text-sm font-semibold uppercase text-gray-400 dark:text-zinc-500">
           {t('privacy_settings.section_contact')}
         </Text>
-        <View className="bg-white">
+        <View className="bg-white dark:bg-zinc-900">
           <Row field="privacyMessages" options={TRIPLE} />
           <Row field="privacyCalls" options={TRIPLE} />
           <Row field="privacyFriendRequests" options={FR_VALUES} />
         </View>
 
         {/* Utilisateurs bloqués */}
-        <View className="bg-white mt-5">
+        <View className="bg-white dark:bg-zinc-900 mt-5">
           <TouchableOpacity
             className="flex-row items-center px-4 py-4"
             onPress={() => router.push('/blocked' as any)}
           >
             <Ionicons name="ban-outline" size={20} color="#EF4444" />
-            <Text className="flex-1 ml-3 text-lg text-gray-900">
+            <Text className="flex-1 ml-3 text-lg text-gray-900 dark:text-zinc-100">
               {t('moderation.blocked_users')}
             </Text>
             <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
@@ -155,7 +155,7 @@ export default function PrivacyScreen() {
 
       {/* Sélecteur de valeur */}
       <BottomSheet visible={picker !== null} onClose={() => setPicker(null)}>
-        <Text className="text-xl font-bold text-gray-900 px-5 pt-1 pb-2">
+        <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 px-5 pt-1 pb-2">
           {picker ? t(`privacy_settings.${LABEL_KEY[picker.key]}` as any) : ''}
         </Text>
         {picker?.options.map((opt) => {
@@ -167,7 +167,7 @@ export default function PrivacyScreen() {
               onPress={() => selectValue(opt)}
             >
               <Text
-                className={`flex-1 text-lg ${active ? 'font-bold' : 'text-gray-900'}`}
+                className={`flex-1 text-lg ${active ? 'font-bold' : 'text-gray-900 dark:text-zinc-100'}`}
                 style={active ? { color: NEXA } : undefined}
               >
                 {t(`privacy_settings.${opt}` as any)}

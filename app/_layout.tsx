@@ -11,6 +11,7 @@ import i18n from "../lib/i18n";
 import { registerForPushNotifications } from "../lib/notifications";
 import { connectSocket } from "../lib/socket";
 import { clearTokens, getAccessToken, getRefreshToken } from "../lib/storage";
+import { initTheme } from "../lib/theme";
 import "./globals.css";
 
 // Notif in-app locale (utilisateur en ligne → reçoit l'event socket plutôt qu'un push).
@@ -36,6 +37,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     setSessionExpiredHandler(() => router.replace("/(auth)/welcome"));
+    initTheme(); // restaure le thème choisi (Système/Clair/Sombre) avant le rendu
 
     const init = async () => {
       const token = await getAccessToken();

@@ -289,7 +289,7 @@ export default function GroupDetailsScreen() {
 
   if (loading || !data) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50 items-center justify-center">
+      <SafeAreaView className="flex-1 bg-gray-50 dark:bg-zinc-950 items-center justify-center">
         <ActivityIndicator size="large" color={NEXA} />
       </SafeAreaView>
     );
@@ -302,17 +302,17 @@ export default function GroupDetailsScreen() {
   const memberRow = (m: Member) => (
     <TouchableOpacity
       key={m.userId}
-      className="flex-row items-center px-4 py-3 border-b border-gray-50"
+      className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800"
       onPress={() => openMemberMenu(m)}
     >
       <UserAvatar photoUrl={m.user.photoUrl} name={m.user.name} size={44} />
-      <Text className="flex-1 ml-3 font-semibold text-gray-900" numberOfLines={1}>
+      <Text className="flex-1 ml-3 font-semibold text-gray-900 dark:text-zinc-100" numberOfLines={1}>
         {m.user.name}
         {m.userId === me ? ` ${t('group.you')}` : ''}
       </Text>
       {roleBadge(m.role) && (
-        <View className={`rounded-full px-2 py-0.5 ${m.role === 'admin' ? 'bg-blue-50' : 'bg-gray-100'}`}>
-          <Text className={`text-xs font-semibold ${m.role === 'admin' ? 'text-nexa' : 'text-gray-500'}`}>
+        <View className={`rounded-full px-2 py-0.5 ${m.role === 'admin' ? 'bg-blue-50 dark:bg-blue-950' : 'bg-gray-100 dark:bg-zinc-800'}`}>
+          <Text className={`text-xs font-semibold ${m.role === 'admin' ? 'text-nexa' : 'text-gray-500 dark:text-zinc-400'}`}>
             {roleBadge(m.role)}
           </Text>
         </View>
@@ -325,25 +325,25 @@ export default function GroupDetailsScreen() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      <View className="flex-row items-center px-4 py-3 bg-white border-b border-gray-100">
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-zinc-950">
+      <View className="flex-row items-center px-4 py-3 bg-white dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-800">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900 flex-1">{t('group.title')}</Text>
+        <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100 flex-1">{t('group.title')}</Text>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
         {/* En-tête */}
-        <View className="bg-white rounded-2xl mx-4 mt-3 overflow-hidden" style={CARD_SHADOW}>
+        <View className="bg-white dark:bg-zinc-900 rounded-2xl mx-4 mt-3 overflow-hidden" style={CARD_SHADOW}>
           <LinearGradient colors={['#3B82F6', '#1E3A8A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ height: 76 }} />
           <View className="items-center -mt-11 pb-5 px-6">
             <TouchableOpacity disabled={!isAdmin || uploading} onPress={changePhoto} activeOpacity={0.85}>
-              <View className="rounded-full bg-white p-1">
+              <View className="rounded-full bg-white dark:bg-zinc-900 p-1">
                 {data.photoUrl ? (
                   <UserAvatar photoUrl={data.photoUrl} name={data.name ?? ''} size={96} />
                 ) : (
-                  <View className="w-24 h-24 rounded-full bg-blue-50 items-center justify-center">
+                  <View className="w-24 h-24 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center">
                     <Ionicons name="people" size={44} color={NEXA} />
                   </View>
                 )}
@@ -360,7 +360,7 @@ export default function GroupDetailsScreen() {
             </TouchableOpacity>
 
             <View className="flex-row items-center mt-3">
-              <Text className="text-2xl font-bold text-gray-900">{data.name ?? t('chat.group')}</Text>
+              <Text className="text-2xl font-bold text-gray-900 dark:text-zinc-100">{data.name ?? t('chat.group')}</Text>
               {isAdmin && (
                 <TouchableOpacity
                   className="ml-2"
@@ -374,11 +374,11 @@ export default function GroupDetailsScreen() {
                 </TouchableOpacity>
               )}
             </View>
-            <Text className="text-gray-400 text-sm mt-0.5">
+            <Text className="text-gray-400 dark:text-zinc-500 text-sm mt-0.5">
               {t('group.member_count', { count: members.length })}
             </Text>
             {data.description ? (
-              <Text className="text-gray-600 text-center mt-2">{data.description}</Text>
+              <Text className="text-gray-600 dark:text-zinc-300 text-center mt-2">{data.description}</Text>
             ) : isAdmin ? (
               <TouchableOpacity
                 onPress={() => {
@@ -394,7 +394,7 @@ export default function GroupDetailsScreen() {
         </View>
 
         {/* Actions rapides */}
-        <View className="flex-row justify-around bg-white rounded-2xl mx-4 mt-3 py-4" style={CARD_SHADOW}>
+        <View className="flex-row justify-around bg-white dark:bg-zinc-900 rounded-2xl mx-4 mt-3 py-4" style={CARD_SHADOW}>
           <QuickAction
             icon={isMuted ? 'notifications-off' : 'notifications-outline'}
             label={t('details.mute')}
@@ -415,7 +415,7 @@ export default function GroupDetailsScreen() {
               className="flex-row items-center px-4 py-3"
               onPress={() => setMembersOpen(true)}
             >
-              <View className="w-11 h-11 rounded-full bg-blue-50 items-center justify-center">
+              <View className="w-11 h-11 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center">
                 <Ionicons name="chevron-down" size={20} color={NEXA} />
               </View>
               <Text className="ml-3 font-semibold text-nexa">
@@ -443,11 +443,11 @@ export default function GroupDetailsScreen() {
                 style={{ width: '33.33%' }}
                 onPress={() => openMedia(category, t(`details.${key}`))}
               >
-                <View className="w-12 h-12 rounded-2xl bg-blue-50 items-center justify-center">
+                <View className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950 items-center justify-center">
                   <Ionicons name={icon} size={22} color={NEXA} />
                 </View>
-                <Text className="text-gray-900 font-semibold mt-1.5">{count}</Text>
-                <Text className="text-gray-400 text-[11px]" numberOfLines={1}>
+                <Text className="text-gray-900 dark:text-zinc-100 font-semibold mt-1.5">{count}</Text>
+                <Text className="text-gray-400 dark:text-zinc-500 text-[11px]" numberOfLines={1}>
                   {t(`details.${key}`)}
                 </Text>
               </TouchableOpacity>
@@ -477,14 +477,14 @@ export default function GroupDetailsScreen() {
       {/* Modale édition nom/description */}
       <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
         <Pressable className="flex-1 bg-black/40 justify-center px-8" onPress={() => setEditOpen(false)}>
-          <Pressable className="bg-white rounded-2xl p-5" onPress={() => Keyboard.dismiss()}>
-            <Text className="text-lg font-bold text-gray-900 mb-3">{t('group.edit_info')}</Text>
+          <Pressable className="bg-white dark:bg-zinc-900 rounded-2xl p-5" onPress={() => Keyboard.dismiss()}>
+            <Text className="text-lg font-bold text-gray-900 dark:text-zinc-100 mb-3">{t('group.edit_info')}</Text>
             <TextInput
               value={nameDraft}
               onChangeText={setNameDraft}
               placeholder={t('group.group_name')}
               maxLength={50}
-              className="border border-gray-200 rounded-xl px-4 py-3 text-base mb-3"
+              className="border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-base mb-3"
             />
             <TextInput
               value={descDraft}
@@ -492,12 +492,12 @@ export default function GroupDetailsScreen() {
               placeholder={t('group.description_placeholder')}
               maxLength={200}
               multiline
-              className="border border-gray-200 rounded-xl px-4 py-3 text-base"
+              className="border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-base"
               style={{ minHeight: 70, textAlignVertical: 'top' }}
             />
             <View className="flex-row justify-end gap-3 mt-4">
               <TouchableOpacity onPress={() => setEditOpen(false)} className="px-4 py-2">
-                <Text className="text-gray-500 font-semibold">{t('cancel')}</Text>
+                <Text className="text-gray-500 dark:text-zinc-400 font-semibold">{t('cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={saveInfo} className="px-4 py-2 bg-nexa rounded-full">
                 <Text className="text-white font-semibold">{t('details.save')}</Text>
@@ -517,7 +517,7 @@ export default function GroupDetailsScreen() {
         height={SHEET_HEIGHT}
       >
         <View className="flex-row items-center px-5 pt-1 pb-2">
-          <Text className="text-lg font-semibold text-gray-900 flex-1">
+          <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100 flex-1">
             {t('group.members')} · {members.length}
           </Text>
           <TouchableOpacity
@@ -530,10 +530,10 @@ export default function GroupDetailsScreen() {
           </TouchableOpacity>
         </View>
 
-        <View className="flex-row items-center bg-gray-100 rounded-xl px-3 mx-4 my-3">
+        <View className="flex-row items-center bg-gray-100 dark:bg-zinc-800 rounded-xl px-3 mx-4 my-3">
           <Ionicons name="search" size={18} color="#6B7280" />
           <TextInput
-            className="flex-1 py-3 px-2 text-base"
+            className="flex-1 py-3 px-2 text-base text-gray-900 dark:text-zinc-100"
             placeholder={t('group.search_member')}
             placeholderTextColor="#6B7280"
             value={memberQuery}
@@ -550,7 +550,7 @@ export default function GroupDetailsScreen() {
           contentContainerStyle={{ paddingBottom: insets.bottom + 12 }}
           renderItem={({ item }) => memberRow(item)}
           ListEmptyComponent={
-            <Text className="text-gray-400 text-center mt-8">{t('friends.no_friends')}</Text>
+            <Text className="text-gray-400 dark:text-zinc-500 text-center mt-8">{t('friends.no_friends')}</Text>
           }
         />
       </BottomSheet>
@@ -565,7 +565,7 @@ export default function GroupDetailsScreen() {
         height={SHEET_HEIGHT}
       >
         <View className="flex-row items-center px-5 pt-1 pb-2">
-          <Text className="text-lg font-semibold text-gray-900 flex-1">{t('group.add_members')}</Text>
+          <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100 flex-1">{t('group.add_members')}</Text>
           <TouchableOpacity
             onPress={() => {
               setAddOpen(false);
@@ -576,10 +576,10 @@ export default function GroupDetailsScreen() {
           </TouchableOpacity>
         </View>
 
-        <View className="flex-row items-center bg-gray-100 rounded-xl px-3 mx-4 my-3">
+        <View className="flex-row items-center bg-gray-100 dark:bg-zinc-800 rounded-xl px-3 mx-4 my-3">
           <Ionicons name="search" size={18} color="#6B7280" />
           <TextInput
-            className="flex-1 py-3 px-2 text-base"
+            className="flex-1 py-3 px-2 text-base text-gray-900 dark:text-zinc-100"
             placeholder={t('user_search.placeholder')}
             placeholderTextColor="#6B7280"
             value={query}
@@ -597,12 +597,12 @@ export default function GroupDetailsScreen() {
           contentContainerStyle={{ paddingBottom: insets.bottom + 12 }}
           renderItem={({ item }) => (
             <TouchableOpacity
-              className="flex-row items-center px-4 py-3 border-b border-gray-50"
+              className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800"
               disabled={busy}
               onPress={() => addMembers(item)}
             >
               <UserAvatar photoUrl={item.photoUrl} name={item.name} size={44} />
-              <Text className="flex-1 ml-3 font-semibold text-gray-900">{item.name}</Text>
+              <Text className="flex-1 ml-3 font-semibold text-gray-900 dark:text-zinc-100">{item.name}</Text>
               <Ionicons name="add-circle-outline" size={22} color={NEXA} />
             </TouchableOpacity>
           )}
@@ -625,10 +625,10 @@ function QuickAction({
 }) {
   return (
     <TouchableOpacity className="items-center" onPress={onPress}>
-      <View className={`w-12 h-12 rounded-2xl items-center justify-center ${active ? 'bg-nexa' : 'bg-blue-50'}`}>
+      <View className={`w-12 h-12 rounded-2xl items-center justify-center ${active ? 'bg-nexa' : 'bg-blue-50 dark:bg-blue-950'}`}>
         <Ionicons name={icon} size={22} color={active ? 'white' : NEXA} />
       </View>
-      <Text className="text-[11px] text-gray-600 mt-1.5">{label}</Text>
+      <Text className="text-[11px] text-gray-600 dark:text-zinc-300 mt-1.5">{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -636,8 +636,8 @@ function QuickAction({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View className="mt-5">
-      <Text className="text-xs font-semibold text-gray-400 uppercase px-6 pb-2">{title}</Text>
-      <View className="bg-white rounded-2xl mx-4 overflow-hidden" style={CARD_SHADOW}>
+      <Text className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase px-6 pb-2">{title}</Text>
+      <View className="bg-white dark:bg-zinc-900 rounded-2xl mx-4 overflow-hidden" style={CARD_SHADOW}>
         {children}
       </View>
     </View>
@@ -658,12 +658,12 @@ function Row({
   danger?: boolean;
 }) {
   return (
-    <TouchableOpacity className="flex-row items-center px-4 py-3 border-b border-gray-50" onPress={onPress}>
-      <View className={`w-9 h-9 rounded-full items-center justify-center ${danger ? 'bg-red-50' : 'bg-blue-50'}`}>
+    <TouchableOpacity className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800" onPress={onPress}>
+      <View className={`w-9 h-9 rounded-full items-center justify-center ${danger ? 'bg-red-50' : 'bg-blue-50 dark:bg-blue-950'}`}>
         <Ionicons name={icon} size={18} color={danger ? '#EF4444' : NEXA} />
       </View>
-      <Text className={`flex-1 ml-3.5 ${danger ? 'text-red-500' : 'text-gray-800'}`}>{label}</Text>
-      {value ? <Text className="text-gray-400 text-sm" numberOfLines={1}>{value}</Text> : null}
+      <Text className={`flex-1 ml-3.5 ${danger ? 'text-red-500' : 'text-gray-800 dark:text-zinc-200'}`}>{label}</Text>
+      {value ? <Text className="text-gray-400 dark:text-zinc-500 text-sm" numberOfLines={1}>{value}</Text> : null}
       <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 6 }} />
     </TouchableOpacity>
   );

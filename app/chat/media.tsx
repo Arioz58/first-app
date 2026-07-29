@@ -109,12 +109,12 @@ export default function MediaScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <View className="flex-row items-center px-4 py-3 border-b border-gray-100">
+    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
+      <View className="flex-row items-center px-4 py-3 border-b border-gray-100 dark:border-zinc-800">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
-        <Text className="text-xl font-semibold text-gray-900 flex-1">{title}</Text>
+        <Text className="text-xl font-semibold text-gray-900 dark:text-zinc-100 flex-1">{title}</Text>
         {category !== 'links' && items.some((m) => m.mediaUrl) ? (
           <TouchableOpacity onPress={downloadAll}>
             <Ionicons name="download-outline" size={22} color={NEXA} />
@@ -127,7 +127,7 @@ export default function MediaScreen() {
       ) : items.length === 0 ? (
         <View className="flex-1 items-center justify-center px-10">
           <Ionicons name="folder-open-outline" size={40} color="#D1D5DB" />
-          <Text className="text-gray-400 mt-3">{t('details.empty_media')}</Text>
+          <Text className="text-gray-400 dark:text-zinc-500 mt-3">{t('details.empty_media')}</Text>
         </View>
       ) : (
         <FlatList
@@ -161,12 +161,12 @@ export default function MediaScreen() {
                 ) : null}
               </TouchableOpacity>
             ) : category === 'audio' ? (
-              <View className="px-4 py-3 border-b border-gray-50">
+              <View className="px-4 py-3 border-b border-gray-50 dark:border-zinc-800">
                 {item.mediaUrl ? <AudioMessage uri={item.mediaUrl} tint={NEXA} /> : null}
               </View>
             ) : (
               <TouchableOpacity
-                className="flex-row items-center px-4 py-3 border-b border-gray-50"
+                className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800"
                 onPress={() => openItem(item)}
                 activeOpacity={0.7}
               >
@@ -176,13 +176,13 @@ export default function MediaScreen() {
                   color={NEXA}
                 />
                 <View className="ml-3 flex-1">
-                  <Text className="text-gray-900" numberOfLines={1}>
+                  <Text className="text-gray-900 dark:text-zinc-100" numberOfLines={1}>
                     {category === 'links'
                       ? firstUrl(item.content) || item.content
                       : item.fileName || 'Document'}
                   </Text>
                   {category !== 'links' && item.fileSize ? (
-                    <Text className="text-gray-400 text-sm">{formatFileSize(item.fileSize)}</Text>
+                    <Text className="text-gray-400 dark:text-zinc-500 text-sm">{formatFileSize(item.fileSize)}</Text>
                   ) : null}
                 </View>
               </TouchableOpacity>

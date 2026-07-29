@@ -147,23 +147,23 @@ export default function SearchScreen() {
   const showRecent = !loading && !result && !error && recent.length > 0;
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
       <View className="px-4 pt-3 pb-2">
         <Text className="text-3xl font-bold text-nexa mb-3">{t('tabs.contacts')}</Text>
         {/* Segmented Recherche / Amis */}
-        <View className="flex-row bg-gray-100 rounded-full p-1">
+        <View className="flex-row bg-gray-100 dark:bg-zinc-800 rounded-full p-1">
           {(['search', 'friends'] as const).map((s) => {
             const active = seg === s;
             const showBadge = s === 'friends' && pendingRequests > 0;
             return (
               <TouchableOpacity
                 key={s}
-                className={`flex-1 flex-row items-center justify-center py-2 rounded-full ${active ? 'bg-white' : ''}`}
+                className={`flex-1 flex-row items-center justify-center py-2 rounded-full ${active ? 'bg-white dark:bg-zinc-900' : ''}`}
                 style={active ? { elevation: 1 } : undefined}
                 onPress={() => setSeg(s)}
               >
                 <Text
-                  className={`text-base font-semibold ${active ? 'text-nexa' : 'text-gray-500'}`}
+                  className={`text-base font-semibold ${active ? 'text-nexa' : 'text-gray-500 dark:text-zinc-400'}`}
                 >
                   {s === 'search' ? t('search_phone.segment') : t('friends.title')}
                 </Text>
@@ -187,9 +187,9 @@ export default function SearchScreen() {
           <View className="px-4 pb-2">
             <View className="flex-row items-center">
               <CountryPicker selected={country} onSelect={setCountry} />
-          <View className="flex-1 flex-row items-center bg-gray-100 rounded-xl px-3">
+          <View className="flex-1 flex-row items-center bg-gray-100 dark:bg-zinc-800 rounded-xl px-3">
             <TextInput
-              className="flex-1 py-3 px-1 text-lg"
+              className="flex-1 py-3 px-1 text-lg text-gray-900 dark:text-zinc-100"
               placeholder={t('search_phone.placeholder')}
               placeholderTextColor="#6B7280"
               keyboardType="phone-pad"
@@ -208,7 +208,7 @@ export default function SearchScreen() {
 
         {/* Erreur inline (introuvable / invalide / propre numéro / échec) */}
         {error && !isSelf ? (
-          <Text className="text-gray-500 text-base mt-3 ml-1">
+          <Text className="text-gray-500 dark:text-zinc-400 text-base mt-3 ml-1">
             {t(`search_phone.${error}`)}
           </Text>
         ) : null}
@@ -223,20 +223,20 @@ export default function SearchScreen() {
             </Text>
           ) : null}
           <TouchableOpacity
-            className="flex-row items-center p-3 rounded-2xl border border-gray-100 bg-white"
+            className="flex-row items-center p-3 rounded-2xl border border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900"
             style={{ elevation: 1 }}
             onPress={() => openProfile(result.id)}
             disabled={isSelf}
           >
             <UserAvatar photoUrl={result.photoUrl} name={result.name} size={60} />
             <View className="flex-1 ml-3">
-              <Text className="text-lg font-semibold text-gray-900">
+              <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100">
                 {result.name}
               </Text>
-              <Text className="text-gray-500 text-base">{result.phone}</Text>
+              <Text className="text-gray-500 dark:text-zinc-400 text-base">{result.phone}</Text>
             </View>
             {!isSelf && (
-              <View className="bg-blue-50 rounded-full px-3 py-1.5">
+              <View className="bg-blue-50 dark:bg-blue-950 rounded-full px-3 py-1.5">
                 <Text className="text-nexa text-sm font-semibold">
                   {relationLabel(result.relationStatus)}
                 </Text>
@@ -255,7 +255,7 @@ export default function SearchScreen() {
           keyboardDismissMode="on-drag"
           ListHeaderComponent={
             <View className="flex-row items-center justify-between px-4 pt-4 pb-1">
-              <Text className="text-sm font-semibold uppercase text-gray-400">
+              <Text className="text-sm font-semibold uppercase text-gray-400 dark:text-zinc-500">
                 {t('search_phone.recent')}
               </Text>
               <TouchableOpacity onPress={clearHistory}>
@@ -267,15 +267,15 @@ export default function SearchScreen() {
           }
           renderItem={({ item }) => (
             <TouchableOpacity
-              className="flex-row items-center px-4 py-3 border-b border-gray-50"
+              className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800"
               onPress={() => openProfile(item.id)}
             >
               <UserAvatar photoUrl={item.photoUrl} name={item.name} size={52} />
               <View className="flex-1 ml-3">
-                <Text className="text-lg font-medium text-gray-900">
+                <Text className="text-lg font-medium text-gray-900 dark:text-zinc-100">
                   {item.name}
                 </Text>
-                <Text className="text-gray-500 text-base">{item.phone}</Text>
+                <Text className="text-gray-500 dark:text-zinc-400 text-base">{item.phone}</Text>
               </View>
             </TouchableOpacity>
           )}

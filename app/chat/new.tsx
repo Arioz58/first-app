@@ -58,8 +58,8 @@ export default function NewChatScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <View className="flex-row items-center px-4 py-3 border-b border-gray-100">
+    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
+      <View className="flex-row items-center px-4 py-3 border-b border-gray-100 dark:border-zinc-800">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
@@ -69,10 +69,10 @@ export default function NewChatScreen() {
       {/* `flex: 0` : sinon le Pressable (flex:1 par défaut) mangerait la place de la liste. */}
       <DismissKeyboard style={{ flex: 0 }}>
         <View className="px-4 py-3">
-          <View className="flex-row items-center bg-gray-100 rounded-xl px-3">
+          <View className="flex-row items-center bg-gray-100 dark:bg-zinc-800 rounded-xl px-3">
             <Ionicons name="search" size={18} color="#6B7280" />
             <TextInput
-              className="flex-1 py-2.5 px-2 text-lg"
+              className="flex-1 py-2.5 px-2 text-lg text-gray-900 dark:text-zinc-100"
               placeholder={t('friends.search_friends')}
               placeholderTextColor="#6B7280"
               value={query}
@@ -95,19 +95,19 @@ export default function NewChatScreen() {
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
             <View className="items-center justify-center mt-20 px-8">
-              <Text className="text-gray-400 text-center">
+              <Text className="text-gray-400 dark:text-zinc-500 text-center">
                 {friends.length === 0 ? t('friends.no_friends') : t('new_chat.no_results')}
               </Text>
             </View>
           }
           renderItem={({ item }) => (
             <TouchableOpacity
-              className="flex-row items-center px-4 py-3 border-b border-gray-50"
+              className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800"
               onPress={() => openChat(item)}
               disabled={!!opening}
             >
               <UserAvatar photoUrl={item.photoUrl} name={item.name} size={56} />
-              <Text className="flex-1 ml-3 font-semibold text-gray-900">{item.name}</Text>
+              <Text className="flex-1 ml-3 font-semibold text-gray-900 dark:text-zinc-100">{item.name}</Text>
               {opening === item.id && <ActivityIndicator size="small" color={NEXA} />}
             </TouchableOpacity>
           )}

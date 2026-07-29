@@ -11,7 +11,7 @@ export default function SecurityScreen() {
 
   return (
     <SafeAreaView
-      className="flex-1 bg-white gap-10"
+      className="flex-1 bg-white dark:bg-zinc-950 gap-10"
       edges={["bottom", "left", "right"]}
     >
       <View className="flex-row items-center justify-between px-4 py-3">
@@ -38,7 +38,7 @@ export default function SecurityScreen() {
         }}
       >
         <MotiText
-          className="text-6xl font-black text-nexa italic"
+          className="text-6xl font-black text-nexa dark:text-blue-400 italic"
           from={{ opacity: 0, translateY: 30 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{
@@ -53,7 +53,7 @@ export default function SecurityScreen() {
         </MotiText>
 
         <MotiText
-          className="text-3xl font-medium italic text-nexa"
+          className="text-3xl font-medium italic text-nexa dark:text-blue-400"
           from={{ opacity: 0, translateY: 24 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{

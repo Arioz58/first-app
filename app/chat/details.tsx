@@ -401,13 +401,13 @@ export default function ConversationDetailsScreen() {
   const comingSoon = () => Alert.alert('', t('details.coming_soon'));
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-zinc-950">
       {/* En-tête */}
-      <View className="flex-row items-center px-4 py-3 bg-white border-b border-gray-100">
+      <View className="flex-row items-center px-4 py-3 bg-white dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-800">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
-        <Text className="text-xl font-semibold text-gray-900 flex-1">{t('details.title')}</Text>
+        <Text className="text-xl font-semibold text-gray-900 dark:text-zinc-100 flex-1">{t('details.title')}</Text>
       </View>
 
       {loading ? (
@@ -415,7 +415,7 @@ export default function ConversationDetailsScreen() {
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
           {/* 2.1 Bloc profil — bannière dégradée + avatar en débord */}
-          <View className="bg-white rounded-2xl mx-4 mt-3 overflow-hidden" style={CARD_SHADOW}>
+          <View className="bg-white dark:bg-zinc-900 rounded-2xl mx-4 mt-3 overflow-hidden" style={CARD_SHADOW}>
             <LinearGradient
               colors={['#3B82F6', '#1E3A8A']}
               start={{ x: 0, y: 0 }}
@@ -429,7 +429,7 @@ export default function ConversationDetailsScreen() {
                 activeOpacity={0.9}
               >
                 {/* Anneau blanc + point de présence */}
-                <View className="rounded-full bg-white p-1">
+                <View className="rounded-full bg-white dark:bg-zinc-900 p-1">
                   <UserAvatar photoUrl={data?.photoUrl ?? null} name={displayName} size={108} />
                 </View>
                 {data && !data.isSelf && data.online ? (
@@ -439,31 +439,31 @@ export default function ConversationDetailsScreen() {
                 ) : null}
               </TouchableOpacity>
 
-              <Text className="text-3xl font-bold text-gray-900 mt-3">{displayName}</Text>
+              <Text className="text-3xl font-bold text-gray-900 dark:text-zinc-100 mt-3">{displayName}</Text>
               {custom.nickname ? (
-                <Text className="text-gray-400 text-base mt-0.5">{data?.name ?? name}</Text>
+                <Text className="text-gray-400 dark:text-zinc-500 text-base mt-0.5">{data?.name ?? name}</Text>
               ) : null}
 
               {data && !data.isSelf ? <RelationBadge status={data.relationStatus} t={t} /> : null}
 
               {data?.bio ? (
-                <Text className="text-gray-600 text-center mt-3">{data.bio}</Text>
+                <Text className="text-gray-600 dark:text-zinc-300 text-center mt-3">{data.bio}</Text>
               ) : null}
               {data?.phone ? (
                 <View className="flex-row items-center mt-2">
                   <Ionicons name="call-outline" size={13} color="#9CA3AF" />
-                  <Text className="text-gray-500 ml-1.5">{data.phone}</Text>
+                  <Text className="text-gray-500 dark:text-zinc-400 ml-1.5">{data.phone}</Text>
                 </View>
               ) : null}
               {data && !data.isSelf && !data.online && data.lastSeenAt ? (
-                <Text className="text-gray-400 text-sm mt-1">
+                <Text className="text-gray-400 dark:text-zinc-500 text-sm mt-1">
                   {t('details.last_seen', { value: formatLastSeen(data.lastSeenAt) })}
                 </Text>
               ) : null}
               {data && data.mutualFriendsCount > 0 ? (
                 <TouchableOpacity
                   onPress={() => setMutualOpen(true)}
-                  className="flex-row items-center mt-3 bg-blue-50 rounded-full pl-1.5 pr-3 py-1"
+                  className="flex-row items-center mt-3 bg-blue-50 dark:bg-blue-950 rounded-full pl-1.5 pr-3 py-1"
                 >
                   {/* Avatars empilés des amis en commun */}
                   {mutualPreview.length > 0 ? (
@@ -498,7 +498,7 @@ export default function ConversationDetailsScreen() {
           {/* 2.2 Actions rapides — tuiles */}
           {data && !data.isSelf ? (
             <View
-              className="flex-row justify-around bg-white rounded-2xl mx-4 mt-3 py-4"
+              className="flex-row justify-around bg-white dark:bg-zinc-900 rounded-2xl mx-4 mt-3 py-4"
               style={CARD_SHADOW}
             >
               <QuickAction
@@ -599,11 +599,11 @@ export default function ConversationDetailsScreen() {
                   onPress={() => openMedia(category, t(`details.${key}`))}
                   activeOpacity={0.7}
                 >
-                  <View className="w-12 h-12 rounded-2xl bg-blue-50 items-center justify-center">
+                  <View className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950 items-center justify-center">
                     <Ionicons name={icon} size={22} color={NEXA} />
                   </View>
-                  <Text className="text-gray-900 font-semibold mt-1.5">{count}</Text>
-                  <Text className="text-gray-400 text-[11px]" numberOfLines={1}>
+                  <Text className="text-gray-900 dark:text-zinc-100 font-semibold mt-1.5">{count}</Text>
+                  <Text className="text-gray-400 dark:text-zinc-500 text-[11px]" numberOfLines={1}>
                     {t(`details.${key}`)}
                   </Text>
                 </TouchableOpacity>
@@ -614,7 +614,7 @@ export default function ConversationDetailsScreen() {
           {/* 2.5 Messages épinglés */}
           <Section title={`${t('details.pinned')} · ${pins.length}`}>
             {pins.length === 0 ? (
-              <Text className="text-gray-400 text-base px-4 py-4">{t('details.no_pinned')}</Text>
+              <Text className="text-gray-400 dark:text-zinc-500 text-base px-4 py-4">{t('details.no_pinned')}</Text>
             ) : (
               pins.map((m) => (
                 <MessageRow
@@ -631,7 +631,7 @@ export default function ConversationDetailsScreen() {
           {/* 2.6 Messages favoris */}
           <Section title={`${t('details.starred')} · ${starred.length}`}>
             {starred.length === 0 ? (
-              <Text className="text-gray-400 text-base px-4 py-4">{t('details.no_starred')}</Text>
+              <Text className="text-gray-400 dark:text-zinc-500 text-base px-4 py-4">{t('details.no_starred')}</Text>
             ) : (
               starred.map((m) => (
                 <MessageRow
@@ -662,7 +662,7 @@ export default function ConversationDetailsScreen() {
           </Section>
 
           {notFound && !blockedByMe ? (
-            <Text className="text-gray-400 text-center text-sm mt-4 px-8">
+            <Text className="text-gray-400 dark:text-zinc-500 text-center text-sm mt-4 px-8">
               {t('profile_view.not_found')}
             </Text>
           ) : null}
@@ -679,8 +679,8 @@ export default function ConversationDetailsScreen() {
 
       <BottomSheet visible={colorSheet} onClose={() => setColorSheet(false)}>
         <View className="px-5 pb-10 pt-1">
-          <Text className="text-xl font-bold text-gray-900 mb-1">{t('details.bubble_color')}</Text>
-          <Text className="text-base text-gray-500 mb-4">{t('details.nickname_hint')}</Text>
+          <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 mb-1">{t('details.bubble_color')}</Text>
+          <Text className="text-base text-gray-500 dark:text-zinc-400 mb-4">{t('details.nickname_hint')}</Text>
           <View className="flex-row flex-wrap gap-4">
             {BUBBLE_COLORS.map((c) => {
               const active = resolveBubbleColor(custom.bubbleColor) === c;
@@ -709,20 +709,20 @@ export default function ConversationDetailsScreen() {
       {/* Surnom */}
       <Modal visible={nicknameOpen} transparent animationType="fade" onRequestClose={() => setNicknameOpen(false)}>
         <Pressable className="flex-1 bg-black/40 justify-center px-8" onPress={() => setNicknameOpen(false)}>
-          <Pressable className="bg-white rounded-2xl p-5" onPress={() => Keyboard.dismiss()}>
-            <Text className="text-xl font-bold text-gray-900">{t('details.nickname')}</Text>
-            <Text className="text-base text-gray-500 mt-1 mb-3">{t('details.nickname_hint')}</Text>
+          <Pressable className="bg-white dark:bg-zinc-900 rounded-2xl p-5" onPress={() => Keyboard.dismiss()}>
+            <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">{t('details.nickname')}</Text>
+            <Text className="text-base text-gray-500 dark:text-zinc-400 mt-1 mb-3">{t('details.nickname_hint')}</Text>
             <TextInput
               value={nicknameDraft}
               onChangeText={setNicknameDraft}
               placeholder={t('details.nickname_placeholder')}
               autoFocus
               maxLength={40}
-              className="border border-gray-200 rounded-xl px-4 py-3 text-lg"
+              className="border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-lg"
             />
             <View className="flex-row justify-end gap-3 mt-4">
               <TouchableOpacity onPress={() => setNicknameOpen(false)} className="px-4 py-2">
-                <Text className="text-gray-500 font-semibold">{t('cancel')}</Text>
+                <Text className="text-gray-500 dark:text-zinc-400 font-semibold">{t('cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={saveNickname} className="px-4 py-2 bg-nexa rounded-full">
                 <Text className="text-white font-semibold">{t('details.save')}</Text>
@@ -735,7 +735,7 @@ export default function ConversationDetailsScreen() {
       {/* Amis en commun */}
       <BottomSheet visible={mutualOpen} onClose={() => setMutualOpen(false)}>
         <View className="px-5 pb-8 pt-1">
-          <Text className="text-xl font-bold text-gray-900 mb-3">
+          <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 mb-3">
             {t('details.mutual_friends')}
           </Text>
           {mutualList === null ? (
@@ -751,7 +751,7 @@ export default function ConversationDetailsScreen() {
                 }}
               >
                 <UserAvatar photoUrl={f.photoUrl} name={f.name} size={52} />
-                <Text className="ml-3 flex-1 text-lg font-medium text-gray-900" numberOfLines={1}>
+                <Text className="ml-3 flex-1 text-lg font-medium text-gray-900 dark:text-zinc-100" numberOfLines={1}>
                   {f.name}
                 </Text>
                 <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
@@ -764,11 +764,11 @@ export default function ConversationDetailsScreen() {
       {/* Ajouter à un groupe */}
       <BottomSheet visible={addGroupOpen} onClose={() => setAddGroupOpen(false)}>
         <View className="px-5 pb-8 pt-1">
-          <Text className="text-xl font-bold text-gray-900 mb-3">{t('details.add_to_group')}</Text>
+          <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 mb-3">{t('details.add_to_group')}</Text>
           {adminGroups === null ? (
             <ActivityIndicator color={NEXA} className="my-6" />
           ) : adminGroups.length === 0 ? (
-            <Text className="text-gray-400 text-base py-6 text-center">
+            <Text className="text-gray-400 dark:text-zinc-500 text-base py-6 text-center">
               {t('details.no_admin_group')}
             </Text>
           ) : (
@@ -779,14 +779,14 @@ export default function ConversationDetailsScreen() {
                 onPress={() => addToGroup(g)}
                 disabled={!!addingTo}
               >
-                <View className="w-11 h-11 rounded-full bg-blue-50 items-center justify-center mr-3">
+                <View className="w-11 h-11 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center mr-3">
                   <Ionicons name="people" size={20} color={NEXA} />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-gray-900 font-semibold" numberOfLines={1}>
+                  <Text className="text-gray-900 dark:text-zinc-100 font-semibold" numberOfLines={1}>
                     {g.name || t('chat.group')}
                   </Text>
-                  <Text className="text-gray-400 text-sm">
+                  <Text className="text-gray-400 dark:text-zinc-500 text-sm">
                     {t('details.member_count', { count: g.memberCount })}
                   </Text>
                 </View>
@@ -832,8 +832,8 @@ function RelationBadge({ status, t }: { status: RelationStatus; t: (k: string) =
           ? t('relation.accept')
           : t('relation.add_friend');
   return (
-    <View className={`mt-3 px-3 py-1 rounded-full ${accent ? 'bg-blue-50' : 'bg-gray-100'}`}>
-      <Text className={`text-sm font-semibold ${accent ? 'text-nexa' : 'text-gray-600'}`}>
+    <View className={`mt-3 px-3 py-1 rounded-full ${accent ? 'bg-blue-50 dark:bg-blue-950' : 'bg-gray-100 dark:bg-zinc-800'}`}>
+      <Text className={`text-sm font-semibold ${accent ? 'text-nexa' : 'text-gray-600 dark:text-zinc-300'}`}>
         {label}
       </Text>
     </View>
@@ -856,11 +856,11 @@ function QuickAction({
   return (
     <TouchableOpacity className="items-center" onPress={onPress} style={{ opacity: disabled ? 0.4 : 1 }}>
       <View
-        className={`w-12 h-12 rounded-2xl items-center justify-center ${active ? 'bg-nexa' : 'bg-blue-50'}`}
+        className={`w-12 h-12 rounded-2xl items-center justify-center ${active ? 'bg-nexa' : 'bg-blue-50 dark:bg-blue-950'}`}
       >
         <Ionicons name={icon} size={22} color={active ? 'white' : NEXA} />
       </View>
-      <Text className="text-[11px] text-gray-600 mt-1.5">{label}</Text>
+      <Text className="text-[11px] text-gray-600 dark:text-zinc-300 mt-1.5">{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -868,8 +868,8 @@ function QuickAction({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View className="mt-5">
-      <Text className="text-sm font-semibold text-gray-400 uppercase px-6 pb-2">{title}</Text>
-      <View className="bg-white rounded-2xl mx-4 overflow-hidden" style={CARD_SHADOW}>
+      <Text className="text-sm font-semibold text-gray-400 dark:text-zinc-500 uppercase px-6 pb-2">{title}</Text>
+      <View className="bg-white dark:bg-zinc-900 rounded-2xl mx-4 overflow-hidden" style={CARD_SHADOW}>
         {children}
       </View>
     </View>
@@ -895,17 +895,17 @@ function Row({
 }) {
   return (
     <TouchableOpacity
-      className="flex-row items-center px-4 py-3 border-b border-gray-50"
+      className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800"
       onPress={onPress}
       style={{ opacity: disabled ? 0.45 : 1 }}
     >
       <View
-        className={`w-9 h-9 rounded-full items-center justify-center ${danger ? 'bg-red-50' : 'bg-blue-50'}`}
+        className={`w-9 h-9 rounded-full items-center justify-center ${danger ? 'bg-red-50' : 'bg-blue-50 dark:bg-blue-950'}`}
       >
         <Ionicons name={icon} size={18} color={danger ? '#EF4444' : NEXA} />
       </View>
-      <Text className={`flex-1 ml-3.5 ${danger ? 'text-red-500' : 'text-gray-800'}`}>{label}</Text>
-      {right ?? (value ? <Text className="text-gray-400 text-base" numberOfLines={1}>{value}</Text> : null)}
+      <Text className={`flex-1 ml-3.5 ${danger ? 'text-red-500' : 'text-gray-800 dark:text-zinc-200'}`}>{label}</Text>
+      {right ?? (value ? <Text className="text-gray-400 dark:text-zinc-500 text-base" numberOfLines={1}>{value}</Text> : null)}
       <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 6 }} />
     </TouchableOpacity>
   );
@@ -926,13 +926,13 @@ function MessageRow({
 }) {
   const preview = msg.content?.trim() || (msg.storyMediaUrl ? '📷' : '…');
   return (
-    <View className="flex-row items-center px-4 py-3 border-b border-gray-50">
+    <View className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800">
       <Ionicons name={icon} size={18} color={iconColor} />
       <TouchableOpacity className="flex-1 ml-3" onPress={onPress} activeOpacity={0.7}>
-        <Text className="text-gray-800" numberOfLines={1}>
+        <Text className="text-gray-800 dark:text-zinc-200" numberOfLines={1}>
           {preview}
         </Text>
-        <Text className="text-gray-400 text-sm mt-0.5">{msg.sender?.name}</Text>
+        <Text className="text-gray-400 dark:text-zinc-500 text-sm mt-0.5">{msg.sender?.name}</Text>
       </TouchableOpacity>
       <TouchableOpacity onPress={onRemove} className="p-1 ml-2">
         <Ionicons name="close" size={18} color="#9CA3AF" />
@@ -944,16 +944,16 @@ function MessageRow({
 function DetailsSkeleton() {
   return (
     <View>
-      <View className="items-center bg-white rounded-2xl mx-4 mt-3 pt-8 pb-6" style={CARD_SHADOW}>
-        <View style={{ width: 96, height: 96 }} className="rounded-full bg-gray-200" />
-        <View className="w-40 h-5 bg-gray-200 rounded mt-4" />
-        <View className="w-24 h-3 bg-gray-100 rounded mt-3" />
+      <View className="items-center bg-white dark:bg-zinc-900 rounded-2xl mx-4 mt-3 pt-8 pb-6" style={CARD_SHADOW}>
+        <View style={{ width: 96, height: 96 }} className="rounded-full bg-gray-200 dark:bg-zinc-700" />
+        <View className="w-40 h-5 bg-gray-200 dark:bg-zinc-700 rounded mt-4" />
+        <View className="w-24 h-3 bg-gray-100 dark:bg-zinc-800 rounded mt-3" />
       </View>
       {[0, 1, 2].map((i) => (
-        <View key={i} className="mt-5 bg-white rounded-2xl mx-4 px-4 py-4" style={CARD_SHADOW}>
-          <View className="w-32 h-3 bg-gray-100 rounded mb-4" />
-          <View className="w-full h-4 bg-gray-100 rounded mb-3" />
-          <View className="w-3/4 h-4 bg-gray-100 rounded" />
+        <View key={i} className="mt-5 bg-white dark:bg-zinc-900 rounded-2xl mx-4 px-4 py-4" style={CARD_SHADOW}>
+          <View className="w-32 h-3 bg-gray-100 dark:bg-zinc-800 rounded mb-4" />
+          <View className="w-full h-4 bg-gray-100 dark:bg-zinc-800 rounded mb-3" />
+          <View className="w-3/4 h-4 bg-gray-100 dark:bg-zinc-800 rounded" />
         </View>
       ))}
       <ActivityIndicator color={NEXA} className="mt-6" />

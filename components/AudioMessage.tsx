@@ -39,7 +39,7 @@ export function AudioMessage({ uri, tint }: { uri: string; tint: string }) {
             style={{ width: `${progress * 100}%`, backgroundColor: tint }}
           />
         </View>
-        <Text className="text-[11px] text-gray-500 mt-1">
+        <Text className="text-[11px] text-gray-500 dark:text-zinc-400 mt-1">
           {fmt(current > 0 ? current : duration)}
         </Text>
       </View>

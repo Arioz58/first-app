@@ -71,13 +71,13 @@ export default function ChatWallpaperPicker({ visible, current, onClose, onSelec
   return (
     <BottomSheet visible={visible} onClose={onClose} backdropOpacity={0.12}>
       <View className="px-5 pb-10 pt-1">
-        <Text className="text-xl font-bold text-gray-900">{t('chat.wallpaper')}</Text>
-        <Text className="text-base text-gray-500 mt-1 mb-4">{t('chat.wallpaper_hint')}</Text>
+        <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">{t('chat.wallpaper')}</Text>
+        <Text className="text-base text-gray-500 dark:text-zinc-400 mt-1 mb-4">{t('chat.wallpaper_hint')}</Text>
 
         <View className="flex-row flex-wrap gap-3">
           {/* Défaut (asset nexa selon le thème) */}
           <TouchableOpacity onPress={() => onSelect(null)} className="items-center" activeOpacity={0.8}>
-            <View className={`${SWATCH} border border-gray-200`}>
+            <View className={`${SWATCH} border border-gray-200 dark:border-zinc-800`}>
               <Image
                 source={DEFAULT_WALLPAPER_ASSET[scheme === 'dark' ? 'dark' : 'light']}
                 style={{ width: 68, height: 68 }}
@@ -85,7 +85,7 @@ export default function ChatWallpaperPicker({ visible, current, onClose, onSelec
               />
               {!current && <Check />}
             </View>
-            <Text className="text-[11px] text-gray-500 mt-1">{t('chat.wallpaper_auto')}</Text>
+            <Text className="text-[11px] text-gray-500 dark:text-zinc-400 mt-1">{t('chat.wallpaper_auto')}</Text>
           </TouchableOpacity>
 
           {/* Presets (image nexa clair/sombre, puis couleurs/dégradés) */}
@@ -96,7 +96,7 @@ export default function ChatWallpaperPicker({ visible, current, onClose, onSelec
               activeOpacity={0.8}
             >
               {w.asset ? (
-                <View className={`${SWATCH} border border-gray-200`}>
+                <View className={`${SWATCH} border border-gray-200 dark:border-zinc-800`}>
                   <Image source={w.asset} style={{ width: 68, height: 68 }} contentFit="cover" />
                   {isPreset(w.id) && <Check />}
                 </View>
@@ -125,11 +125,11 @@ export default function ChatWallpaperPicker({ visible, current, onClose, onSelec
                 <Check />
               </View>
             ) : (
-              <View className={`${SWATCH} bg-gray-100 border border-dashed border-gray-300`}>
+              <View className={`${SWATCH} bg-gray-100 dark:bg-zinc-800 border border-dashed border-gray-300 dark:border-zinc-700`}>
                 <Ionicons name="image-outline" size={26} color="#1E40AF" />
               </View>
             )}
-            <Text className="text-[11px] text-gray-500 mt-1">{t('chat.wallpaper_gallery')}</Text>
+            <Text className="text-[11px] text-gray-500 dark:text-zinc-400 mt-1">{t('chat.wallpaper_gallery')}</Text>
           </TouchableOpacity>
         </View>
 

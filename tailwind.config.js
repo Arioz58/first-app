@@ -3,6 +3,9 @@ module.exports = {
   // NOTE: Update this to include the paths to all files that contain Nativewind classes.
   content: ["./app/**/*.{js,jsx,ts,tsx}", "./components/**/*.{js,jsx,ts,tsx}"],
   presets: [require("nativewind/preset")],
+  // Dark mode piloté par le colorScheme NativeWind (setColorScheme) → permet
+  // l'override manuel (Système/Clair/Sombre) en plus du réglage système.
+  darkMode: "class",
   theme: {
     extend: {
         colors: {

@@ -153,12 +153,12 @@ export default function UserProfileScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <View className="flex-row items-center px-4 py-3 border-b border-gray-100">
+    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
+      <View className="flex-row items-center px-4 py-3 border-b border-gray-100 dark:border-zinc-800">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
-        <Text className="text-xl font-semibold text-gray-900 flex-1" numberOfLines={1}>
+        <Text className="text-xl font-semibold text-gray-900 dark:text-zinc-100 flex-1" numberOfLines={1}>
           {data?.name ?? ''}
         </Text>
         {data && !data.isSelf && (
@@ -173,15 +173,15 @@ export default function UserProfileScreen() {
       ) : notFound || !data ? (
         <View className="flex-1 items-center justify-center px-10">
           <Ionicons name="person-circle-outline" size={56} color="#D1D5DB" />
-          <Text className="text-gray-400 mt-3">{t('profile_view.not_found')}</Text>
+          <Text className="text-gray-400 dark:text-zinc-500 mt-3">{t('profile_view.not_found')}</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
           <View className="items-center pt-8 pb-6">
             <UserAvatar photoUrl={data.photoUrl} name={data.name} size={118} />
-            <Text className="text-3xl font-bold text-gray-900 mt-4">{data.name}</Text>
+            <Text className="text-3xl font-bold text-gray-900 dark:text-zinc-100 mt-4">{data.name}</Text>
             {data.mutualFriendsCount > 0 && (
-              <Text className="text-gray-500 mt-1">
+              <Text className="text-gray-500 dark:text-zinc-400 mt-1">
                 {t(
                   data.mutualFriendsCount === 1
                     ? 'profile_view.mutual_one'
@@ -191,7 +191,7 @@ export default function UserProfileScreen() {
               </Text>
             )}
             {data.bio ? (
-              <Text className="text-gray-600 text-center px-10 mt-3">{data.bio}</Text>
+              <Text className="text-gray-600 dark:text-zinc-300 text-center px-10 mt-3">{data.bio}</Text>
             ) : null}
           </View>
 
@@ -248,18 +248,18 @@ export default function UserProfileScreen() {
                   className="flex-1"
                 />
                 <View
-                  className={`w-12 h-12 rounded-full items-center justify-center ${data.canCall ? 'bg-blue-50' : 'bg-gray-100'}`}
+                  className={`w-12 h-12 rounded-full items-center justify-center ${data.canCall ? 'bg-blue-50 dark:bg-blue-950' : 'bg-gray-100 dark:bg-zinc-800'}`}
                 >
                   <Ionicons name="call" size={20} color={data.canCall ? NEXA : '#9CA3AF'} />
                 </View>
                 <View
-                  className={`w-12 h-12 rounded-full items-center justify-center ${data.canCall ? 'bg-blue-50' : 'bg-gray-100'}`}
+                  className={`w-12 h-12 rounded-full items-center justify-center ${data.canCall ? 'bg-blue-50 dark:bg-blue-950' : 'bg-gray-100 dark:bg-zinc-800'}`}
                 >
                   <Ionicons name="videocam" size={20} color={data.canCall ? NEXA : '#9CA3AF'} />
                 </View>
               </View>
               {!data.canMessage && (
-                <Text className="text-gray-400 text-sm text-center mt-2">
+                <Text className="text-gray-400 dark:text-zinc-500 text-sm text-center mt-2">
                   {t('profile_view.message_friends_only')}
                 </Text>
               )}
@@ -302,7 +302,7 @@ function ActionButton({
 }) {
   return (
     <TouchableOpacity
-      className={`flex-row items-center justify-center rounded-full py-3 px-5 ${primary ? 'bg-nexa' : 'border border-gray-300'} ${disabled ? 'opacity-50' : ''} ${className}`}
+      className={`flex-row items-center justify-center rounded-full py-3 px-5 ${primary ? 'bg-nexa' : 'border border-gray-300 dark:border-zinc-700'} ${disabled ? 'opacity-50' : ''} ${className}`}
       onPress={onPress}
       disabled={disabled}
     >
@@ -314,7 +314,7 @@ function ActionButton({
           style={{ marginRight: 6 }}
         />
       )}
-      <Text className={`font-semibold ${primary ? 'text-white' : 'text-gray-700'}`}>
+      <Text className={`font-semibold ${primary ? 'text-white' : 'text-gray-700 dark:text-zinc-300'}`}>
         {label}
       </Text>
     </TouchableOpacity>
@@ -334,8 +334,8 @@ function InfoRow({
     <View className="flex-row items-center">
       <Ionicons name={icon} size={20} color="#6B7280" />
       <View className="ml-3">
-        {label ? <Text className="text-gray-400 text-sm">{label}</Text> : null}
-        <Text className="text-gray-800">{value}</Text>
+        {label ? <Text className="text-gray-400 dark:text-zinc-500 text-sm">{label}</Text> : null}
+        <Text className="text-gray-800 dark:text-zinc-200">{value}</Text>
       </View>
     </View>
   );
@@ -344,11 +344,11 @@ function InfoRow({
 function ProfileSkeleton() {
   return (
     <View className="items-center pt-8">
-      <View className="w-26 h-26 rounded-full bg-gray-200" style={{ width: 104, height: 104 }} />
-      <View className="w-40 h-5 bg-gray-200 rounded mt-4" />
-      <View className="w-28 h-3 bg-gray-100 rounded mt-3" />
-      <View className="w-11/12 h-12 bg-gray-100 rounded-full mt-8" />
-      <View className="w-11/12 h-12 bg-gray-100 rounded-full mt-3" />
+      <View className="w-26 h-26 rounded-full bg-gray-200 dark:bg-zinc-700" style={{ width: 104, height: 104 }} />
+      <View className="w-40 h-5 bg-gray-200 dark:bg-zinc-700 rounded mt-4" />
+      <View className="w-28 h-3 bg-gray-100 dark:bg-zinc-800 rounded mt-3" />
+      <View className="w-11/12 h-12 bg-gray-100 dark:bg-zinc-800 rounded-full mt-8" />
+      <View className="w-11/12 h-12 bg-gray-100 dark:bg-zinc-800 rounded-full mt-3" />
       <ActivityIndicator color={NEXA} className="mt-8" />
     </View>
   );

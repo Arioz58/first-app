@@ -101,7 +101,7 @@ function Bubble({
     >
       <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
         <View
-          className="rounded-full bg-white"
+          className="rounded-full bg-white dark:bg-zinc-900"
           style={{
             padding: 2,
             shadowColor: '#1E40AF',
@@ -137,7 +137,7 @@ function CenterAvatar({
   return (
     <Animated.View style={[{ position: 'absolute', left: CENTER_X - 47, top: CENTER_Y - 47 }, style]}>
       <View
-        className="rounded-full bg-white"
+        className="rounded-full bg-white dark:bg-zinc-900"
         style={{
           padding: 3,
           shadowColor: '#1E40AF',
@@ -216,7 +216,7 @@ export default function FloatingSuggestions({
 
   return (
     <View className="mt-4">
-      <Text className="text-xs font-semibold text-gray-400 uppercase px-5 pb-1">
+      <Text className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase px-5 pb-1">
         {t('activity.suggestions')}
       </Text>
 
@@ -243,7 +243,7 @@ export default function FloatingSuggestions({
 
       {/* Voir tout → drawer */}
       <TouchableOpacity className="items-center mt-1" onPress={onSeeAll}>
-        <View className="flex-row items-center bg-blue-50 rounded-full px-4 py-2">
+        <View className="flex-row items-center bg-blue-50 dark:bg-blue-950 rounded-full px-4 py-2">
           <Text className="text-nexa font-semibold text-sm">
             {t('activity.see_all', { count: suggestions.length })}
           </Text>

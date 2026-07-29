@@ -108,10 +108,10 @@ export function FriendsPanel({
           return (
             <TouchableOpacity
               key={tab.key}
-              className={`flex-row items-center px-3 py-1.5 rounded-full ${active ? 'bg-nexa' : 'bg-gray-100'}`}
+              className={`flex-row items-center px-3 py-1.5 rounded-full ${active ? 'bg-nexa' : 'bg-gray-100 dark:bg-zinc-800'}`}
               onPress={() => setSub(tab.key)}
             >
-              <Text className={`text-base font-medium ${active ? 'text-white' : 'text-gray-600'}`}>
+              <Text className={`text-base font-medium ${active ? 'text-white' : 'text-gray-600 dark:text-zinc-300'}`}>
                 {tab.label}
               </Text>
               {tab.badge ? (
@@ -126,10 +126,10 @@ export function FriendsPanel({
 
       {sub === 'friends' && (
         <View className="px-4 pt-2">
-          <View className="flex-row items-center bg-gray-100 rounded-full px-4">
+          <View className="flex-row items-center bg-gray-100 dark:bg-zinc-800 rounded-full px-4">
             <Ionicons name="search" size={16} color="#6B7280" />
             <TextInput
-              className="flex-1 py-2 px-2 text-lg"
+              className="flex-1 py-2 px-2 text-lg text-gray-900 dark:text-zinc-100"
               placeholder={t('friends.search_friends')}
               placeholderTextColor="#6B7280"
               value={query}
@@ -179,10 +179,10 @@ export function FriendsPanel({
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  className="border border-gray-300 rounded-full px-3 py-1.5"
+                  className="border border-gray-300 dark:border-zinc-700 rounded-full px-3 py-1.5"
                   onPress={() => refuse(item.requestId)}
                 >
-                  <Text className="text-gray-600 text-sm font-semibold">
+                  <Text className="text-gray-600 dark:text-zinc-300 text-sm font-semibold">
                     {t('relation.refuse')}
                   </Text>
                 </TouchableOpacity>
@@ -200,10 +200,10 @@ export function FriendsPanel({
           renderItem={({ item }) => (
             <Row user={item.user} onPress={() => onOpenProfile(item.user.id)}>
               <TouchableOpacity
-                className="border border-gray-300 rounded-full px-3 py-1.5"
+                className="border border-gray-300 dark:border-zinc-700 rounded-full px-3 py-1.5"
                 onPress={() => cancel(item.requestId)}
               >
-                <Text className="text-gray-600 text-sm font-semibold">
+                <Text className="text-gray-600 dark:text-zinc-300 text-sm font-semibold">
                   {t('relation.cancel_request')}
                 </Text>
               </TouchableOpacity>
@@ -228,13 +228,13 @@ function Row({
 }) {
   return (
     <TouchableOpacity
-      className="flex-row items-center px-4 py-3 border-b border-gray-50"
+      className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800"
       onPress={onPress}
     >
       <UserAvatar photoUrl={user.photoUrl} name={user.name} size={52} />
       <View className="flex-1 ml-3">
-        <Text className="text-lg font-medium text-gray-900">{user.name}</Text>
-        {subtitle ? <Text className="text-gray-400 text-sm">{subtitle}</Text> : null}
+        <Text className="text-lg font-medium text-gray-900 dark:text-zinc-100">{user.name}</Text>
+        {subtitle ? <Text className="text-gray-400 dark:text-zinc-500 text-sm">{subtitle}</Text> : null}
       </View>
       {children}
     </TouchableOpacity>
@@ -244,7 +244,7 @@ function Row({
 function Empty({ text }: { text: string }) {
   return (
     <View className="items-center justify-center mt-20">
-      <Text className="text-gray-400">{text}</Text>
+      <Text className="text-gray-400 dark:text-zinc-500">{text}</Text>
     </View>
   );
 }

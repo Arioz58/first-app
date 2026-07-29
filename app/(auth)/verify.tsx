@@ -199,7 +199,7 @@ export default function VerifyScreen() {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <SafeAreaView
-        className="flex-1 bg-white"
+        className="flex-1 bg-white dark:bg-zinc-950"
         edges={["bottom", "left", "right"]}
       >
         <View className="flex-row items-center justify-between px-4 py-3">
@@ -238,10 +238,10 @@ export default function VerifyScreen() {
               opacity: { type: "timing", duration: 400, delay: 100 },
             }}
           >
-            <Text className="text-5xl font-black text-nexa italic">
+            <Text className="text-5xl font-black text-nexa dark:text-blue-400 italic">
               {t("auth.verification")}
             </Text>
-            <Text className="text-2xl font-medium italic text-nexa mb-6">
+            <Text className="text-2xl font-medium italic text-nexa dark:text-blue-400 mb-6">
               {t("auth.code_sent_to", { phone })}
             </Text>
           </MotiView>
@@ -285,10 +285,10 @@ export default function VerifyScreen() {
                 }}
                 className={`w-14 h-16 border-2 rounded-2xl text-center text-3xl font-bold ${
                   expired
-                    ? "border-gray-200 text-gray-300"
+                    ? "border-gray-200 dark:border-zinc-700 text-gray-300"
                     : digit
-                      ? "border-nexa text-nexa"
-                      : "border-gray-300 text-gray-900"
+                      ? "border-nexa text-nexa dark:text-blue-400"
+                      : "border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-zinc-100"
                 }`}
                 keyboardType="number-pad"
                 maxLength={6}
@@ -323,7 +323,7 @@ export default function VerifyScreen() {
           >
             {!expired && (
               <Text
-                className={`text-base font-medium ${timeLeft <= 30 ? "text-red-400" : "text-gray-400"}`}
+                className={`text-base font-medium ${timeLeft <= 30 ? "text-red-400" : "text-gray-400 dark:text-zinc-500"}`}
               >
                 {t("auth.code_valid_for")}{" "}
                 <Text className="font-bold">{formatTime(timeLeft)}</Text>
@@ -333,12 +333,12 @@ export default function VerifyScreen() {
               {resending ? (
                 <ActivityIndicator color="#1E40AF" />
               ) : resendIn > 0 ? (
-                <Text className="text-gray-400 text-base">
+                <Text className="text-gray-400 dark:text-zinc-500 text-base">
                   {t("auth.resend_in", { time: formatTime(resendIn) })}
                 </Text>
               ) : (
                 <TouchableOpacity onPress={handleResend}>
-                  <Text className="text-nexa font-semibold text-base">
+                  <Text className="text-nexa dark:text-blue-400 font-semibold text-base">
                     {t("auth.resend_code")}
                   </Text>
                 </TouchableOpacity>
@@ -360,7 +360,7 @@ export default function VerifyScreen() {
                 <ActivityIndicator color="white" />
               ) : (
                 <Text
-                  className={`font-semibold text-2xl italic ${code.length === 6 && !expired ? "text-white" : "text-gray-400"}`}
+                  className={`font-semibold text-2xl italic ${code.length === 6 && !expired ? "text-white" : "text-gray-400 dark:text-zinc-500"}`}
                 >
                   {t("auth.confirm")} →
                 </Text>

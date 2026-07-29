@@ -176,7 +176,7 @@ export default function LoginScreen() {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <SafeAreaView
-        className="flex-1 bg-white"
+        className="flex-1 bg-white dark:bg-zinc-950"
         edges={["bottom", "left", "right"]}
       >
         <View className="flex-row items-center justify-between px-4 py-3">
@@ -234,10 +234,10 @@ export default function LoginScreen() {
               opacity: { type: "timing", duration: 400, delay: 210 },
             }}
           >
-            <Text className="text-4xl font-black text-nexa italic">
+            <Text className="text-4xl font-black text-nexa dark:text-blue-400 italic">
               {isNewUser ? t("auth.create_account") : t("auth.connection")}
             </Text>
-            <Text className="text-2xl font-medium italic text-nexa mb-4">
+            <Text className="text-2xl font-medium italic text-nexa dark:text-blue-400 mb-4">
               {isNewUser ? t("auth.enter_info") : t("auth.enter_phone")}
             </Text>
           </MotiView>
@@ -245,7 +245,7 @@ export default function LoginScreen() {
           {isNewUser && (
             <View className="mb-4 mt-4">
               <TextInput
-                className={`border rounded-xl px-4 py-3 text-xl ${nameError ? "border-red-400" : "border-gray-300"}`}
+                className={`border rounded-xl px-4 py-3 text-xl text-gray-900 dark:text-zinc-100 ${nameError ? "border-red-400" : "border-gray-300 dark:border-zinc-700"}`}
                 placeholder={t("auth.first_name_placeholder")}
                 placeholderTextColor="#6B7280"
                 value={name}
@@ -268,7 +268,7 @@ export default function LoginScreen() {
             <View className="flex-row">
               <CountryPicker selected={country} onSelect={setCountry} />
               <TextInput
-                className={`flex-1 border rounded-xl px-4 py-3 text-xl ${phoneError ? "border-red-400" : "border-gray-300"}`}
+                className={`flex-1 border rounded-xl px-4 py-3 text-xl text-gray-900 dark:text-zinc-100 ${phoneError ? "border-red-400" : "border-gray-300 dark:border-zinc-700"}`}
                 placeholder={country.example ?? t("phone")}
                 placeholderTextColor="#6B7280"
                 keyboardType="phone-pad"
@@ -304,14 +304,14 @@ export default function LoginScreen() {
                 size={24}
                 color={accepted ? "#1E40AF" : "#9CA3AF"}
               />
-              <Text className="ml-2 flex-1 text-base text-gray-600 leading-6">
+              <Text className="ml-2 flex-1 text-base text-gray-600 dark:text-zinc-300 leading-6">
                 {(() => {
                   const parts = t("auth.consent").split("{{link}}");
                   return (
                     <>
                       {parts[0]}
                       <Text
-                        className="text-nexa font-semibold underline"
+                        className="text-nexa dark:text-blue-400 font-semibold underline"
                         onPress={() => Linking.openURL(PRIVACY_URL)}
                       >
                         {t("auth.privacy_link")}
@@ -341,7 +341,7 @@ export default function LoginScreen() {
               ) : (
                 <Text
                   className={`font-semibold text-2xl italic ${
-                    isNewUser && !accepted ? "text-gray-400" : "text-white"
+                    isNewUser && !accepted ? "text-gray-400 dark:text-zinc-500" : "text-white"
                   }`}
                 >
                   {t("auth.receive_code")} →

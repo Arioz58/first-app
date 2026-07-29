@@ -205,7 +205,10 @@
     "description_placeholder": "Açıklama (isteğe bağlı)",
     "add_description": "Açıklama ekle",
     "show_all": "{{count}} üyenin tümünü göster",
-    "search_member": "Üye ara"
+    "search_member": "Üye ara",
+    "new_group": "Yeni grup",
+    "create": "Oluştur",
+    "name_member_required": "Bir ad ve en az bir üye gerekli"
   },
   "user_search": {
     "placeholder": "Kişi ara",
@@ -396,5 +399,11 @@
     "admin": "Yönetici",
     "moderator": "Moderatör",
     "member": "Üye"
+  },
+  "theme": {
+    "appearance": "Görünüm",
+    "system": "Sistem",
+    "light": "Açık",
+    "dark": "Koyu"
   }
 }

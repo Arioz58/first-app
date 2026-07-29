@@ -72,11 +72,11 @@ export function MessageMedia({
     >
       <Ionicons name="document-text" size={30} color={tint} />
       <View className="ml-2 flex-1">
-        <Text numberOfLines={1} className="text-gray-900 font-medium">
+        <Text numberOfLines={1} className="text-gray-900 dark:text-zinc-100 font-medium">
           {message.fileName || 'Document'}
         </Text>
         {message.fileSize ? (
-          <Text className="text-gray-400 text-sm">{formatFileSize(message.fileSize)}</Text>
+          <Text className="text-gray-400 dark:text-zinc-500 text-sm">{formatFileSize(message.fileSize)}</Text>
         ) : null}
       </View>
     </TouchableOpacity>

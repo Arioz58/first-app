@@ -369,17 +369,17 @@ export default function ConversationsScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
       <View className="flex-row items-center justify-between px-4 py-4">
         <Text className="text-2xl font-bold text-nexa">{t('messages')}</Text>
       </View>
 
       {/* Barre de recherche — toujours visible. */}
       <View className="px-4 pb-3">
-        <View className="flex-row items-center bg-gray-100 rounded-xl px-3">
+        <View className="flex-row items-center bg-gray-100 dark:bg-zinc-800 rounded-xl px-3">
           <Ionicons name="search" size={18} color="#6B7280" />
           <TextInput
-            className="flex-1 py-2.5 px-2 text-lg"
+            className="flex-1 py-2.5 px-2 text-lg text-gray-900 dark:text-zinc-100"
             placeholder={t('search.placeholder')}
             placeholderTextColor="#6B7280"
             value={query}
@@ -427,12 +427,12 @@ export default function ConversationsScreen() {
             <TouchableOpacity
               key={f}
               className={`flex-row items-center rounded-full px-4 py-2 mr-2 ${
-                active ? 'bg-nexa' : 'bg-gray-100'
+                active ? 'bg-nexa' : 'bg-gray-100 dark:bg-zinc-800'
               }`}
               onPress={() => setFilter(f)}
             >
               <Text
-                className={`text-base font-semibold ${active ? 'text-white' : 'text-gray-600'}`}
+                className={`text-base font-semibold ${active ? 'text-white' : 'text-gray-600 dark:text-zinc-300'}`}
               >
                 {t(`filters.${f}`)}
               </Text>
@@ -456,13 +456,13 @@ export default function ConversationsScreen() {
             {/* Les stories ont migré vers l'onglet Actus (updates.tsx). */}
             {filter === 'all' && requestCount > 0 && (
               <TouchableOpacity
-                className="flex-row items-center px-4 py-3.5 border-b border-gray-100"
+                className="flex-row items-center px-4 py-3.5 border-b border-gray-100 dark:border-zinc-800"
                 onPress={() => router.push('/requests' as any)}
               >
-                <View className="w-14 h-14 rounded-full bg-blue-50 items-center justify-center mr-3.5">
+                <View className="w-14 h-14 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center mr-3.5">
                   <Ionicons name="mail-unread-outline" size={26} color={NEXA} />
                 </View>
-                <Text className="flex-1 font-semibold text-gray-900">
+                <Text className="flex-1 font-semibold text-gray-900 dark:text-zinc-100">
                   {t('message_requests.title')}
                 </Text>
                 <View className="bg-red-500 rounded-full min-w-[24px] h-[24px] items-center justify-center px-1.5">
@@ -484,7 +484,7 @@ export default function ConversationsScreen() {
         }
         ListEmptyComponent={
           <View className="items-center justify-center mt-20 px-8">
-            <Text className="text-gray-400 text-center">
+            <Text className="text-gray-400 dark:text-zinc-500 text-center">
               {filter === 'all' ? t('chat.no_conversations') : t(`filters.empty_${filter}`)}
             </Text>
           </View>
@@ -494,13 +494,13 @@ export default function ConversationsScreen() {
           const other = getOtherMember(item);
           return (
             <TouchableOpacity
-              className="flex-row items-center px-4 py-3.5 border-b border-gray-50"
+              className="flex-row items-center px-4 py-3.5 border-b border-gray-50 dark:border-zinc-800"
               onPress={() => openChat(item)}
               onLongPress={() => setActionTarget(item)}
               delayLongPress={300}
             >
               {item.type === 'group' ? (
-                <View className="w-14 h-14 rounded-full bg-blue-50 items-center justify-center">
+                <View className="w-14 h-14 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center">
                   <Ionicons name="people" size={26} color={NEXA} />
                 </View>
               ) : (
@@ -512,7 +512,7 @@ export default function ConversationsScreen() {
                   {item.pinnedAt && (
                     <Ionicons name="pin" size={15} color="#9CA3AF" style={{ marginRight: 4 }} />
                   )}
-                  <Text className="font-semibold text-gray-900 flex-shrink" numberOfLines={1}>
+                  <Text className="font-semibold text-gray-900 dark:text-zinc-100 flex-shrink" numberOfLines={1}>
                     {getConvName(item)}
                   </Text>
                   {item.favoritedAt && (
@@ -528,7 +528,7 @@ export default function ConversationsScreen() {
                   )}
                 </View>
                 <Text
-                  className={`text-base ${unread ? 'text-gray-900 font-medium' : 'text-gray-500'}`}
+                  className={`text-base ${unread ? 'text-gray-900 dark:text-zinc-100 font-medium' : 'text-gray-500 dark:text-zinc-400'}`}
                   numberOfLines={1}
                 >
                   {getLastMessage(item)}
@@ -536,7 +536,7 @@ export default function ConversationsScreen() {
               </View>
 
               <View className="items-end ml-2">
-                <Text className={`text-sm ${unread ? 'text-nexa font-semibold' : 'text-gray-400'}`}>
+                <Text className={`text-sm ${unread ? 'text-nexa font-semibold' : 'text-gray-400 dark:text-zinc-500'}`}>
                   {formatDate(item.lastMessageAt)}
                 </Text>
                 {unread && (
@@ -575,10 +575,10 @@ export default function ConversationsScreen() {
                 run(router);
               }}
             >
-              <View className="w-11 h-11 rounded-full bg-blue-50 items-center justify-center mr-4">
+              <View className="w-11 h-11 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center mr-4">
                 <Ionicons name={icon} size={22} color={NEXA} />
               </View>
-              <Text className="text-lg font-semibold text-gray-900">{t(`fab.${key}`)}</Text>
+              <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100">{t(`fab.${key}`)}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -589,7 +589,7 @@ export default function ConversationsScreen() {
         <View className="pb-6 pt-2">
           {actionTarget && (
             <>
-              <Text className="px-5 pb-2 text-base text-gray-400" numberOfLines={1}>
+              <Text className="px-5 pb-2 text-base text-gray-400 dark:text-zinc-500" numberOfLines={1}>
                 {getConvName(actionTarget)}
               </Text>
               <ConvAction
@@ -641,17 +641,17 @@ function ConvAction({
 }) {
   return (
     <TouchableOpacity className="flex-row items-center px-5 py-4" onPress={onPress}>
-      <View className="w-11 h-11 rounded-full bg-blue-50 items-center justify-center mr-4">
+      <View className="w-11 h-11 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center mr-4">
         <Ionicons name={icon} size={22} color={NEXA} />
       </View>
-      <Text className="text-lg font-semibold text-gray-900">{label}</Text>
+      <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100">{label}</Text>
     </TouchableOpacity>
   );
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <Text className="text-sm font-semibold text-gray-400 uppercase px-4 pt-4 pb-1">{children}</Text>
+    <Text className="text-sm font-semibold text-gray-400 dark:text-zinc-500 uppercase px-4 pt-4 pb-1">{children}</Text>
   );
 }
 
@@ -697,17 +697,17 @@ function SearchResults({
             return (
               <TouchableOpacity
                 key={c.id}
-                className="flex-row items-center px-4 py-3 border-b border-gray-50"
+                className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800"
                 onPress={() => onOpenConv(c)}
               >
                 {c.type === 'group' ? (
-                  <View className="w-12 h-12 rounded-full bg-blue-50 items-center justify-center">
+                  <View className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center">
                     <Ionicons name="people" size={22} color={NEXA} />
                   </View>
                 ) : (
                   <UserAvatar photoUrl={other?.user.photoUrl} name={other?.user.name} size={48} />
                 )}
-                <Text className="flex-1 ml-3 font-semibold text-gray-900" numberOfLines={1}>
+                <Text className="flex-1 ml-3 font-semibold text-gray-900 dark:text-zinc-100" numberOfLines={1}>
                   {getConvName(c)}
                 </Text>
               </TouchableOpacity>
@@ -725,25 +725,25 @@ function SearchResults({
             return (
               <TouchableOpacity
                 key={m.id}
-                className="flex-row items-center px-4 py-3 border-b border-gray-50"
+                className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800"
                 onPress={() => onOpenMessage(m)}
               >
                 {m.conversation.type === 'group' ? (
-                  <View className="w-12 h-12 rounded-full bg-blue-50 items-center justify-center">
+                  <View className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center">
                     <Ionicons name="people" size={22} color={NEXA} />
                   </View>
                 ) : (
                   <UserAvatar photoUrl={avatar?.photoUrl} name={avatar?.name} size={48} />
                 )}
                 <View className="flex-1 ml-3">
-                  <Text className="font-semibold text-gray-900" numberOfLines={1}>
+                  <Text className="font-semibold text-gray-900 dark:text-zinc-100" numberOfLines={1}>
                     {searchConvName(m.conversation)}
                   </Text>
-                  <Text className="text-base text-gray-500" numberOfLines={1}>
+                  <Text className="text-base text-gray-500 dark:text-zinc-400" numberOfLines={1}>
                     {m.content}
                   </Text>
                 </View>
-                <Text className="text-sm text-gray-400 ml-2">{formatDate(m.createdAt)}</Text>
+                <Text className="text-sm text-gray-400 dark:text-zinc-500 ml-2">{formatDate(m.createdAt)}</Text>
               </TouchableOpacity>
             );
           })}
@@ -757,11 +757,11 @@ function SearchResults({
           {friendMatches.map((f) => (
             <TouchableOpacity
               key={f.id}
-              className="flex-row items-center px-4 py-3 border-b border-gray-50"
+              className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800"
               onPress={() => onOpenFriend(f)}
             >
               <UserAvatar photoUrl={f.photoUrl} name={f.name} size={48} />
-              <Text className="flex-1 ml-3 font-semibold text-gray-900" numberOfLines={1}>
+              <Text className="flex-1 ml-3 font-semibold text-gray-900 dark:text-zinc-100" numberOfLines={1}>
                 {f.name}
               </Text>
               <Ionicons name="chatbubble-ellipses-outline" size={20} color={NEXA} />
@@ -778,7 +778,7 @@ function SearchResults({
       {!searching && nothing ? (
         <View className="items-center mt-16 px-10">
           <Ionicons name="search-outline" size={44} color="#D1D5DB" />
-          <Text className="text-gray-400 text-center mt-3">{t('search.no_results')}</Text>
+          <Text className="text-gray-400 dark:text-zinc-500 text-center mt-3">{t('search.no_results')}</Text>
         </View>
       ) : null}
       <View className="h-24" />

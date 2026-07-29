@@ -43,12 +43,12 @@ export default function BlockedScreen() {
       .catch((e: any) => Alert.alert(t('error'), e.message));
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <View className="flex-row items-center px-4 py-3 border-b border-gray-100">
+    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
+      <View className="flex-row items-center px-4 py-3 border-b border-gray-100 dark:border-zinc-800">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
-        <Text className="text-xl font-semibold text-gray-900">
+        <Text className="text-xl font-semibold text-gray-900 dark:text-zinc-100">
           {t('moderation.blocked_users')}
         </Text>
       </View>
@@ -61,20 +61,20 @@ export default function BlockedScreen() {
           keyExtractor={(item) => item.id}
           ListEmptyComponent={
             <View className="items-center justify-center mt-24">
-              <Text className="text-gray-400">{t('moderation.no_blocked')}</Text>
+              <Text className="text-gray-400 dark:text-zinc-500">{t('moderation.no_blocked')}</Text>
             </View>
           }
           renderItem={({ item }) => (
-            <View className="flex-row items-center px-4 py-3 border-b border-gray-50">
+            <View className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800">
               <UserAvatar photoUrl={item.photoUrl} name={item.name} size={52} />
-              <Text className="flex-1 ml-3 text-lg font-medium text-gray-900">
+              <Text className="flex-1 ml-3 text-lg font-medium text-gray-900 dark:text-zinc-100">
                 {item.name}
               </Text>
               <TouchableOpacity
-                className="border border-gray-300 rounded-full px-4 py-1.5"
+                className="border border-gray-300 dark:border-zinc-700 rounded-full px-4 py-1.5"
                 onPress={() => unblock(item.id)}
               >
-                <Text className="text-gray-700 text-base font-semibold">
+                <Text className="text-gray-700 dark:text-zinc-300 text-base font-semibold">
                   {t('moderation.unblock')}
                 </Text>
               </TouchableOpacity>

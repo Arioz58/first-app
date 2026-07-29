@@ -65,13 +65,13 @@ export default function GiphyPicker({
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaProvider>
-        <SafeAreaView className="flex-1 bg-white" edges={['top', 'bottom']}>
-        <View className="flex-row items-center px-4 py-2 border-b border-gray-100">
+        <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900" edges={['top', 'bottom']}>
+        <View className="flex-row items-center px-4 py-2 border-b border-gray-100 dark:border-zinc-800">
           <TouchableOpacity onPress={onClose} className="mr-3">
             <Ionicons name="close" size={24} color="#1E40AF" />
           </TouchableOpacity>
           <TextInput
-            className="flex-1 bg-gray-100 rounded-full px-4 py-2"
+            className="flex-1 bg-gray-100 dark:bg-zinc-800 rounded-full px-4 py-2 text-gray-900 dark:text-zinc-100"
             placeholder={t('media.gif_search')}
             value={query}
             onChangeText={setQuery}
@@ -82,7 +82,7 @@ export default function GiphyPicker({
         {!configured ? (
           <View className="flex-1 items-center justify-center px-10">
             <Ionicons name="key-outline" size={40} color="#D1D5DB" />
-            <Text className="text-gray-400 text-center mt-3">{t('media.gif_no_key')}</Text>
+            <Text className="text-gray-400 dark:text-zinc-500 text-center mt-3">{t('media.gif_no_key')}</Text>
           </View>
         ) : loading ? (
           <ActivityIndicator color="#1E40AF" className="mt-8" />

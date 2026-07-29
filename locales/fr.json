@@ -205,7 +205,10 @@
     "description_placeholder": "Description (optionnel)",
     "add_description": "Ajouter une description",
     "show_all": "Afficher les {{count}} membres",
-    "search_member": "Rechercher un membre"
+    "search_member": "Rechercher un membre",
+    "new_group": "Nouveau groupe",
+    "create": "Créer",
+    "name_member_required": "Un nom et au moins un membre sont requis"
   },
   "user_search": {
     "placeholder": "Rechercher des personnes",
@@ -396,5 +399,11 @@
     "admin": "Admin",
     "moderator": "Modérateur",
     "member": "Membre"
+  },
+  "theme": {
+    "appearance": "Apparence",
+    "system": "Système",
+    "light": "Clair",
+    "dark": "Sombre"
   }
 }

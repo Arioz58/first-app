@@ -21,8 +21,7 @@ import { apiRequest } from '../../lib/api';
 import { SUPPORTED_LANGUAGES, setAppLanguage } from '../../lib/i18n';
 import { clearTokens } from '../../lib/storage';
 import { disconnectSocket } from '../../lib/socket';
-
-const NEXA = '#1E40AF';
+import { getThemePref, setThemePref, useThemeColors, type ThemePref } from '../../lib/theme';
 
 type User = {
   id: string;
@@ -48,6 +47,7 @@ function SettingRow({
   onPress?: () => void;
   danger?: boolean;
 }) {
+  const c = useThemeColors();
   return (
     <TouchableOpacity
       className="flex-row items-center px-4 py-4"
@@ -56,20 +56,17 @@ function SettingRow({
       activeOpacity={0.6}
     >
       <View
-        className="w-9 h-9 rounded-full items-center justify-center"
-        style={{ backgroundColor: danger ? '#FEE2E2' : '#DBEAFE' }}
+        className={`w-9 h-9 rounded-full items-center justify-center ${danger ? 'bg-red-50 dark:bg-red-950' : 'bg-blue-50 dark:bg-blue-950'}`}
       >
-        <Ionicons name={icon} size={20} color={danger ? '#EF4444' : NEXA} />
+        <Ionicons name={icon} size={20} color={danger ? '#EF4444' : c.nexa} />
       </View>
       <Text
-        className={`ml-3 flex-1 text-lg ${danger ? 'text-red-500 font-semibold' : 'text-gray-900'}`}
+        className={`ml-3 flex-1 text-lg ${danger ? 'text-red-500 font-semibold' : 'text-gray-900 dark:text-zinc-100'}`}
       >
         {label}
       </Text>
-      {value ? <Text className="text-gray-400 mr-1">{value}</Text> : null}
-      {onPress && !danger ? (
-        <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-      ) : null}
+      {value ? <Text className="text-gray-400 dark:text-zinc-500 mr-1">{value}</Text> : null}
+      {onPress && !danger ? <Ionicons name="chevron-forward" size={18} color={c.faint} /> : null}
     </TouchableOpacity>
   );
 }
@@ -77,6 +74,7 @@ function SettingRow({
 export default function ProfileScreen() {
   const router = useRouter();
   const { t } = useTranslation();
+  const c = useThemeColors();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -88,12 +86,15 @@ export default function ProfileScreen() {
   const [savingName, setSavingName] = useState(false);
 
   const [langVisible, setLangVisible] = useState(false);
+  const [themeVisible, setThemeVisible] = useState(false);
+  const [themePref, setThemePrefState] = useState<ThemePref>('system');
 
   useEffect(() => {
     apiRequest<User>('/users/me')
       .then(setUser)
       .catch(() => {})
       .finally(() => setLoading(false));
+    getThemePref().then(setThemePrefState);
   }, []);
 
   const handleLogout = () => {
@@ -169,7 +170,6 @@ export default function ProfileScreen() {
     }
   };
 
-  // Appui sur l'avatar : choix Changer / Supprimer si une photo existe, sinon picker direct.
   const handleAvatarPress = () => {
     if (!user?.photoUrl) {
       handleChangePhoto();
@@ -177,11 +177,7 @@ export default function ProfileScreen() {
     }
     Alert.alert('', '', [
       { text: t('change_photo'), onPress: handleChangePhoto },
-      {
-        text: t('remove_photo'),
-        style: 'destructive',
-        onPress: handleRemovePhoto,
-      },
+      { text: t('remove_photo'), style: 'destructive', onPress: handleRemovePhoto },
       { text: t('cancel'), style: 'cancel' },
     ]);
   };
@@ -210,9 +206,7 @@ export default function ProfileScreen() {
         method: 'PATCH',
         body: { name: trimmed, bio },
       });
-      setUser((u) =>
-        u ? { ...u, name: trimmed, profile: { ...u.profile, bio } } : u,
-      );
+      setUser((u) => (u ? { ...u, name: trimmed, profile: { ...u.profile, bio } } : u));
       setEditModal(false);
     } catch (e: any) {
       setNameError(e.message || t('error'));
@@ -226,44 +220,43 @@ export default function ProfileScreen() {
     if (code === user?.language) return;
     await setAppLanguage(code);
     setUser((u) => (u ? { ...u, language: code } : u));
-    apiRequest('/users/me', { method: 'PATCH', body: { language: code } }).catch(
-      () => {},
-    );
+    apiRequest('/users/me', { method: 'PATCH', body: { language: code } }).catch(() => {});
+  };
+
+  const selectTheme = async (pref: ThemePref) => {
+    setThemeVisible(false);
+    setThemePrefState(pref);
+    await setThemePref(pref);
   };
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color={NEXA} />
+      <View className="flex-1 items-center justify-center bg-white dark:bg-zinc-950">
+        <ActivityIndicator size="large" color={c.nexa} />
       </View>
     );
   }
 
   const currentLang = SUPPORTED_LANGUAGES.find((l) => l.code === user?.language);
+  const themeLabel =
+    themePref === 'light' ? t('theme.light') : themePref === 'dark' ? t('theme.dark') : t('theme.system');
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top', 'left', 'right']}>
-      <View className="px-5 py-3 bg-white">
-        <Text className="text-3xl font-bold" style={{ color: NEXA }}>
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-zinc-950" edges={['top', 'left', 'right']}>
+      <View className="px-5 py-3 bg-white dark:bg-zinc-900">
+        <Text className="text-3xl font-bold" style={{ color: c.nexa }}>
           {t('profile')}
         </Text>
       </View>
 
       {/* Carte profil */}
-      <View className="items-center bg-white pt-6 pb-8 mb-3">
-        <TouchableOpacity
-          onPress={handleAvatarPress}
-          activeOpacity={0.8}
-          disabled={uploading}
-        >
-          <View className="w-28 h-28 rounded-full overflow-hidden items-center justify-center bg-blue-50">
+      <View className="items-center bg-white dark:bg-zinc-900 pt-6 pb-8 mb-3">
+        <TouchableOpacity onPress={handleAvatarPress} activeOpacity={0.8} disabled={uploading}>
+          <View className="w-28 h-28 rounded-full overflow-hidden items-center justify-center bg-blue-50 dark:bg-blue-950">
             {user?.photoUrl ? (
-              <Image
-                source={{ uri: user.photoUrl }}
-                style={{ width: '100%', height: '100%' }}
-              />
+              <Image source={{ uri: user.photoUrl }} style={{ width: '100%', height: '100%' }} />
             ) : (
-              <Text className="text-6xl font-bold" style={{ color: NEXA }}>
+              <Text className="text-6xl font-bold" style={{ color: c.nexa }}>
                 {user?.name?.charAt(0).toUpperCase() ?? '?'}
               </Text>
             )}
@@ -274,64 +267,64 @@ export default function ProfileScreen() {
             )}
           </View>
           <View
-            className="absolute bottom-0 right-0 w-9 h-9 rounded-full items-center justify-center border-2 border-white"
-            style={{ backgroundColor: NEXA }}
+            className="absolute bottom-0 right-0 w-9 h-9 rounded-full items-center justify-center border-2 border-white dark:border-zinc-900"
+            style={{ backgroundColor: c.nexa }}
           >
             <Ionicons name="camera" size={18} color="white" />
           </View>
         </TouchableOpacity>
 
         <View className="flex-row items-center mt-4">
-          <Text className="text-3xl font-bold text-gray-900">{user?.name}</Text>
+          <Text className="text-3xl font-bold text-gray-900 dark:text-zinc-100">{user?.name}</Text>
           <TouchableOpacity className="ml-2 p-1" onPress={openEditModal}>
-            <Ionicons name="pencil" size={18} color={NEXA} />
+            <Ionicons name="pencil" size={18} color={c.nexa} />
           </TouchableOpacity>
         </View>
-        <Text className="text-gray-500 mt-1">{user?.phone}</Text>
+        <Text className="text-gray-500 dark:text-zinc-400 mt-1">{user?.phone}</Text>
 
         <TouchableOpacity onPress={openEditModal} className="mt-2 px-8">
           {user?.profile?.bio ? (
-            <Text className="text-gray-600 text-center">{user.profile.bio}</Text>
+            <Text className="text-gray-600 dark:text-zinc-300 text-center">{user.profile.bio}</Text>
           ) : (
-            <Text className="text-gray-400 italic text-center">{t('add_bio')}</Text>
+            <Text className="text-gray-400 dark:text-zinc-500 italic text-center">{t('add_bio')}</Text>
           )}
         </TouchableOpacity>
       </View>
 
       {/* Réglages */}
-      <View className="bg-white">
-        <Text className="px-4 pt-4 pb-1 text-sm font-semibold uppercase text-gray-400">
+      <View className="bg-white dark:bg-zinc-900">
+        <Text className="px-4 pt-4 pb-1 text-sm font-semibold uppercase text-gray-400 dark:text-zinc-500">
           {t('settings')}
         </Text>
+        <SettingRow
+          icon="contrast-outline"
+          label={t('theme.appearance')}
+          value={themeLabel}
+          onPress={() => setThemeVisible(true)}
+        />
+        <View className="h-px bg-gray-100 dark:bg-zinc-800 ml-16" />
         <SettingRow
           icon="language-outline"
           label={t('language')}
           value={currentLang ? `${currentLang.flag} ${currentLang.label}` : ''}
           onPress={() => setLangVisible(true)}
         />
-        <View className="h-px bg-gray-100 ml-16" />
+        <View className="h-px bg-gray-100 dark:bg-zinc-800 ml-16" />
         <SettingRow
           icon="lock-closed-outline"
           label={t('privacy_settings.title')}
           onPress={() => router.push('/privacy' as any)}
         />
-        <View className="h-px bg-gray-100 ml-16" />
+        <View className="h-px bg-gray-100 dark:bg-zinc-800 ml-16" />
         <SettingRow
           icon="shield-checkmark-outline"
           label={t('privacy_title')}
-          value={
-            user?.privacyConsent ? t('consent_granted') : t('consent_not_granted')
-          }
+          value={user?.privacyConsent ? t('consent_granted') : t('consent_not_granted')}
         />
       </View>
 
-      <View className="bg-white mt-3">
-        <SettingRow
-          icon="log-out-outline"
-          label={t('logout')}
-          onPress={handleLogout}
-          danger
-        />
+      <View className="bg-white dark:bg-zinc-900 mt-3">
+        <SettingRow icon="log-out-outline" label={t('logout')} onPress={handleLogout} danger />
       </View>
 
       {/* Modal édition du profil (nom + bio) */}
@@ -340,14 +333,14 @@ export default function ProfileScreen() {
           className="flex-1 justify-center items-center bg-black/40 px-8"
           onPress={() => setEditModal(false)}
         >
-          <Pressable className="w-full bg-white rounded-2xl p-5" onPress={() => Keyboard.dismiss()}>
-            <Text className="text-xl font-bold text-gray-900 mb-3">
+          <Pressable className="w-full bg-white dark:bg-zinc-900 rounded-2xl p-5" onPress={() => Keyboard.dismiss()}>
+            <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 mb-3">
               {t('edit_profile')}
             </Text>
             <TextInput
-              className={`border rounded-xl px-4 py-3 text-xl ${nameError ? 'border-red-400' : 'border-gray-300'}`}
+              className={`border rounded-xl px-4 py-3 text-xl text-gray-900 dark:text-zinc-100 ${nameError ? 'border-red-400' : 'border-gray-300 dark:border-zinc-700'}`}
               placeholder={t('your_name')}
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={c.faint}
               value={nameDraft}
               onChangeText={(v) => {
                 setNameDraft(v);
@@ -361,29 +354,26 @@ export default function ProfileScreen() {
             ) : null}
 
             <TextInput
-              className="border border-gray-300 rounded-xl px-4 py-3 text-lg mt-3 h-24"
+              className="border border-gray-300 dark:border-zinc-700 rounded-xl px-4 py-3 text-lg text-gray-900 dark:text-zinc-100 mt-3 h-24"
               placeholder={t('bio_placeholder')}
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={c.faint}
               value={bioDraft}
               onChangeText={setBioDraft}
               multiline
               textAlignVertical="top"
               maxLength={140}
             />
-            <Text className="text-gray-400 text-sm mt-1 ml-1 self-end">
+            <Text className="text-gray-400 dark:text-zinc-500 text-sm mt-1 ml-1 self-end">
               {bioDraft.length}/140
             </Text>
 
             <View className="flex-row justify-end gap-3 mt-2">
-              <TouchableOpacity
-                className="px-4 py-2"
-                onPress={() => setEditModal(false)}
-              >
-                <Text className="text-gray-500 font-semibold">{t('cancel')}</Text>
+              <TouchableOpacity className="px-4 py-2" onPress={() => setEditModal(false)}>
+                <Text className="text-gray-500 dark:text-zinc-400 font-semibold">{t('cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 className="px-5 py-2 rounded-full"
-                style={{ backgroundColor: NEXA }}
+                style={{ backgroundColor: c.nexa }}
                 onPress={saveProfile}
                 disabled={savingName}
               >
@@ -400,7 +390,7 @@ export default function ProfileScreen() {
 
       {/* Drawer sélection de langue */}
       <BottomSheet visible={langVisible} onClose={() => setLangVisible(false)}>
-        <Text className="text-xl font-bold text-gray-900 px-5 pt-1 pb-2">
+        <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 px-5 pt-1 pb-2">
           {t('language')}
         </Text>
         {SUPPORTED_LANGUAGES.map((l) => {
@@ -413,14 +403,45 @@ export default function ProfileScreen() {
             >
               <Text className="text-3xl mr-3">{l.flag}</Text>
               <Text
-                className={`flex-1 text-lg ${active ? 'font-bold' : 'text-gray-900'}`}
-                style={active ? { color: NEXA } : undefined}
+                className={`flex-1 text-lg ${active ? 'font-bold' : 'text-gray-900 dark:text-zinc-100'}`}
+                style={active ? { color: c.nexa } : undefined}
               >
                 {l.label}
               </Text>
-              {active && (
-                <Ionicons name="checkmark-circle" size={22} color={NEXA} />
-              )}
+              {active && <Ionicons name="checkmark-circle" size={22} color={c.nexa} />}
+            </TouchableOpacity>
+          );
+        })}
+        <View className="pb-8" />
+      </BottomSheet>
+
+      {/* Drawer sélection du thème */}
+      <BottomSheet visible={themeVisible} onClose={() => setThemeVisible(false)}>
+        <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 px-5 pt-1 pb-2">
+          {t('theme.appearance')}
+        </Text>
+        {(
+          [
+            ['system', 'phone-portrait-outline'],
+            ['light', 'sunny-outline'],
+            ['dark', 'moon-outline'],
+          ] as const
+        ).map(([pref, icon]) => {
+          const active = themePref === pref;
+          return (
+            <TouchableOpacity
+              key={pref}
+              className="flex-row items-center px-5 py-4"
+              onPress={() => selectTheme(pref)}
+            >
+              <Ionicons name={icon} size={22} color={active ? c.nexa : c.muted} style={{ marginRight: 12 }} />
+              <Text
+                className={`flex-1 text-lg ${active ? 'font-bold' : 'text-gray-900 dark:text-zinc-100'}`}
+                style={active ? { color: c.nexa } : undefined}
+              >
+                {t(`theme.${pref}`)}
+              </Text>
+              {active && <Ionicons name="checkmark-circle" size={22} color={c.nexa} />}
             </TouchableOpacity>
           );
         })}

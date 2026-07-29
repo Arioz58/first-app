@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { apiRequest } from '../lib/api';
 import { getUserId } from '../lib/storage';
+import { useThemeColors } from '../lib/theme';
 
 type StoryUser = { id: string; name: string; photoUrl: string | null };
 type Story = { id: string; mediaUrl?: string | null; background?: string | null; expiresAt: string };
@@ -21,6 +22,7 @@ const INNER = 54;  // diamètre de l'avatar interne
 
 // Anneau autour d'un avatar : dégradé bleu (non vu) ou gris fin (vu)
 function StoryRing({ unseen, children }: { unseen: boolean; children: ReactNode }) {
+  const c = useThemeColors();
   if (unseen) {
     return (
       <LinearGradient
@@ -32,7 +34,7 @@ function StoryRing({ unseen, children }: { unseen: boolean; children: ReactNode 
         <View
           style={{
             width: INNER + 5, height: INNER + 5, borderRadius: (INNER + 5) / 2,
-            backgroundColor: 'white', alignItems: 'center', justifyContent: 'center',
+            backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center',
           }}
         >
           {children}
@@ -44,7 +46,7 @@ function StoryRing({ unseen, children }: { unseen: boolean; children: ReactNode 
     <View
       style={{
         width: RING, height: RING, borderRadius: RING / 2,
-        borderWidth: 2, borderColor: '#D1D5DB',
+        borderWidth: 2, borderColor: c.line,
         alignItems: 'center', justifyContent: 'center',
       }}
     >
@@ -58,7 +60,7 @@ function Avatar({ photoUrl, name }: { photoUrl?: string | null; name?: string })
   return (
     <View
       style={{ width: INNER, height: INNER, borderRadius: INNER / 2, overflow: 'hidden' }}
-      className="bg-blue-50 items-center justify-center"
+      className="bg-blue-50 dark:bg-blue-950 items-center justify-center"
     >
       {photoUrl ? (
         <Image source={{ uri: photoUrl }} style={{ width: '100%', height: '100%' }} />
@@ -142,14 +144,14 @@ const StoriesBar = forwardRef<StoriesBarHandle>((_props, ref) => {
           <Ionicons name="add" size={14} color="white" />
         </TouchableOpacity>
       </View>
-      <Text className="text-sm text-gray-600 mt-1 text-center" style={{ width: RING }} numberOfLines={1}>
+      <Text className="text-sm text-gray-600 dark:text-zinc-300 mt-1 text-center" style={{ width: RING }} numberOfLines={1}>
         {hasMyStory ? t('stories.my_story') : t('stories.add')}
       </Text>
     </View>
   );
 
   return (
-    <View className="border-b border-gray-100 py-3">
+    <View className="border-b border-gray-100 dark:border-zinc-800 py-3">
       <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -160,7 +162,7 @@ const StoriesBar = forwardRef<StoriesBarHandle>((_props, ref) => {
         ListEmptyComponent={
           groups.length === 0 ? (
             <View className="items-center justify-center ml-4">
-              <Text className="text-gray-400 text-sm">{t('stories.empty')}</Text>
+              <Text className="text-gray-400 dark:text-zinc-500 text-sm">{t('stories.empty')}</Text>
             </View>
           ) : null
         }
@@ -175,7 +177,7 @@ const StoriesBar = forwardRef<StoriesBarHandle>((_props, ref) => {
             <StoryRing unseen={item.hasUnviewed}>
               <Avatar photoUrl={item.user.photoUrl} name={item.user.name} />
             </StoryRing>
-            <Text className="text-sm text-gray-700 mt-1 text-center" style={{ width: RING }} numberOfLines={1}>
+            <Text className="text-sm text-gray-700 dark:text-zinc-300 mt-1 text-center" style={{ width: RING }} numberOfLines={1}>
               {item.user.name}
             </Text>
           </TouchableOpacity>

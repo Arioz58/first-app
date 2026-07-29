@@ -17,7 +17,7 @@ function AuthHeader() {
   const step = getStep(pathname);
 
   return (
-    <View style={{ paddingTop: insets.top }}>
+    <View className="bg-white dark:bg-zinc-950" style={{ paddingTop: insets.top }}>
       <StepIndicator currentStep={step} />
     </View>
   );

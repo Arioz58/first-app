@@ -41,7 +41,7 @@ export default function UpdatesScreen() {
   const storiesRef = useRef<StoriesBarHandle>(null);
 
   return (
-    <SafeAreaView className="flex-1 bg-white" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900" edges={['top']}>
       <View className="px-4 pt-3 pb-2">
         <Text className="text-3xl font-bold text-nexa">{t('tabs.updates')}</Text>
       </View>
@@ -56,10 +56,10 @@ export default function UpdatesScreen() {
           return (
             <TouchableOpacity
               key={s}
-              className={`flex-1 items-center py-2 rounded-full mx-1 ${active ? 'bg-nexa' : 'bg-gray-100'}`}
+              className={`flex-1 items-center py-2 rounded-full mx-1 ${active ? 'bg-nexa' : 'bg-gray-100 dark:bg-zinc-800'}`}
               onPress={() => setSeg(s)}
             >
-              <Text className={`text-base font-semibold ${active ? 'text-white' : 'text-gray-600'}`}>
+              <Text className={`text-base font-semibold ${active ? 'text-white' : 'text-gray-600 dark:text-zinc-300'}`}>
                 {t(`updates.${s}`)}
               </Text>
             </TouchableOpacity>
@@ -164,7 +164,7 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
       {empty ? (
         <View className="items-center justify-center mt-24 px-10">
           <Ionicons name="people-outline" size={48} color="#D1D5DB" />
-          <Text className="text-gray-400 text-center mt-3">{t('activity.empty')}</Text>
+          <Text className="text-gray-400 dark:text-zinc-500 text-center mt-3">{t('activity.empty')}</Text>
         </View>
       ) : null}
 
@@ -181,7 +181,7 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
       {/* Demandes d'ami reçues — en dessous des suggestions */}
       {received.length > 0 ? (
         <View className="mt-2">
-          <Text className="text-sm font-semibold text-gray-400 uppercase px-5 pb-2">
+          <Text className="text-sm font-semibold text-gray-400 dark:text-zinc-500 uppercase px-5 pb-2">
             {t('activity.requests')}
           </Text>
           {received.map((r) => (
@@ -189,7 +189,7 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
               <TouchableOpacity onPress={() => router.push({ pathname: '/user/[id]' as any, params: { id: r.user.id } })}>
                 <UserAvatar photoUrl={r.user.photoUrl} name={r.user.name} size={56} />
               </TouchableOpacity>
-              <Text className="flex-1 ml-3 font-semibold text-gray-900" numberOfLines={1}>
+              <Text className="flex-1 ml-3 font-semibold text-gray-900 dark:text-zinc-100" numberOfLines={1}>
                 {r.user.name}
               </Text>
               <TouchableOpacity
@@ -200,11 +200,11 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
                 <Text className="text-white text-base font-semibold">{t('relation.accept')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                className="bg-gray-100 rounded-full px-4 py-2"
+                className="bg-gray-100 dark:bg-zinc-800 rounded-full px-4 py-2"
                 disabled={acting === r.requestId}
                 onPress={() => refuse(r.requestId)}
               >
-                <Text className="text-gray-600 text-base font-semibold">{t('relation.refuse')}</Text>
+                <Text className="text-gray-600 dark:text-zinc-300 text-base font-semibold">{t('relation.refuse')}</Text>
               </TouchableOpacity>
             </View>
           ))}
@@ -214,7 +214,7 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
       {/* Drawer « voir tout » : liste complète + Ajouter */}
       <BottomSheet visible={suggOpen} onClose={() => setSuggOpen(false)}>
         <View className="pb-6 pt-1">
-          <Text className="text-lg font-bold text-gray-900 px-5 pb-2">{t('activity.suggestions')}</Text>
+          <Text className="text-lg font-bold text-gray-900 dark:text-zinc-100 px-5 pb-2">{t('activity.suggestions')}</Text>
           {suggestions.map((s) => (
             <View key={s.id} className="flex-row items-center px-4 py-3">
               <TouchableOpacity
@@ -226,9 +226,9 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
                 <UserAvatar photoUrl={s.photoUrl} name={s.name} size={52} />
               </TouchableOpacity>
               <View className="flex-1 ml-3">
-                <Text className="font-semibold text-gray-900" numberOfLines={1}>{s.name}</Text>
+                <Text className="font-semibold text-gray-900 dark:text-zinc-100" numberOfLines={1}>{s.name}</Text>
                 {s.mutualFriendsCount > 0 ? (
-                  <Text className="text-gray-400 text-sm">
+                  <Text className="text-gray-400 dark:text-zinc-500 text-sm">
                     {t(
                       s.mutualFriendsCount === 1 ? 'profile_view.mutual_one' : 'profile_view.mutual_other',
                       { count: s.mutualFriendsCount },
@@ -237,7 +237,7 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
                 ) : null}
               </View>
               <TouchableOpacity
-                className="flex-row items-center bg-blue-50 rounded-full px-4 py-2"
+                className="flex-row items-center bg-blue-50 dark:bg-blue-950 rounded-full px-4 py-2"
                 disabled={acting === s.id}
                 onPress={() => addFriend(s.id)}
               >
@@ -258,16 +258,16 @@ function CommunityTab() {
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
       <View className="flex-1 items-center justify-center px-10 mt-16">
-        <View className="w-20 h-20 rounded-3xl bg-blue-50 items-center justify-center">
+        <View className="w-20 h-20 rounded-3xl bg-blue-50 dark:bg-blue-950 items-center justify-center">
           <Ionicons name="trophy" size={36} color={NEXA} />
         </View>
-        <Text className="text-xl font-bold text-gray-900 mt-4 text-center">
+        <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 mt-4 text-center">
           {t('community.title')}
         </Text>
-        <Text className="text-gray-500 text-center mt-2 leading-5">
+        <Text className="text-gray-500 dark:text-zinc-400 text-center mt-2 leading-5">
           {t('community.description')}
         </Text>
-        <View className="bg-blue-50 rounded-full px-4 py-1.5 mt-5">
+        <View className="bg-blue-50 dark:bg-blue-950 rounded-full px-4 py-1.5 mt-5">
           <Text className="text-nexa text-sm font-semibold">{t('community.badge')}</Text>
         </View>
       </View>

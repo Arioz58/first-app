@@ -70,20 +70,20 @@ export default function NewGroupScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
       <DismissKeyboard>
-      <View className="flex-row items-center px-4 py-3 border-b border-gray-100">
+      <View className="flex-row items-center px-4 py-3 border-b border-gray-100 dark:border-zinc-800">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color="#1E40AF" />
         </TouchableOpacity>
-        <Text className="text-xl font-semibold text-gray-900">
+        <Text className="text-xl font-semibold text-gray-900 dark:text-zinc-100">
           {t('group.new_group')}
         </Text>
       </View>
 
       <View className="px-4 pt-4">
         <TextInput
-          className="border border-gray-300 rounded-xl px-4 py-3 text-lg"
+          className="border border-gray-300 dark:border-zinc-700 rounded-xl px-4 py-3 text-lg text-gray-900 dark:text-zinc-100"
           placeholder={t('group.group_name')}
           placeholderTextColor="#6B7280"
           value={name}
@@ -96,7 +96,7 @@ export default function NewGroupScreen() {
             {selected.map((m) => (
               <TouchableOpacity
                 key={m.id}
-                className="flex-row items-center bg-blue-50 rounded-full pl-1 pr-2 py-1"
+                className="flex-row items-center bg-blue-50 dark:bg-blue-950 rounded-full pl-1 pr-2 py-1"
                 onPress={() => toggleMember(m)}
               >
                 <UserAvatar photoUrl={m.photoUrl} name={m.name} size={28} />
@@ -109,13 +109,13 @@ export default function NewGroupScreen() {
           </View>
         )}
 
-        <Text className="text-sm font-semibold uppercase text-gray-400 mt-5 mb-1">
+        <Text className="text-sm font-semibold uppercase text-gray-400 dark:text-zinc-500 mt-5 mb-1">
           {t('group.add_members')}
         </Text>
-        <View className="flex-row items-center bg-gray-100 rounded-full px-4">
+        <View className="flex-row items-center bg-gray-100 dark:bg-zinc-800 rounded-full px-4">
           <Ionicons name="search" size={18} color="#6B7280" />
           <TextInput
-            className="flex-1 py-2.5 px-2 text-lg"
+            className="flex-1 py-2.5 px-2 text-lg text-gray-900 dark:text-zinc-100"
             placeholder={t('user_search.placeholder')}
             placeholderTextColor="#6B7280"
             value={query}
@@ -137,11 +137,11 @@ export default function NewGroupScreen() {
           const isSelected = selected.some((m) => m.id === item.id);
           return (
             <TouchableOpacity
-              className="flex-row items-center px-4 py-3 border-b border-gray-50"
+              className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800"
               onPress={() => toggleMember(item)}
             >
               <UserAvatar photoUrl={item.photoUrl} name={item.name} size={52} />
-              <Text className="ml-3 flex-1 text-lg font-medium text-gray-900">
+              <Text className="ml-3 flex-1 text-lg font-medium text-gray-900 dark:text-zinc-100">
                 {item.name}
               </Text>
               <Ionicons
@@ -156,7 +156,7 @@ export default function NewGroupScreen() {
 
       <View className="px-4 pb-4">
         <TouchableOpacity
-          className={`rounded-xl py-4 items-center ${name.trim() && selected.length ? 'bg-nexa' : 'bg-gray-200'}`}
+          className={`rounded-xl py-4 items-center ${name.trim() && selected.length ? 'bg-nexa' : 'bg-gray-200 dark:bg-zinc-700'}`}
           onPress={handleCreate}
           disabled={loading || !name.trim() || !selected.length}
         >
@@ -164,7 +164,7 @@ export default function NewGroupScreen() {
             <ActivityIndicator color="white" />
           ) : (
             <Text
-              className={`font-semibold text-lg ${name.trim() && selected.length ? 'text-white' : 'text-gray-400'}`}
+              className={`font-semibold text-lg ${name.trim() && selected.length ? 'text-white' : 'text-gray-400 dark:text-zinc-500'}`}
             >
               {t('group.create')}
             </Text>

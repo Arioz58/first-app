@@ -685,9 +685,9 @@ export default function ChatScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
       {/* Header */}
-      <View className="flex-row items-center px-3 py-2 border-b border-gray-100">
+      <View className="flex-row items-center px-3 py-2 border-b border-gray-100 dark:border-zinc-800">
         <TouchableOpacity onPress={() => router.back()} className="px-1 py-1">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
@@ -695,7 +695,7 @@ export default function ChatScreen() {
         {/* Avatar + point de statut */}
         <TouchableOpacity onPress={openDetails} className="ml-1">
           {convType === 'group' ? (
-            <View className="w-10 h-10 rounded-full bg-blue-50 items-center justify-center">
+            <View className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center">
               <Ionicons name="people" size={20} color={NEXA} />
             </View>
           ) : (
@@ -713,7 +713,7 @@ export default function ChatScreen() {
         <TouchableOpacity className="flex-1 ml-3" onPress={openDetails}>
           <View className="flex-row items-center">
             <Text
-              className="text-lg font-semibold text-gray-900 flex-shrink"
+              className="text-lg font-semibold text-gray-900 dark:text-zinc-100 flex-shrink"
               numberOfLines={1}
             >
               {displayName}
@@ -732,7 +732,7 @@ export default function ChatScreen() {
           </View>
           {subtitle ? (
             <Text
-              className={`text-sm ${subtitleAccent ? 'text-nexa' : 'text-gray-400'}`}
+              className={`text-sm ${subtitleAccent ? 'text-nexa' : 'text-gray-400 dark:text-zinc-500'}`}
               numberOfLines={1}
             >
               {subtitle}
@@ -810,7 +810,7 @@ export default function ChatScreen() {
             if (item.type === 'system') {
               return (
                 <View className="items-center my-2 px-6">
-                  <Text className="text-xs text-gray-500 bg-gray-100 rounded-full px-3 py-1 text-center">
+                  <Text className="text-xs text-gray-500 dark:text-zinc-400 bg-gray-100 dark:bg-zinc-800 rounded-full px-3 py-1 text-center">
                     {systemText(item.content)}
                   </Text>
                 </View>
@@ -849,7 +849,7 @@ export default function ChatScreen() {
                       className={`flex-row items-center gap-1 mb-1 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
                     >
                       <Ionicons name="arrow-undo" size={12} color="#9CA3AF" />
-                      <Text className="text-[11px] text-gray-400">
+                      <Text className="text-[11px] text-gray-400 dark:text-zinc-500">
                         {reaction
                           ? isMe
                             ? t('chat.you_reacted')
@@ -864,7 +864,7 @@ export default function ChatScreen() {
                     {item.storyMediaUrl && (
                       <Image
                         source={{ uri: item.storyMediaUrl }}
-                        className="rounded-xl border border-gray-200 bg-gray-100 mb-1"
+                        className="rounded-xl border border-gray-200 dark:border-zinc-800 bg-gray-100 dark:bg-zinc-800 mb-1"
                         style={{ width: 50, height: 84 }}
                       />
                     )}
@@ -877,9 +877,9 @@ export default function ChatScreen() {
                     ) : (
                       <View
                         style={[BUBBLE_SHADOW, isMe ? { backgroundColor: bubbleColor } : null]}
-                        className={`rounded-2xl px-4 py-2 ${isMe ? '' : 'bg-white'}`}
+                        className={`rounded-2xl px-4 py-2 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
                       >
-                        <Text className={isMe ? 'text-white' : 'text-gray-900'}>
+                        <Text className={isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}>
                           {item.content}
                         </Text>
                       </View>
@@ -888,7 +888,7 @@ export default function ChatScreen() {
                 ) : item.mediaUrl ? (
                   <>
                     {!isMe && (
-                      <Text className="text-sm text-gray-400 mb-1 ml-1">{item.sender?.name}</Text>
+                      <Text className="text-sm text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
                     )}
                     {isImageLike(item.mediaType) ? (
                       <View>
@@ -899,11 +899,11 @@ export default function ChatScreen() {
                           onOpenVideo={(url) => setViewer({ type: 'video', url })}
                         />
                         {item.content ? (
-                          <Text className="text-sm text-gray-500 mt-1 px-1">{item.content}</Text>
+                          <Text className="text-sm text-gray-500 dark:text-zinc-400 mt-1 px-1">{item.content}</Text>
                         ) : null}
                       </View>
                     ) : (
-                      <View style={BUBBLE_SHADOW} className="rounded-2xl px-3 py-2 bg-white">
+                      <View style={BUBBLE_SHADOW} className="rounded-2xl px-3 py-2 bg-white dark:bg-zinc-900">
                         <MessageMedia
                           message={item}
                           tint={bubbleColor}
@@ -916,17 +916,17 @@ export default function ChatScreen() {
                 ) : (
                   <>
                     {!isMe && (
-                      <Text className="text-sm text-gray-400 mb-1 ml-1">{item.sender?.name}</Text>
+                      <Text className="text-sm text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
                     )}
                     <Pressable
                       onPress={
                         firstUrl(item.content) ? () => Linking.openURL(firstUrl(item.content)!) : undefined
                       }
                       style={[BUBBLE_SHADOW, isMe ? { backgroundColor: bubbleColor } : null]}
-                      className={`rounded-2xl px-4 py-2 ${isMe ? '' : 'bg-white'}`}
+                      className={`rounded-2xl px-4 py-2 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
                     >
                       <Text
-                        className={`${isMe ? 'text-white' : 'text-gray-900'} ${firstUrl(item.content) ? 'underline' : ''}`}
+                        className={`${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'} ${firstUrl(item.content) ? 'underline' : ''}`}
                       >
                         {item.content}
                       </Text>
@@ -942,7 +942,7 @@ export default function ChatScreen() {
 
         {/* Panneau de pièces jointes animé */}
         {attachOpen && !isRecording && (
-          <View className="flex-row px-5 py-4 border-t border-gray-100" style={{ gap: 28 }}>
+          <View className="flex-row px-5 py-4 border-t border-gray-100 dark:border-zinc-800" style={{ gap: 28 }}>
             {attachItems.map((it, i) => (
               <Animated.View
                 key={it.key}
@@ -956,7 +956,7 @@ export default function ChatScreen() {
                   >
                     <Ionicons name={it.icon} size={26} color="white" />
                   </View>
-                  <Text className="text-sm text-gray-600 mt-1.5">{it.label}</Text>
+                  <Text className="text-sm text-gray-600 dark:text-zinc-300 mt-1.5">{it.label}</Text>
                 </TouchableOpacity>
               </Animated.View>
             ))}
@@ -964,7 +964,7 @@ export default function ChatScreen() {
         )}
 
         {uploading && (
-          <Text className="text-sm text-gray-400 px-4 pt-1">{t('media.uploading')}</Text>
+          <Text className="text-sm text-gray-400 dark:text-zinc-500 px-4 pt-1">{t('media.uploading')}</Text>
         )}
 
         {/* Groupe réservé aux admins : simple membre → saisie bloquée */}
@@ -972,19 +972,19 @@ export default function ChatScreen() {
         whoCanSend === 'admins' &&
         myRole !== 'admin' &&
         myRole !== 'moderator' ? (
-          <View className="px-4 py-4 border-t border-gray-100 items-center">
-            <Text className="text-sm text-gray-400 text-center">
+          <View className="px-4 py-4 border-t border-gray-100 dark:border-zinc-800 items-center">
+            <Text className="text-sm text-gray-400 dark:text-zinc-500 text-center">
               {t('group.only_admins_can_send')}
             </Text>
           </View>
         ) : isRecording ? (
-          <View className="flex-row items-center px-3 py-3 border-t border-gray-100">
+          <View className="flex-row items-center px-3 py-3 border-t border-gray-100 dark:border-zinc-800">
             <TouchableOpacity onPress={cancelRecording} className="px-2">
               <Ionicons name="trash-outline" size={22} color="#EF4444" />
             </TouchableOpacity>
             <View className="flex-1 flex-row items-center ml-2">
               <View className="w-2.5 h-2.5 rounded-full bg-red-500 mr-2" />
-              <Text className="text-gray-700">{recFmt(recordSeconds)}</Text>
+              <Text className="text-gray-700 dark:text-zinc-300">{recFmt(recordSeconds)}</Text>
             </View>
             <TouchableOpacity
               onPress={stopAndSendRecording}
@@ -995,14 +995,14 @@ export default function ChatScreen() {
           </View>
         ) : (
           /* Input */
-          <View className="flex-row items-center px-3 py-2 border-t border-gray-100">
+          <View className="flex-row items-center px-3 py-2 border-t border-gray-100 dark:border-zinc-800">
             <TouchableOpacity onPress={toggleAttach} disabled={uploading} className="mr-1 px-1">
               <Animated.View style={plusStyle}>
                 <Ionicons name="add-circle-outline" size={26} color={NEXA} />
               </Animated.View>
             </TouchableOpacity>
             <TextInput
-              className="flex-1 bg-gray-100 rounded-full px-4 py-2 mr-2 text-lg"
+              className="flex-1 bg-gray-100 dark:bg-zinc-800 rounded-full px-4 py-2 mr-2 text-lg text-gray-900 dark:text-zinc-100"
               placeholder={t('chat.message_placeholder')}
               value={text}
               onChangeText={handleChangeText}
