@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CountryPicker from '../../components/CountryPicker';
 import { DismissKeyboard } from '../../components/DismissKeyboard';
+import QrScanner, { ScanOrigin } from '../../components/QrScanner';
 import { FriendsPanel } from '../../components/FriendsPanel';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
@@ -57,6 +58,17 @@ export default function SearchScreen() {
   const [isSelf, setIsSelf] = useState(false);
   const [recent, setRecent] = useState<RecentSearch[]>([]);
   const reqId = useRef(0);
+  // Scanner QR : overlay qui s'ouvre en s'agrandissant depuis le bouton.
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanOrigin, setScanOrigin] = useState<ScanOrigin>({ x: 0, y: 0, w: 44, h: 44 });
+  const scanBtnRef = useRef<View>(null);
+
+  const openScan = () => {
+    scanBtnRef.current?.measureInWindow((x, y, w, h) => {
+      setScanOrigin({ x, y, w, h });
+      setScanOpen(true);
+    });
+  };
 
   useEffect(() => {
     getRecentSearches().then(setRecent);
@@ -206,8 +218,9 @@ export default function SearchScreen() {
           </View>
           {/* Scanner un QR de profil */}
           <TouchableOpacity
+            ref={scanBtnRef}
             className="ml-2 w-11 h-11 rounded-xl bg-blue-50 dark:bg-blue-950 items-center justify-center"
-            onPress={() => router.push('/scan' as any)}
+            onPress={openScan}
           >
             <Ionicons name="scan-outline" size={22} color="#1E40AF" />
           </TouchableOpacity>
@@ -290,6 +303,8 @@ export default function SearchScreen() {
           )}
         </DismissKeyboard>
       )}
+
+      <QrScanner visible={scanOpen} origin={scanOrigin} onClose={() => setScanOpen(false)} />
     </SafeAreaView>
   );
 }
