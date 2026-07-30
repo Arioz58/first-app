@@ -8,7 +8,7 @@
   "enter_code": "Entrez le code",
   "profile": "Profil",
   "settings": "Paramètres",
-  "messages": "Messages",
+  "messages": "Discussion",
   "search": {
     "placeholder": "Rechercher",
     "conversations": "Discussions",
@@ -42,7 +42,7 @@
   "uploading": "Envoi en cours...",
   "photo_error": "Impossible de mettre à jour la photo",
   "tabs": {
-    "messages": "Messages",
+    "messages": "Discussion",
     "calls": "Appels",
     "profile": "Vous",
     "contacts": "Contacts",

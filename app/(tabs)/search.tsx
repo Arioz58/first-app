@@ -46,7 +46,7 @@ export default function SearchScreen() {
     <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
       <View className="px-4 pt-3 pb-2">
         <View className="flex-row items-center justify-between mb-3">
-          <Text className="text-3xl font-bold text-nexa">{t('tabs.contacts')}</Text>
+          <Text className="text-4xl font-bold text-nexa">{t('tabs.contacts')}</Text>
           {/* Scanner un QR + ajouter par numéro (uniquement sur le segment Répertoire) */}
           {seg === 'directory' && (
             <View className="flex-row items-center">

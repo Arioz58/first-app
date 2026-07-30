@@ -371,7 +371,7 @@ export default function ConversationsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
       <View className="flex-row items-center justify-between px-4 py-4">
-        <Text className="text-2xl font-bold text-nexa">{t('messages')}</Text>
+        <Text className="text-4xl font-bold text-nexa">{t('messages')}</Text>
       </View>
 
       {/* Barre de recherche — toujours visible. */}

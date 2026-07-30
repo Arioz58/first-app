@@ -8,7 +8,7 @@
   "enter_code": "Enter the code",
   "profile": "Profile",
   "settings": "Settings",
-  "messages": "Messages",
+  "messages": "Chats",
   "search": {
     "placeholder": "Search",
     "conversations": "Chats",
@@ -42,7 +42,7 @@
   "uploading": "Uploading...",
   "photo_error": "Could not update photo",
   "tabs": {
-    "messages": "Messages",
+    "messages": "Chats",
     "calls": "Calls",
     "profile": "You",
     "contacts": "Contacts",

@@ -43,7 +43,7 @@ export default function UpdatesScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900" edges={['top']}>
       <View className="px-4 pt-3 pb-2">
-        <Text className="text-3xl font-bold text-nexa">{t('tabs.updates')}</Text>
+        <Text className="text-4xl font-bold text-nexa">{t('tabs.updates')}</Text>
       </View>
 
       {/* Stories — toujours en tête, hors du contenu qui défile. */}

@@ -8,7 +8,7 @@
   "enter_code": "Kodu girin",
   "profile": "Profil",
   "settings": "Ayarlar",
-  "messages": "Mesajlar",
+  "messages": "Sohbetler",
   "search": {
     "placeholder": "Ara",
     "conversations": "Sohbetler",
@@ -42,7 +42,7 @@
   "uploading": "Yükleniyor...",
   "photo_error": "Fotoğraf güncellenemedi",
   "tabs": {
-    "messages": "Mesajlar",
+    "messages": "Sohbetler",
     "calls": "Aramalar",
     "profile": "Sen",
     "contacts": "Kişiler",
