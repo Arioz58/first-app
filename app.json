@@ -17,6 +17,7 @@
         "NSMicrophoneUsageDescription": "Nexa utilise le micro pour enregistrer le son de vos vidéos.",
         "NSPhotoLibraryUsageDescription": "Nexa accède à votre galerie pour choisir des photos et vidéos à publier en story.",
         "NSPhotoLibraryAddUsageDescription": "Nexa peut enregistrer des médias dans votre galerie.",
+        "NSContactsUsageDescription": "Nexa utilise vos contacts pour retrouver qui utilise déjà l'application et inviter les autres. Vos contacts ne sont jamais stockés.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -65,7 +66,13 @@
         }
       ],
       "expo-localization",
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Nexa utilise vos contacts pour retrouver qui utilise déjà l'application et inviter les autres. Vos contacts ne sont jamais stockés."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

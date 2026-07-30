@@ -432,5 +432,25 @@
     "allow": "İzin ver",
     "hint": "Bir profil QR kodunu hedefle",
     "not_recognized": "QR kodu tanınmadı"
+  },
+  "contacts_sync": {
+    "title": "Kişiler",
+    "find_title": "Kişilerimi bul",
+    "find_subtitle": "Nexa'yı kimlerin kullandığını gör",
+    "or_search": "veya numarayla ara",
+    "intro_title": "Kişilerini Nexa'da bul",
+    "intro_body": "Nexa, kimlerin burada olduğunu göstermek ve diğerlerini davet etmek için rehberini kullanır. Kişilerin asla saklanmaz.",
+    "allow": "Erişime izin ver",
+    "denied_body": "Kişi erişimi kapalı. Kişilerini bulmak için ayarlardan aç.",
+    "open_settings": "Ayarları aç",
+    "error": "Bir hata oluştu.",
+    "retry": "Tekrar dene",
+    "on_nexa": "Nexa'da",
+    "message": "Mesaj",
+    "friend": "Arkadaş",
+    "empty": "Kişilerinden henüz kimse Nexa kullanmıyor.",
+    "invite": "Nexa'ya davet et",
+    "invite_button": "Davet et",
+    "invite_message": "Nexa'da bana katıl: {{link}}"
   }
 }

@@ -196,6 +196,25 @@ export default function SearchScreen() {
         <FriendsPanel onOpenProfile={openProfile} />
       ) : (
         <DismissKeyboard>
+          {/* Chemin principal : synchroniser le carnet du téléphone */}
+          <TouchableOpacity
+            onPress={() => router.push('/contacts')}
+            className="mx-4 mt-2 mb-1 flex-row items-center bg-nexa rounded-2xl px-4 py-3.5"
+          >
+            <Ionicons name="people" size={22} color="#fff" />
+            <View className="flex-1 ml-3">
+              <Text className="text-white font-semibold text-base">
+                {t('contacts_sync.find_title')}
+              </Text>
+              <Text className="text-blue-100 text-xs mt-0.5">
+                {t('contacts_sync.find_subtitle')}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#fff" />
+          </TouchableOpacity>
+          <Text className="text-center text-gray-400 dark:text-zinc-500 text-xs my-2">
+            {t('contacts_sync.or_search')}
+          </Text>
           <View className="px-4 pb-2">
             <View className="flex-row items-center">
               <CountryPicker selected={country} onSelect={setCountry} />

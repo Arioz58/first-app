@@ -432,5 +432,25 @@
     "allow": "Allow",
     "hint": "Point at a profile QR code",
     "not_recognized": "QR code not recognized"
+  },
+  "contacts_sync": {
+    "title": "Contacts",
+    "find_title": "Find my contacts",
+    "find_subtitle": "See who already uses Nexa",
+    "or_search": "or search by number",
+    "intro_title": "Find your contacts on Nexa",
+    "intro_body": "Nexa uses your address book to show who is already here and invite the others. Your contacts are never stored.",
+    "allow": "Allow access",
+    "denied_body": "Contacts access is off. Enable it in settings to find your contacts.",
+    "open_settings": "Open settings",
+    "error": "Something went wrong.",
+    "retry": "Retry",
+    "on_nexa": "On Nexa",
+    "message": "Message",
+    "friend": "Friend",
+    "empty": "None of your contacts use Nexa yet.",
+    "invite": "Invite to Nexa",
+    "invite_button": "Invite",
+    "invite_message": "Join me on Nexa: {{link}}"
   }
 }

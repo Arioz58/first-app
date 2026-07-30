@@ -432,5 +432,25 @@
     "allow": "Autoriser",
     "hint": "Vise le QR code d'un profil",
     "not_recognized": "QR code non reconnu"
+  },
+  "contacts_sync": {
+    "title": "Contacts",
+    "find_title": "Trouver mes contacts",
+    "find_subtitle": "Vois qui utilise déjà Nexa",
+    "or_search": "ou recherche par numéro",
+    "intro_title": "Retrouve tes contacts sur Nexa",
+    "intro_body": "Nexa utilise ton carnet d'adresses pour te montrer qui est déjà là et inviter les autres. Tes contacts ne sont jamais stockés.",
+    "allow": "Autoriser l'accès",
+    "denied_body": "L'accès aux contacts est désactivé. Active-le dans les réglages pour retrouver tes contacts.",
+    "open_settings": "Ouvrir les réglages",
+    "error": "Une erreur est survenue.",
+    "retry": "Réessayer",
+    "on_nexa": "Sur Nexa",
+    "message": "Message",
+    "friend": "Ami",
+    "empty": "Aucun de tes contacts n'utilise encore Nexa.",
+    "invite": "Inviter sur Nexa",
+    "invite_button": "Inviter",
+    "invite_message": "Rejoins-moi sur Nexa : {{link}}"
   }
 }
