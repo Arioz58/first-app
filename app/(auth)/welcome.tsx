@@ -3,6 +3,7 @@ import { MotiImage, MotiText, MotiView } from "moti";
 import { useTranslation } from "react-i18next";
 import { Image, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { BlueAura } from "../../components/BlueAura";
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -56,20 +57,23 @@ export default function WelcomeScreen() {
           {t("onboarding.welcome_subtitle")}
         </MotiText>
 
-        <MotiImage
-          source={require("../../assets/images/welcome_gift.png")}
-          className="w-full h-52 mt-24"
-          resizeMode="contain"
-          from={{ opacity: 0, translateY: 40 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{
-            type: "spring",
-            stiffness: 80,
-            damping: 14,
-            delay: 350,
-            opacity: { type: "timing", duration: 500, delay: 350 },
-          }}
-        />
+        <View className="w-full h-52 items-center justify-center mt-24">
+          <BlueAura />
+          <MotiImage
+            source={require("../../assets/images/welcome_gift.png")}
+            className="w-full h-full"
+            resizeMode="contain"
+            from={{ opacity: 0, translateY: 40 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{
+              type: "spring",
+              stiffness: 80,
+              damping: 14,
+              delay: 350,
+              opacity: { type: "timing", duration: 500, delay: 350 },
+            }}
+          />
+        </View>
       </MotiView>
 
       <MotiView

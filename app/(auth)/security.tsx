@@ -4,6 +4,7 @@ import { MotiImage, MotiText, MotiView } from "moti";
 import { useTranslation } from "react-i18next";
 import { Image, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { BlueAura } from "../../components/BlueAura";
 
 export default function SecurityScreen() {
   const router = useRouter();
@@ -80,14 +81,17 @@ export default function SecurityScreen() {
           opacity: { type: "timing", duration: 500, delay: 320 },
         }}
       >
-        <MotiImage
-          source={require("../../assets/images/welcome_lock.png")}
-          className="w-full h-52"
-          resizeMode="contain"
-          from={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ type: "timing", duration: 400, delay: 380 }}
-        />
+        <View className="w-full h-52 items-center justify-center">
+          <BlueAura />
+          <MotiImage
+            source={require("../../assets/images/welcome_lock.png")}
+            className="w-full h-full"
+            resizeMode="contain"
+            from={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ type: "timing", duration: 400, delay: 380 }}
+          />
+        </View>
       </MotiView>
 
       <MotiView
