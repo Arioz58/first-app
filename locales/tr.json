@@ -377,7 +377,8 @@
     "empty": "Şimdilik yeni bir şey yok.",
     "requests": "Arkadaşlık istekleri",
     "suggestions": "Tanıyor olabileceğin kişiler",
-    "see_all": "{{count}} kişinin tümünü gör"
+    "see_all": "{{count}} kişinin tümünü gör",
+    "no_suggestions": "Henüz öneri yok. Tanıyabileceğin kişileri keşfetmek için arkadaş ekle."
   },
   "community": {
     "title": "Yakında: topluluğun",

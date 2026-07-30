@@ -377,7 +377,8 @@
     "empty": "Rien de neuf pour le moment.",
     "requests": "Demandes d'ami",
     "suggestions": "Personnes que tu connais peut-être",
-    "see_all": "Voir les {{count}} personnes"
+    "see_all": "Voir les {{count}} personnes",
+    "no_suggestions": "Aucune suggestion pour le moment. Ajoute des amis pour découvrir des personnes que tu connais peut-être."
   },
   "community": {
     "title": "Bientôt : ta communauté",

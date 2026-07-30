@@ -145,7 +145,6 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
     );
   }
 
-  const empty = received.length === 0 && suggestions.length === 0;
 
   return (
     <ScrollView
@@ -161,14 +160,8 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
         />
       }
     >
-      {empty ? (
-        <View className="items-center justify-center mt-24 px-10">
-          <Ionicons name="people-outline" size={48} color="#D1D5DB" />
-          <Text className="text-gray-400 dark:text-zinc-500 text-center mt-3">{t('activity.empty')}</Text>
-        </View>
-      ) : null}
-
-      {/* Suggestions — affichage flottant façon iCloud (moi au centre), EN HAUT */}
+      {/* Suggestions — affichage flottant façon iCloud (moi au centre), EN HAUT.
+          Toujours affiché (avatar central + message si aucune suggestion). */}
       <FloatingSuggestions
         suggestions={suggestions}
         myPhotoUrl={me.photoUrl}
@@ -180,7 +173,7 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
 
       {/* Demandes d'ami reçues — en dessous des suggestions */}
       {received.length > 0 ? (
-        <View className="mt-2">
+        <View className="mt-6">
           <Text className="text-sm font-semibold text-gray-400 dark:text-zinc-500 uppercase px-5 pb-2">
             {t('activity.requests')}
           </Text>

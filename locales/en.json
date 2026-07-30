@@ -377,7 +377,8 @@
     "empty": "Nothing new right now.",
     "requests": "Friend requests",
     "suggestions": "People you may know",
-    "see_all": "See all {{count}} people"
+    "see_all": "See all {{count}} people",
+    "no_suggestions": "No suggestions yet. Add friends to discover people you may know."
   },
   "community": {
     "title": "Coming soon: your community",

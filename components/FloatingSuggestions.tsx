@@ -210,8 +210,7 @@ export default function FloatingSuggestions({
   onSeeAll: () => void;
 }) {
   const { t } = useTranslation();
-  if (suggestions.length === 0) return null;
-
+  const empty = suggestions.length === 0;
   const shown = suggestions.slice(0, ORBITS.length);
 
   return (
@@ -229,6 +228,7 @@ export default function FloatingSuggestions({
         {/* Avatar central = moi */}
         <CenterAvatar photoUrl={myPhotoUrl} name={myName} replayKey={replayKey} />
 
+        {/* Bulles en orbite (aucune si pas de suggestion → avatar central seul) */}
         {shown.map((item, i) => (
           <Bubble
             key={item.id}
@@ -241,15 +241,22 @@ export default function FloatingSuggestions({
         ))}
       </View>
 
-      {/* Voir tout → drawer */}
-      <TouchableOpacity className="items-center mt-1" onPress={onSeeAll}>
-        <View className="flex-row items-center bg-blue-50 dark:bg-blue-950 rounded-full px-4 py-2">
-          <Text className="text-nexa font-semibold text-sm">
-            {t('activity.see_all', { count: suggestions.length })}
-          </Text>
-          <Ionicons name="chevron-forward" size={15} color="#1E40AF" style={{ marginLeft: 4 }} />
-        </View>
-      </TouchableOpacity>
+      {empty ? (
+        // Aucune suggestion : avatar central seul + message explicatif.
+        <Text className="text-center text-gray-400 dark:text-zinc-500 text-sm px-10">
+          {t('activity.no_suggestions')}
+        </Text>
+      ) : (
+        /* Voir tout → drawer */
+        <TouchableOpacity className="items-center mt-1" onPress={onSeeAll}>
+          <View className="flex-row items-center bg-blue-50 dark:bg-blue-950 rounded-full px-4 py-2">
+            <Text className="text-nexa font-semibold text-sm">
+              {t('activity.see_all', { count: suggestions.length })}
+            </Text>
+            <Ionicons name="chevron-forward" size={15} color="#1E40AF" style={{ marginLeft: 4 }} />
+          </View>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
