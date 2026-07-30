@@ -1,8 +1,8 @@
 {
   "fill" : {
     "linear-gradient" : [
-      "extended-srgb:0.20392,0.78039,0.34902,1.00000",
-      "display-p3:0.68005,1.00000,0.69674,1.00000"
+      "display-p3:0.28861,0.34766,1.00000,1.00000",
+      "display-p3:0.14123,0.07275,0.64520,1.00000"
     ],
     "orientation" : {
       "start" : {
@@ -40,7 +40,7 @@
       },
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.5
+        "opacity" : 1.6
       },
       "specular" : true,
       "translucency" : {
@@ -54,6 +54,7 @@
         {
           "image-name" : "nexaLogo.svg",
           "name" : "nexaLogo",
+          "opacity" : 1,
           "position" : {
             "scale" : 1.7,
             "translation-in-points" : [
@@ -66,7 +67,7 @@
       "lighting" : "combined",
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.5
+        "opacity" : 1.6
       },
       "specular" : true,
       "translucency" : {

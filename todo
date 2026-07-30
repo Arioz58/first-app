@@ -11,13 +11,31 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
   → badge natif possible (Badge d'expo-router), affiche le nombre car le point muet est Android-only ; onglet renommé "Contacts" (person.2.fill) ; FAB "+" -> nouvelle conv / nouveau groupe / ajouter un contact ; nouvel ecran chat/new.tsx
 
 [FAIT 25/07] Page Messages : Faire un prompte qui explique que je souhaite une page qui se mets a jour tout seule sans rafraichir, que la conv avec le message le plus recents soit le plus haut, qu'on puisse epingler une conversation, et des choses au quelle je n'ai peut etre pas penser
-  → temps reel via conversation_updated (room user:) ; tri epingle puis dernier message ; non-lus via lastReadAt ; filtres Toutes/Non lues/Favoris/Groupes ; favoris de conversation ; avatars/horodatage/apercu media/icone muet. Reste: bouton "ajouter un filtre" perso. Fuite tel/token FCM dans GET /conversations corrigee.
+  → temps reel via conversation_updated (room user:) ; tri epingle puis dernier message ; non-lus via lastReadAt ; filtres Toutes/Non lues/Favoris/Groupes ; favoris de conversation ; avatars/horodatage/apercu media/icone muet. Fuite tel/token FCM dans GET /conversations corrigee.
+  → [A FAIRE] filtres personnalises facon WhatsApp : un bouton "+" a cote des filtres qui permet de creer ses propres filtres.
 
 [FAIT 24/07] Dans les story affiché uniquement les story de ses amis.
 
-Dans les conversation mettre des messages automatique pour le chiffrement de bout en bout, quand une personne mets les chat en ephemere, etc.
+[A FAIRE] Messages systeme dans la conversation (bandeaux automatiques centres) :
+  - "X a rejoint le groupe" / a quitte / a ete ajoute
+  - "Messages ephemeres actives (24h/7j/30j)" / desactives quand qqn change le reglage
+  - "Chiffrement de bout en bout" -> le client PREVOIT d'ajouter l'E2E, donc ce message deviendra legitime.
+    ⚠️ note CLAUDE.md : E2EE = pas en V1 (incompatible moderation + dashboard admin + loi turque KVKK, acces autorites). Prevu V2 si demande client. A trancher avant de l'implementer : on perd la moderation centralisee.
 
-quand on ouvre une conversation on se retrouve tout en haut de la conversation (message le plus ancien) il faut que ce soit tout en bas
+[A FAIRE - E2E chiffrement] (repousse le 29/07, a faire avant le bandeau systeme "chiffre de bout en bout")
+  Decisions prises : VRAI E2E (serveur aveugle), conversations DIRECTES d'abord.
+  Crypto retenue : react-native-libsodium (primitives eprouvees, module natif -> rebuild EAS) + protocoles standards Signal par-dessus (X3DH pour etablir la session, Double Ratchet pour la forward secrecy). PAS libsignal pur (aucun binding RN maintenu = mur en Expo). Ne JAMAIS inventer d'algo ; suivre la spec + vecteurs de test ; audit externe conseille avant prod.
+  Plan : Ph1 cles (identity + signed prekey + one-time prekeys, cle privee en Keychain/expo-secure-store, endpoints POST/GET /users/.../keys). Ph2 direct X3DH + chiffrement session. Ph3 Double Ratchet. Ph4 groupes (sender keys). Ph5 medias (chiffrer avant upload S3). Ph6 bandeau systeme "chiffre de bout en bout".
+  ⚠️ Impacts a assumer : casse la recherche serveur des messages (-> recherche locale), l'apercu dans les push FCM (-> generique), la moderation centralisee (-> via signalement), risque legal KVKK (pas d'acces autorites). Reinstall sans backup de cle = historique illisible.
 
 [A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
   → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.
+
+[A FAIRE] Archivage des conversations (facon WhatsApp).
+
+[FAIT 30/07] Ajout de contacts facon WhatsApp (le client trouvait la saisie manuelle trop longue -> frein a l'adoption).
+  FAB "+" de Messages -> ouvre DIRECTEMENT le repertoire (facon WhatsApp) : raccourcis Nouveau groupe / Nouvelle conversation en tete + section "Sur Nexa" (Message/ami) + section "Inviter" (SMS pre-rempli expo-sms). Recherche par numero gardee en fallback dans l'onglet Contacts.
+  Decisions : numeros envoyes EN CLAIR (hachage = fausse securite sur des numeros, cf WhatsApp) + NON-STOCKAGE des non-inscrits + consentement + rate limit. Hachage possible en V2 si le juriste KVKK l'exige.
+  -> backend POST /users/contacts/match (batch E.164, gated+relationStatus, block-aware, non-stockage, rate limit 12/h) ; User.phone deja indexe (@unique).
+  -> lib/contacts.ts (expo-contacts + normalisation libphonenumber-js) ; app/contacts.tsx (pre-consentement + SectionList) ; NSContactsUsageDescription dans app.json (ios.infoPlist) ; INVITE_URL placeholder store dans config.ts.
+  Restant : lien d'invite = placeholder store (universal links plus tard) ; recherche locale dans le repertoire si besoin.
