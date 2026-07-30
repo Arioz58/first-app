@@ -2,7 +2,7 @@
 // demande à l'onglet Contacts de s'ouvrir sur un segment précis.
 // Un paramètre de route ne conviendrait pas : sa valeur ne changeant pas d'un
 // appel à l'autre, l'effet ne se redéclencherait pas au 2ᵉ passage.
-export type ContactsSegment = 'search' | 'friends';
+export type ContactsSegment = 'directory' | 'friends';
 
 let pending: ContactsSegment | null = null;
 

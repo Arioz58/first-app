@@ -451,6 +451,7 @@
     "empty": "Aucun de tes contacts n'utilise encore Nexa.",
     "invite": "Inviter sur Nexa",
     "invite_button": "Inviter",
-    "invite_message": "Rejoins-moi sur Nexa : {{link}}"
+    "invite_message": "Rejoins-moi sur Nexa : {{link}}",
+    "tab": "Répertoire"
   }
 }

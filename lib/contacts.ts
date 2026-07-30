@@ -38,6 +38,11 @@ const defaultRegion = (): CountryCode => {
 
 export const getContactsPermission = () => Contacts.getPermissionsAsync();
 
+// Cache mémoire du dernier résultat (affichage instantané au retour sur l'onglet,
+// et surtout : évite de re-synchroniser à chaque bascule de segment → rate-limit).
+let cached: SyncResult | null = null;
+export const getCachedSync = (): SyncResult | null => cached;
+
 // Demande la permission, lit le carnet, normalise en E.164 et confronte au serveur.
 // Aucun numéro n'est conservé côté serveur (match en mémoire).
 export const requestAndSyncContacts = async (): Promise<SyncResult> => {
@@ -79,5 +84,6 @@ export const requestAndSyncContacts = async (): Promise<SyncResult> => {
     .map(([phone, name]) => ({ phone, name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  return { granted: true, onNexa, others };
+  cached = { granted: true, onNexa, others };
+  return cached;
 };

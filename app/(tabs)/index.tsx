@@ -49,7 +49,7 @@ const FAB_ACTIONS: {
     icon: 'person-add',
     run: (r) => {
       // Le segment est transmis par relais mémoire, pas par paramètre de route.
-      requestContactsSegment('search');
+      requestContactsSegment('directory');
       r.navigate('/(tabs)/search' as any);
     },
   },

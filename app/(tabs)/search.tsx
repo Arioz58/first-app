@@ -1,78 +1,34 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  ActivityIndicator,
-  FlatList,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import CountryPicker from '../../components/CountryPicker';
-import { DismissKeyboard } from '../../components/DismissKeyboard';
-import QrScanner, { ScanOrigin } from '../../components/QrScanner';
+import AddContactSheet from '../../components/AddContactSheet';
+import { DirectoryPanel } from '../../components/DirectoryPanel';
 import { FriendsPanel } from '../../components/FriendsPanel';
-import { UserAvatar } from '../../components/UserAvatar';
-import { apiRequest } from '../../lib/api';
-import { COUNTRIES, Country } from '../../lib/countries';
+import QrScanner, { ScanOrigin } from '../../components/QrScanner';
 import { usePendingFriendRequests } from '../../lib/friendRequests';
 import { consumeContactsSegment } from '../../lib/tabsNav';
-import {
-  addRecentSearch,
-  clearRecentSearches,
-  getRecentSearches,
-  RecentSearch,
-} from '../../lib/storage';
-
-type RelationStatus =
-  | 'self'
-  | 'friends'
-  | 'request_sent'
-  | 'request_received'
-  | 'none';
-
-type Card = {
-  id: string;
-  name: string;
-  phone: string;
-  photoUrl: string | null;
-  relationStatus: RelationStatus;
-};
-
-type SearchResult = { found: false } | { found: true; self: boolean; user: Card };
 
 export default function SearchScreen() {
   const router = useRouter();
   const { t } = useTranslation();
-  const [seg, setSeg] = useState<'search' | 'friends'>('search');
+  const [seg, setSeg] = useState<'directory' | 'friends'>('directory');
   const pendingRequests = usePendingFriendRequests();
-  const [country, setCountry] = useState<Country>(COUNTRIES[0]);
-  const [phone, setPhone] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(''); // clé i18n sous search_phone.*
-  const [result, setResult] = useState<Card | null>(null);
-  const [isSelf, setIsSelf] = useState(false);
-  const [recent, setRecent] = useState<RecentSearch[]>([]);
-  const reqId = useRef(0);
-  // Scanner QR : overlay qui s'ouvre en s'agrandissant depuis le bouton.
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [scanOrigin, setScanOrigin] = useState<ScanOrigin>({ x: 0, y: 0, w: 44, h: 44 });
   const scanBtnRef = useRef<View>(null);
 
+  // Le bouton scan est dans le header (pas dans un Modal) → ouverture directe.
   const openScan = () => {
     scanBtnRef.current?.measureInWindow((x, y, w, h) => {
       setScanOrigin({ x, y, w, h });
       setScanOpen(true);
     });
   };
-
-  useEffect(() => {
-    getRecentSearches().then(setRecent);
-  }, []);
 
   // Le FAB de la page Messages peut demander l'ouverture sur un segment précis.
   useFocusEffect(
@@ -82,89 +38,38 @@ export default function SearchScreen() {
     }, []),
   );
 
-  useEffect(() => {
-    const digits = phone.replace(/\D/g, '');
-    setResult(null);
-    setIsSelf(false);
-
-    if (digits.length < 6) {
-      setError('');
-      setLoading(false);
-      return;
-    }
-    if (digits.length > 15) {
-      setError('invalid');
-      setLoading(false);
-      return;
-    }
-
-    setError('');
-    setLoading(true);
-    const id = ++reqId.current;
-    const fullPhone =
-      country.dialCode + phone.replace(/\s/g, '').replace(/^0+/, '');
-
-    const handle = setTimeout(async () => {
-      try {
-        const res = await apiRequest<SearchResult>('/users/search-by-phone', {
-          method: 'POST',
-          body: { phone: fullPhone },
-        });
-        if (id !== reqId.current) return;
-
-        if (!res.found) {
-          setError('not_found');
-        } else if (res.self) {
-          setResult(res.user);
-          setIsSelf(true);
-          setError('own_number');
-        } else {
-          setResult(res.user);
-          const updated = await addRecentSearch({
-            id: res.user.id,
-            name: res.user.name,
-            phone: res.user.phone,
-            photoUrl: res.user.photoUrl,
-          });
-          setRecent(updated);
-        }
-      } catch {
-        if (id === reqId.current) setError('error');
-      } finally {
-        if (id === reqId.current) setLoading(false);
-      }
-    }, 400);
-
-    return () => clearTimeout(handle);
-  }, [country, phone]);
-
   const openProfile = (userId: string) => {
     router.push({ pathname: '/user/[id]' as any, params: { id: userId } });
   };
 
-  const relationLabel = (s: RelationStatus) =>
-    s === 'friends'
-      ? t('relation.friends')
-      : s === 'request_sent'
-        ? t('relation.request_sent')
-        : s === 'request_received'
-          ? t('relation.respond')
-          : t('relation.add_friend');
-
-  const clearHistory = async () => {
-    await clearRecentSearches();
-    setRecent([]);
-  };
-
-  const showRecent = !loading && !result && !error && recent.length > 0;
-
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
       <View className="px-4 pt-3 pb-2">
-        <Text className="text-3xl font-bold text-nexa mb-3">{t('tabs.contacts')}</Text>
-        {/* Segmented Recherche / Amis */}
+        <View className="flex-row items-center justify-between mb-3">
+          <Text className="text-3xl font-bold text-nexa">{t('tabs.contacts')}</Text>
+          {/* Scanner un QR + ajouter par numéro (uniquement sur le segment Répertoire) */}
+          {seg === 'directory' && (
+            <View className="flex-row items-center">
+              <TouchableOpacity
+                ref={scanBtnRef}
+                onPress={openScan}
+                className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center mr-2"
+              >
+                <Ionicons name="scan-outline" size={22} color="#1E40AF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setSheetOpen(true)}
+                className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center"
+              >
+                <Ionicons name="add" size={24} color="#1E40AF" />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* Segmented Répertoire / Amis */}
         <View className="flex-row bg-gray-100 dark:bg-zinc-800 rounded-full p-1">
-          {(['search', 'friends'] as const).map((s) => {
+          {(['directory', 'friends'] as const).map((s) => {
             const active = seg === s;
             const showBadge = s === 'friends' && pendingRequests > 0;
             return (
@@ -177,7 +82,7 @@ export default function SearchScreen() {
                 <Text
                   className={`text-base font-semibold ${active ? 'text-nexa' : 'text-gray-500 dark:text-zinc-400'}`}
                 >
-                  {s === 'search' ? t('search_phone.segment') : t('friends.title')}
+                  {s === 'directory' ? t('contacts_sync.tab') : t('friends.title')}
                 </Text>
                 {showBadge && (
                   <View className="bg-red-500 rounded-full min-w-[18px] h-[18px] items-center justify-center px-1 ml-1.5">
@@ -195,133 +100,14 @@ export default function SearchScreen() {
       {seg === 'friends' ? (
         <FriendsPanel onOpenProfile={openProfile} />
       ) : (
-        <DismissKeyboard>
-          {/* Chemin principal : synchroniser le carnet du téléphone */}
-          <TouchableOpacity
-            onPress={() => router.push('/contacts')}
-            className="mx-4 mt-2 mb-1 flex-row items-center bg-nexa rounded-2xl px-4 py-3.5"
-          >
-            <Ionicons name="people" size={22} color="#fff" />
-            <View className="flex-1 ml-3">
-              <Text className="text-white font-semibold text-base">
-                {t('contacts_sync.find_title')}
-              </Text>
-              <Text className="text-blue-100 text-xs mt-0.5">
-                {t('contacts_sync.find_subtitle')}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#fff" />
-          </TouchableOpacity>
-          <Text className="text-center text-gray-400 dark:text-zinc-500 text-xs my-2">
-            {t('contacts_sync.or_search')}
-          </Text>
-          <View className="px-4 pb-2">
-            <View className="flex-row items-center">
-              <CountryPicker selected={country} onSelect={setCountry} />
-          <View className="flex-1 flex-row items-center bg-gray-100 dark:bg-zinc-800 rounded-xl px-3">
-            <TextInput
-              className="flex-1 py-3 px-1 text-lg text-gray-900 dark:text-zinc-100"
-              placeholder={t('search_phone.placeholder')}
-              placeholderTextColor="#6B7280"
-              keyboardType="phone-pad"
-              value={phone}
-              onChangeText={setPhone}
-            />
-            {loading ? (
-              <ActivityIndicator color="#1E40AF" size="small" />
-            ) : phone.length > 0 ? (
-              <TouchableOpacity onPress={() => setPhone('')}>
-                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-              </TouchableOpacity>
-            ) : null}
-          </View>
-          {/* Scanner un QR de profil */}
-          <TouchableOpacity
-            ref={scanBtnRef}
-            className="ml-2 w-11 h-11 rounded-xl bg-blue-50 dark:bg-blue-950 items-center justify-center"
-            onPress={openScan}
-          >
-            <Ionicons name="scan-outline" size={22} color="#1E40AF" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Erreur inline (introuvable / invalide / propre numéro / échec) */}
-        {error && !isSelf ? (
-          <Text className="text-gray-500 dark:text-zinc-400 text-base mt-3 ml-1">
-            {t(`search_phone.${error}`)}
-          </Text>
-        ) : null}
-      </View>
-
-      {/* Carte de résultat */}
-      {result ? (
-        <View className="px-4">
-          {isSelf ? (
-            <Text className="text-nexa text-base mb-2 ml-1">
-              {t('search_phone.own_number')}
-            </Text>
-          ) : null}
-          <TouchableOpacity
-            className="flex-row items-center p-3 rounded-2xl border border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900"
-            style={{ elevation: 1 }}
-            onPress={() => openProfile(result.id)}
-            disabled={isSelf}
-          >
-            <UserAvatar photoUrl={result.photoUrl} name={result.name} size={60} />
-            <View className="flex-1 ml-3">
-              <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100">
-                {result.name}
-              </Text>
-              <Text className="text-gray-500 dark:text-zinc-400 text-base">{result.phone}</Text>
-            </View>
-            {!isSelf && (
-              <View className="bg-blue-50 dark:bg-blue-950 rounded-full px-3 py-1.5">
-                <Text className="text-nexa text-sm font-semibold">
-                  {relationLabel(result.relationStatus)}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
-      {/* Historique des recherches récentes */}
-      {showRecent && (
-        <FlatList
-          data={recent}
-          keyExtractor={(item) => item.id}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          ListHeaderComponent={
-            <View className="flex-row items-center justify-between px-4 pt-4 pb-1">
-              <Text className="text-sm font-semibold uppercase text-gray-400 dark:text-zinc-500">
-                {t('search_phone.recent')}
-              </Text>
-              <TouchableOpacity onPress={clearHistory}>
-                <Text className="text-nexa text-sm font-semibold">
-                  {t('search_phone.clear')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              className="flex-row items-center px-4 py-3 border-b border-gray-50 dark:border-zinc-800"
-              onPress={() => openProfile(item.id)}
-            >
-              <UserAvatar photoUrl={item.photoUrl} name={item.name} size={52} />
-              <View className="flex-1 ml-3">
-                <Text className="text-lg font-medium text-gray-900 dark:text-zinc-100">
-                  {item.name}
-                </Text>
-                <Text className="text-gray-500 dark:text-zinc-400 text-base">{item.phone}</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-            />
-          )}
-        </DismissKeyboard>
+        <DirectoryPanel onOpenProfile={openProfile} />
       )}
+
+      <AddContactSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onOpenProfile={openProfile}
+      />
 
       <QrScanner visible={scanOpen} origin={scanOrigin} onClose={() => setScanOpen(false)} />
     </SafeAreaView>

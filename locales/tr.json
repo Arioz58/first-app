@@ -451,6 +451,7 @@
     "empty": "Kişilerinden henüz kimse Nexa kullanmıyor.",
     "invite": "Nexa'ya davet et",
     "invite_button": "Davet et",
-    "invite_message": "Nexa'da bana katıl: {{link}}"
+    "invite_message": "Nexa'da bana katıl: {{link}}",
+    "tab": "Rehber"
   }
 }
