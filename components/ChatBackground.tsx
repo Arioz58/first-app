@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
 import { StyleSheet, View, useColorScheme } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import {
   DEFAULT_WALLPAPER_ASSET,
   resolveChatWallpaper,
@@ -22,10 +23,13 @@ const VEIL_DARK = 'rgba(0,0,0,0.12)';
 // ou — par défaut (aucun choix) — l'image nexa claire/sombre selon le thème.
 export function ChatBackground({
   wallpaper,
+  style,
   children,
 }: {
   wallpaper: ChatWallpaper | null;
-  children: ReactNode;
+  /** Permet de poser le fond en couche absolue, derrière toute la page. */
+  style?: StyleProp<ViewStyle>;
+  children?: ReactNode;
 }) {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
@@ -62,7 +66,7 @@ export function ChatBackground({
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={[{ flex: 1 }, style]}>
       {layer}
       <View
         pointerEvents="none"

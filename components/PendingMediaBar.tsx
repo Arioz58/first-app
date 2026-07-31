@@ -126,10 +126,8 @@ export function PendingMediaBar({
   if (items.length === 0) return null;
 
   return (
-    <Animated.View
-      entering={FadeIn.duration(160)}
-      className="border-t border-gray-100 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80"
-    >
+    // Plus de barre opaque sous la saisie : les vignettes se posent sur le fond.
+    <Animated.View entering={FadeIn.duration(160)}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}

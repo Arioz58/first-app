@@ -2,6 +2,9 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import * as Notifications from "expo-notifications";
 import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+// Fournit la position du clavier, mesurée nativement image par image, aux écrans qui
+// s'y adaptent (barre de saisie du chat).
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { setSessionExpiredHandler } from "../lib/api";
 import {
   incrementPendingFriendRequests,
@@ -84,6 +87,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+    <KeyboardProvider>
     <Stack>
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -113,6 +117,7 @@ export default function RootLayout() {
       />
       <Stack.Screen name="story/create" options={{ headerShown: false }} />
     </Stack>
+    </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

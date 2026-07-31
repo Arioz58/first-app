@@ -1,13 +1,13 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, Pressable,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Alert, useColorScheme,
+  ActivityIndicator, Image, Alert, useColorScheme, StyleSheet,
 } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -41,7 +41,13 @@ import {
 import type { ChatWallpaper } from '../../lib/chatWallpapers';
 import { resolveBubbleColor } from '../../lib/bubbleColors';
 import { consumeScrollTarget } from '../../lib/chatNav';
+// ⚠️ Ce KeyboardAvoidingView n'est PAS celui de React Native : il suit la position
+// réelle du clavier, mesurée nativement à chaque image. Celui de RN applique son
+// décalage d'un bloc, et le piloter depuis l'événement JS laisse un décalage dans le
+// temps — le temps que le callback soit traité, le clavier a déjà commencé à bouger.
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { ChatBackground } from '../../components/ChatBackground';
+import { GlassSurface, FLOATING_SHADOW } from '../../components/GlassSurface';
 import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
 import { UserAvatar } from '../../components/UserAvatar';
 
@@ -53,9 +59,17 @@ const MAX_PENDING = 10;
 // Durée laissée au défilement animé de la FlatList avant la passe de calage finale
 // (le scroll animé natif tourne autour de 300 ms).
 const SMOOTH_SCROLL_MS = 420;
-// En deçà, on considère le fil calé : re-scroller pour quelques pixels ne ferait que
-// produire un à-coup visible en fin de glissement.
-const SETTLE_TOLERANCE = 8;
+// De combien la liste déborde SOUS la zone de saisie : c'est ce débordement qui fait
+// passer les messages derrière son verre quand on fait défiler, au lieu de les couper.
+// ⚠️ Valeur FIXE et non hauteur mesurée : la barre change de taille à chaque frappe sur
+// plusieurs lignes, et recalculer la mise en page de la liste à ce rythme la fait
+// saccader. Correspond à la barre au repos (44 de bouton + 12 de marges).
+const COMPOSER_OVERLAP = 60;
+// Le champ grandit avec le texte, puis défile : au-delà, la saisie mangerait le fil.
+const INPUT_LINE_H = 22;
+const INPUT_MAX_LINES = 5;
+const INPUT_MAX_H = INPUT_LINE_H * INPUT_MAX_LINES + 20; // + padding vertical (py-2.5)
+
 
 type ConvMember = { userId: string; role: string; user: { id: string; name: string; photoUrl: string | null } };
 type ConvMeta = {
@@ -284,6 +298,12 @@ export default function ChatScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const scheme = useColorScheme();
+  // La zone de saisie est suivie de la bande de safe area : sans l'inclure dans le
+  // débordement, la liste s'arrête avant le bord de l'écran et les messages y sont
+  // tranchés net, à découvert. Cette valeur ne bouge pas d'un rendu à l'autre, elle
+  // n'entraîne donc aucun recalcul répété de la mise en page.
+  const insets = useSafeAreaInsets();
+  const composerOverlap = COMPOSER_OVERLAP + insets.bottom;
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
 
   // Traduit un message système (content JSON { k, by, ... }) selon la langue du lecteur.
@@ -374,8 +394,19 @@ export default function ChatScreen() {
       smoothingRef.current = true;
       setTimeout(() => {
         smoothingRef.current = false;
-        if (!atBottomRef.current || draggingRef.current) return;
-        if (distanceRef.current <= SETTLE_TOLERANCE) return;
+        // ⚠️ On ne re-teste PAS `atBottomRef` ici : pendant que le glissement était
+        // protégé, la nouvelle bulle a fini d'être montée et le contenu a grandi, si bien
+        // que la distance au bas repasse au-dessus du seuil et que le drapeau retombe à
+        // faux. Abandonner alors laisserait le message envoyé sous la zone de saisie. Un
+        // mouvement lancé volontairement doit être mené à son terme ; seul le geste de
+        // l'utilisateur peut l'annuler.
+        if (draggingRef.current) return;
+        // ⚠️ Aucune condition de distance ici : `distanceRef` vient du dernier événement
+        // de défilement, et il n'en arrive plus une fois le glissement fini — la valeur
+        // date donc d'AVANT que la nouvelle bulle soit mesurée, et vaut ~0 alors qu'il
+        // reste sa hauteur à parcourir. S'y fier faisait renoncer au calage, laissant le
+        // message envoyé sous la zone de saisie. Ce dernier passage est animé : s'il n'y a
+        // rien à rattraper, il ne se voit pas.
         listRef.current?.scrollToEnd({ animated: true });
       }, SMOOTH_SCROLL_MS);
     } else {
@@ -1013,9 +1044,13 @@ export default function ChatScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
+    <View className="flex-1 bg-white dark:bg-zinc-900">
+      {/* Couche de fond unique, derrière la page entière : sans elle, la bande de safe
+          area et le fond du conteneur laissent un aplat sous la zone de saisie. */}
+      <ChatBackground wallpaper={wallpaper} style={StyleSheet.absoluteFill} />
+      <SafeAreaView className="flex-1">
       {/* Header */}
-      <View className="flex-row items-center px-3 py-2 border-b border-gray-100 dark:border-zinc-800">
+      <View className="flex-row items-center px-3 py-2 border-b border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900">
         <TouchableOpacity onPress={() => router.back()} className="px-1 py-1">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
@@ -1103,20 +1138,22 @@ export default function ChatScreen() {
       </View>
 
       {/* Messages */}
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
-      >
-        <ChatBackground wallpaper={wallpaper}>
+      <KeyboardAvoidingView className="flex-1" behavior="padding">
         <FlatList
           ref={listRef}
+          style={{ flex: 1, marginBottom: -composerOverlap }}
           data={rows}
           keyExtractor={(row) => row.key}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           // Pas de `gap` : l'écart est porté par chaque bulle, il varie selon le regroupement.
-          contentContainerStyle={{ padding: 14 }}
+          contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 14 }}
+          // ⚠️ Espace de fin en ÉLÉMENT, pas en `paddingBottom` : le débordement de la
+          // liste (marginBottom négatif) place son bas sous la zone de saisie, et il faut
+          // rendre au fil exactement cette hauteur. Un pied de liste est un enfant réel,
+          // donc mesuré et compté dans la taille du contenu — ce dont dépend
+          // `scrollToEnd`, alors qu'un padding de conteneur ne l'était pas ici.
+          ListFooterComponent={<View style={{ height: composerOverlap + 24 }} />}
           scrollEventThrottle={16}
           onScroll={(e) => {
             const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
@@ -1366,8 +1403,10 @@ export default function ChatScreen() {
           }}
           onScrollToIndexFailed={() => {}}
         />
-        </ChatBackground>
 
+        {/* Bloc de saisie, en flux : c'est ce qui lui permet de suivre le clavier — un
+            élément positionné en absolu ignorerait le padding du KeyboardAvoidingView. */}
+        <View>
         {uploading && (
           <Text className="text-sm text-gray-400 dark:text-zinc-500 px-4 pt-1">{t('media.uploading')}</Text>
         )}
@@ -1377,10 +1416,12 @@ export default function ChatScreen() {
         whoCanSend === 'admins' &&
         myRole !== 'admin' &&
         myRole !== 'moderator' ? (
-          <View className="px-4 py-4 border-t border-gray-100 dark:border-zinc-800 items-center">
-            <Text className="text-sm text-gray-400 dark:text-zinc-500 text-center">
-              {t('group.only_admins_can_send')}
-            </Text>
+          <View className="px-4 pb-3 pt-1 items-center">
+            <GlassSurface radius={18} style={{ paddingHorizontal: 16, paddingVertical: 10 }}>
+              <Text className="text-sm text-gray-500 dark:text-zinc-400 text-center">
+                {t('group.only_admins_can_send')}
+              </Text>
+            </GlassSurface>
           </View>
         ) : isRecording ? (
           <VoiceRecorderBar onCancel={() => setIsRecording(false)} onSend={sendRecording} />
@@ -1388,46 +1429,59 @@ export default function ChatScreen() {
           /* Input */
           <>
             <PendingMediaBar items={pending} onRemove={removePending} />
-            <View className="flex-row items-center px-3 py-2 border-t border-gray-100 dark:border-zinc-800">
-            <TouchableOpacity
-              onPress={() => setAttach(!attachOpen)}
-              disabled={uploading}
-              className="mr-1 px-1"
-            >
-              <Animated.View style={plusStyle}>
-                <Ionicons name="add-circle-outline" size={28} color={NEXA} />
-              </Animated.View>
-            </TouchableOpacity>
-            <TextInput
-              className="flex-1 bg-gray-100 dark:bg-zinc-800 rounded-full px-4 py-2.5 mr-2 text-lg text-gray-900 dark:text-zinc-100"
-              placeholder={t('chat.message_placeholder')}
-              value={text}
-              onChangeText={handleChangeText}
-              multiline
-              returnKeyType="send"
-              onSubmitEditing={sendMessage}
-            />
-            {/* Des médias en attente suffisent à rendre l'envoi disponible, sans texte. */}
-            {text.trim() || pending.length ? (
-              <TouchableOpacity
-                className="w-11 h-11 bg-nexa rounded-full items-center justify-center"
-                onPress={sendMessage}
-                disabled={uploading}
-                style={{ opacity: uploading ? 0.5 : 1 }}
-              >
-                <Ionicons name="send" size={20} color="white" />
+            {/* Éléments posés SUR le fond de conversation : pas de barre opaque ni de
+                séparateur, chaque bloc porte son propre verre dépoli. */}
+            <View className="flex-row items-end px-3 pt-1 pb-2" style={{ gap: 8 }}>
+              <TouchableOpacity onPress={() => setAttach(!attachOpen)} disabled={uploading}>
+                <GlassSurface radius={22} style={{ width: 44, height: 44 }}>
+                  <Animated.View
+                    className="w-full h-full items-center justify-center"
+                    style={plusStyle}
+                  >
+                    <Ionicons name="add" size={26} color={NEXA} />
+                  </Animated.View>
+                </GlassSurface>
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                className="w-11 h-11 bg-nexa rounded-full items-center justify-center"
-                onPress={startRecording}
-              >
-                <Ionicons name="mic" size={22} color="white" />
-              </TouchableOpacity>
-            )}
+
+              <GlassSurface radius={22} style={{ flex: 1, minHeight: 44, justifyContent: 'center' }}>
+                <TextInput
+                  className="px-4 py-2.5 text-lg text-gray-900 dark:text-zinc-100"
+                  style={{ maxHeight: INPUT_MAX_H, lineHeight: INPUT_LINE_H }}
+                  placeholder={t('chat.message_placeholder')}
+                  placeholderTextColor={scheme === 'dark' ? '#71717a' : '#9ca3af'}
+                  value={text}
+                  onChangeText={handleChangeText}
+                  multiline
+                  scrollEnabled
+                  textAlignVertical="top"
+                  returnKeyType="send"
+                  onSubmitEditing={sendMessage}
+                />
+              </GlassSurface>
+
+              {/* L'action principale reste pleine : c'est le seul point d'appui coloré. */}
+              {text.trim() || pending.length ? (
+                <TouchableOpacity
+                  className="w-11 h-11 bg-nexa rounded-full items-center justify-center"
+                  onPress={sendMessage}
+                  disabled={uploading}
+                  style={[FLOATING_SHADOW, { opacity: uploading ? 0.5 : 1 }]}
+                >
+                  <Ionicons name="send" size={20} color="white" />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  className="w-11 h-11 bg-nexa rounded-full items-center justify-center"
+                  onPress={startRecording}
+                  style={FLOATING_SHADOW}
+                >
+                  <Ionicons name="mic" size={22} color="white" />
+                </TouchableOpacity>
+              )}
             </View>
           </>
         )}
+        </View>
       </KeyboardAvoidingView>
 
       <ChatWallpaperPicker
@@ -1456,7 +1510,8 @@ export default function ChatScreen() {
         comingLabel={t('media.coming_soon')}
         actions={attachActions}
       />
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 

@@ -3,6 +3,7 @@ import { RecordingPresets, useAudioRecorder, useAudioRecorderState } from 'expo-
 import { useEffect, useRef, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { enterPlaybackMode, enterRecordingMode } from '../lib/audioMode';
+import { FLOATING_SHADOW, GlassSurface } from './GlassSurface';
 import { LiveWaveform } from './VoiceWaveform';
 
 const NEXA = '#1E40AF';
@@ -109,39 +110,49 @@ export function VoiceRecorderBar({
     onSend(uri, durationMs);
   };
 
+  // Même grammaire que la saisie : blocs posés sur le fond de conversation, verre dépoli
+  // pour ce qui accueille du contenu, plein coloré pour la seule action d'envoi.
   return (
-    <View className="flex-row items-center px-3 py-3 border-t border-gray-100 dark:border-zinc-800">
-      <TouchableOpacity onPress={cancel} className="px-2" hitSlop={6}>
-        <Ionicons name="trash-outline" size={22} color="#EF4444" />
+    <View className="flex-row items-end px-3 pt-1 pb-2" style={{ gap: 8 }}>
+      <TouchableOpacity onPress={cancel}>
+        <GlassSurface radius={22} style={{ width: 44, height: 44 }}>
+          <View className="w-full h-full items-center justify-center">
+            <Ionicons name="trash-outline" size={21} color="#EF4444" />
+          </View>
+        </GlassSurface>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={togglePause} className="px-2" hitSlop={6}>
-        <Ionicons name={paused ? 'play' : 'pause'} size={20} color={NEXA} />
-      </TouchableOpacity>
-
-      <View className="flex-1 flex-row items-center ml-1">
-        {/* Le point ne clignote qu'en enregistrement effectif. */}
-        <View
-          className={`w-2.5 h-2.5 rounded-full mr-2 ${paused ? 'bg-gray-400' : 'bg-red-500'}`}
-        />
-        <Text className="text-gray-700 dark:text-zinc-300 mr-2" style={{ fontVariant: ['tabular-nums'] }}>
-          {fmt(state.durationMillis)}
-        </Text>
-        <View className="flex-1">
-          {/* Le tracé se fige de lui-même en pause : plus de mesure, donc plus de
-              glissement — et la couleur passe au gris pour le dire. */}
-          <LiveWaveform
-            levels={levels}
-            color={paused ? '#9CA3AF' : NEXA}
-            height={24}
-            durationMs={TICK_MS}
-          />
+      <GlassSurface radius={22} style={{ flex: 1, minHeight: 44, justifyContent: 'center' }}>
+        <View className="flex-row items-center px-3" style={{ gap: 8 }}>
+          {/* Point d'état : rouge tant que ça enregistre, gris en pause. */}
+          <View className={`w-2.5 h-2.5 rounded-full ${paused ? 'bg-gray-400' : 'bg-red-500'}`} />
+          <Text
+            className="text-gray-700 dark:text-zinc-300"
+            style={{ fontVariant: ['tabular-nums'] }}
+          >
+            {fmt(state.durationMillis)}
+          </Text>
+          <View className="flex-1">
+            {/* Le tracé se fige de lui-même en pause : plus de mesure, donc plus de
+                glissement — et la couleur passe au gris pour le dire. */}
+            <LiveWaveform
+              levels={levels}
+              color={paused ? '#9CA3AF' : NEXA}
+              height={22}
+              durationMs={TICK_MS}
+            />
+          </View>
+          {/* Pause logée dans la capsule : elle agit sur ce qu'elle contient. */}
+          <TouchableOpacity onPress={togglePause} hitSlop={10}>
+            <Ionicons name={paused ? 'play' : 'pause'} size={19} color={NEXA} />
+          </TouchableOpacity>
         </View>
-      </View>
+      </GlassSurface>
 
       <TouchableOpacity
         onPress={send}
-        className="w-11 h-11 bg-nexa rounded-full items-center justify-center ml-2"
+        className="w-11 h-11 bg-nexa rounded-full items-center justify-center"
+        style={FLOATING_SHADOW}
       >
         <Ionicons name="send" size={20} color="white" />
       </TouchableOpacity>
