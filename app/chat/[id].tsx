@@ -1,34 +1,34 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, Pressable,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Alert,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Alert, useColorScheme,
 } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
-  FadeInDown,
-  FadeOutDown,
   useAnimatedStyle,
   useSharedValue,
-  withTiming,
+  withSpring,
 } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Linking from 'expo-linking';
-import {
-  useAudioRecorder,
-  RecordingPresets,
-  AudioModule,
-  setAudioModeAsync,
-} from 'expo-audio';
+import { AudioModule } from 'expo-audio';
 import { apiRequest } from '../../lib/api';
 import { connectSocket, getSocket } from '../../lib/socket';
 import { uploadFile, firstUrl } from '../../lib/upload';
 import { MessageMedia } from '../../components/MessageMedia';
+import { AttachmentSheet, type AttachAction } from '../../components/AttachmentSheet';
+import { PendingMediaBar, type PendingMedia } from '../../components/PendingMediaBar';
+import { VoiceRecorderBar } from '../../components/VoiceRecorderBar';
 import { MediaViewer } from '../../components/MediaViewer';
+import { MediaGrid } from '../../components/MediaGrid';
+import { AlbumViewer, type AlbumItem } from '../../components/AlbumViewer';
 import GiphyPicker from '../../components/GiphyPicker';
 import {
   getChatWallpaper,
@@ -47,6 +47,15 @@ import { UserAvatar } from '../../components/UserAvatar';
 
 const NEXA = '#1E40AF';
 const MUTE_FOREVER = new Date('2999-12-31T00:00:00Z'); // sentinelle « toujours »
+// Plafond de médias par envoi : chaque pièce part en upload S3 depuis le mobile, une
+// sélection massive tiendrait la barre d'envoi occupée trop longtemps.
+const MAX_PENDING = 10;
+// Durée laissée au défilement animé de la FlatList avant la passe de calage finale
+// (le scroll animé natif tourne autour de 300 ms).
+const SMOOTH_SCROLL_MS = 420;
+// En deçà, on considère le fil calé : re-scroller pour quelques pixels ne ferait que
+// produire un à-coup visible en fin de glissement.
+const SETTLE_TOLERANCE = 8;
 
 type ConvMember = { userId: string; role: string; user: { id: string; name: string; photoUrl: string | null } };
 type ConvMeta = {
@@ -78,7 +87,13 @@ const BUBBLE_SHADOW = {
 
 // Médias affichés en grand (sans bulle) vs en carte (audio/document).
 const isImageLike = (mt?: string | null) => mt === 'image' || mt === 'video' || mt === 'gif';
-const recFmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+// Regroupement des bulles : messages consécutifs d'un même auteur, dans une fenêtre courte.
+// Le nom n'est rendu qu'en tête de série, l'espacement se resserre à l'intérieur.
+const GROUP_WINDOW_MS = 5 * 60 * 1000;
+const GROUP_GAP = 10; // entre deux séries
+const GROUP_GAP_TIGHT = 3; // à l'intérieur d'une série
+const GROUP_RADIUS = 7; // coin resserré côté « flux » (vs rounded-2xl = 16)
 
 type Sender = { id: string; name: string };
 type Message = {
@@ -95,7 +110,156 @@ type Message = {
   fileName?: string | null;
   fileSize?: number | null;
   durationMs?: number | null;
+  batchId?: string | null; // médias d'un même envoi → un seul album à l'affichage
 };
+
+// Une réponse à une story porte déjà son propre en-tête (« X a répondu à votre story »)
+// avec le nom : on la laisse hors des séries, en amont comme en aval.
+const isStoryReplyMsg = (m?: Message) => !!m && (m.type === 'story_reply' || !!m.storyMediaUrl);
+
+// Une ligne de la liste : un message seul, ou les médias d'un même envoi (album).
+type Row = { key: string; messages: Message[] };
+
+// `a` précède `b` dans la liste (ordre chronologique).
+const sameGroup = (a?: Message, b?: Message) =>
+  !!a &&
+  !!b &&
+  a.type !== 'system' &&
+  b.type !== 'system' &&
+  !isStoryReplyMsg(a) &&
+  !isStoryReplyMsg(b) &&
+  !!a.sender?.id &&
+  a.sender.id === b.sender?.id &&
+  new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() < GROUP_WINDOW_MS;
+
+// Le conteneur de bulle doit être animé pour porter l'entrée.
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+// Deux ressorts par bulle plutôt qu'un : le déplacement se pose net (amorti), l'échelle
+// garde un léger rebond. Les faire diverger est ce qui donne de la matière à l'entrée —
+// un ressort unique produit un mouvement plat, tout part et s'arrête ensemble.
+const SPRING_MINE = {
+  pos: { damping: 16, stiffness: 260, mass: 0.6 }, // envoi : vif, il doit se sentir
+  scale: { damping: 12, stiffness: 300, mass: 0.6 },
+};
+const SPRING_THEIRS = {
+  pos: { damping: 17, stiffness: 200, mass: 0.7 }, // réception : plus posée, jamais brusque
+  scale: { damping: 13, stiffness: 210, mass: 0.7 },
+};
+
+// ⚠️ L'entrée est jouée depuis un effet de montage, PAS via les layout animations
+// (`entering`) : dans une FlatList les cellules sont montées/recyclées par la
+// virtualisation, à travers le CellRendererComponent de RN, et `entering` ne s'y
+// déclenche pas. Un effet de montage, lui, suit exactement l'apparition de la bulle.
+type MessageEnterProps = {
+  messageId: string;
+  // ⚠️ Le marquage « déjà vu » doit se faire au montage de CETTE bulle, pas au rendu de la
+  // liste : passé la hauteur d'un écran, VirtualizedList monte les cellules par lots
+  // (updateCellsBatchingPeriod), donc plusieurs frames après le setMessages qui les ajoute.
+  seenIds: { current: Set<string> };
+  isMe: boolean;
+  className: string;
+  style: StyleProp<ViewStyle>;
+  onLongPress: () => void;
+  children: React.ReactNode;
+};
+
+function MessageEnter({
+  messageId,
+  seenIds,
+  isMe,
+  className,
+  style,
+  onLongPress,
+  children,
+}: MessageEnterProps) {
+  // Première apparition à l'écran de ce message ? (l'historique est pré-marqué au chargement)
+  const animate = !seenIds.current.has(messageId);
+  // 0 = état d'arrivée, 1 = en place. Le ressort de `sc` dépasse 1 → petit « pop » final.
+  const pos = useSharedValue(animate ? 0 : 1); // déplacement + opacité
+  const sc = useSharedValue(animate ? 0 : 1); // échelle
+  useEffect(() => {
+    seenIds.current.add(messageId);
+    if (!animate) return;
+    const spring = isMe ? SPRING_MINE : SPRING_THEIRS;
+    pos.value = withSpring(1, spring.pos);
+    sc.value = withSpring(1, spring.scale);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const anim = useAnimatedStyle(() => ({
+    // Fade plus rapide que le déplacement : la bulle est lisible avant d'être posée.
+    opacity: Math.min(1, pos.value * 2.4),
+    transform: isMe
+      ? [{ translateY: 16 * (1 - pos.value) }, { scale: 0.86 + 0.14 * sc.value }]
+      : [
+          // Reçue : arrive en diagonale depuis son coin d'ancrage, pas d'un simple côté.
+          { translateX: -10 * (1 - pos.value) },
+          { translateY: 10 * (1 - pos.value) },
+          { scale: 0.88 + 0.12 * sc.value },
+        ],
+  }));
+
+  return (
+    <AnimatedPressable
+      onLongPress={onLongPress}
+      delayLongPress={300}
+      className={className}
+      // La bulle éclot depuis son coin bas (côté expéditeur) au lieu de son centre :
+      // elle semble sortir du fil plutôt que d'apparaître par-dessus.
+      style={[{ transformOrigin: isMe ? 'bottom right' : 'bottom left' }, style, anim]}
+    >
+      {children}
+    </AnimatedPressable>
+  );
+}
+
+// Queue de bulle : triangle accolé au coin bas, côté expéditeur. Dessiné avec des
+// bordures (une View 0×0 dont un seul côté est coloré) — react-native-svg n'est pas
+// installé et l'ajouter imposerait un rebuild natif pour un ornement de 9 px.
+const TAIL_W = 9;
+const TAIL_H = 13;
+// Coin porteur de la queue : parfaitement droit. Au moindre arrondi, le bord de la bulle
+// rentre vers l'intérieur alors que la queue part du bord théorique — et l'appendice
+// semble décollé.
+const TAIL_CORNER = 0;
+// Chevauchement de la queue sur la bulle : garantit la continuité, ombre comprise.
+const TAIL_OVERLAP = 2;
+
+function BubbleTail({ isMe, color }: { isMe: boolean; color: string }) {
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        bottom: 0,
+        ...(isMe
+          ? { right: -(TAIL_W - TAIL_OVERLAP) }
+          : { left: -(TAIL_W - TAIL_OVERLAP) }),
+        width: 0,
+        height: 0,
+        borderBottomWidth: TAIL_H,
+        borderBottomColor: color,
+        ...(isMe
+          ? { borderRightWidth: TAIL_W, borderRightColor: 'transparent' }
+          : { borderLeftWidth: TAIL_W, borderLeftColor: 'transparent' }),
+      }}
+    />
+  );
+}
+
+// Coins resserrés du côté où la série se poursuit ; en fin de série, le coin bas
+// s'aplatit pour accueillir la queue.
+const bubbleRadius = (isMe: boolean, first: boolean, last: boolean) => ({
+  ...(first ? null : isMe ? { borderTopRightRadius: GROUP_RADIUS } : { borderTopLeftRadius: GROUP_RADIUS }),
+  ...(last
+    ? isMe
+      ? { borderBottomRightRadius: TAIL_CORNER }
+      : { borderBottomLeftRadius: TAIL_CORNER }
+    : isMe
+      ? { borderBottomRightRadius: GROUP_RADIUS }
+      : { borderBottomLeftRadius: GROUP_RADIUS }),
+});
+
 type MediaPayload = {
   mediaUrl: string;
   mediaType: 'image' | 'video' | 'audio' | 'document' | 'gif';
@@ -103,6 +267,7 @@ type MediaPayload = {
   fileSize?: number;
   mimeType?: string;
   durationMs?: number;
+  batchId?: string;
 };
 
 // Détecte une réaction emoji seule (≤ 8 pictogrammes) → affichage géant hors bulle
@@ -118,6 +283,7 @@ const isEmojiOnly = (raw?: string | null): boolean => {
 export default function ChatScreen() {
   const router = useRouter();
   const { t } = useTranslation();
+  const scheme = useColorScheme();
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
 
   // Traduit un message système (content JSON { k, by, ... }) selon la langue du lecteur.
@@ -163,17 +329,60 @@ export default function ChatScreen() {
   const atBottomRef = useRef(true); // l'utilisateur est-il collé au bas ? (auto-scroll conditionnel)
   // Pièces jointes / médias (Phase D)
   const [viewer, setViewer] = useState<{ type: 'image' | 'video'; url: string } | null>(null);
+  const [albumView, setAlbumView] = useState<{ items: AlbumItem[]; index: number } | null>(
+    null,
+  );
   const [giphyOpen, setGiphyOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [recordSeconds, setRecordSeconds] = useState(0);
   const [attachOpen, setAttachOpen] = useState(false);
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [pending, setPending] = useState<PendingMedia[]>([]); // médias choisis, pas encore envoyés
   const plusRotation = useSharedValue(0);
   const plusStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${plusRotation.value}deg` }],
   }));
+  // Ids déjà affichés : une bulle ne joue son entrée qu'à sa première apparition réelle
+  // (message qui arrive), jamais pour l'historique ni au recyclage des lignes par la FlatList.
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const draggingRef = useRef(false); // l'utilisateur a le doigt sur la liste → on ne le contrarie pas
+  const smoothNextRef = useRef(false); // le prochain repositionnement suit un message qui arrive
+  const smoothingRef = useRef(false); // un défilement animé est en cours : ne pas le couper
+  const distanceRef = useRef(0); // pixels restants sous le bas de l'écran (maj à chaque scroll)
+
+  // Unique point de repositionnement du fil. Deux raisons de repasser plusieurs fois :
+  // - la virtualisation monte les cellules par lots, donc le contenu grandit APRÈS le
+  //   premier scroll (les hauteurs des bulles sont variables, donc estimées jusqu'à mesure) ;
+  // - un média (image, GIF) finit de charger et pousse encore le contenu.
+  // Chaque passe se re-teste : dès que l'utilisateur touche la liste, on s'arrête.
+  const scrollToBottom = useCallback((animated = false) => {
+    const settle = () => {
+      if (atBottomRef.current && !draggingRef.current) {
+        listRef.current?.scrollToEnd({ animated: false });
+      }
+    };
+    // Un défilement animé est en cours : les changements de taille qui suivent (cellules
+    // montées par lots) ne doivent PAS déclencher un saut, sinon ils l'interrompent.
+    if (smoothingRef.current) return;
+    if (!atBottomRef.current || draggingRef.current) return;
+
+    listRef.current?.scrollToEnd({ animated });
+
+    if (animated) {
+      // On laisse l'animation se dérouler, puis un seul calage à la fin — et en douceur :
+      // un `scrollToEnd` instantané juste après le glissement se voit comme un à-coup.
+      // S'il ne reste rien à rattraper, on ne touche à rien du tout.
+      smoothingRef.current = true;
+      setTimeout(() => {
+        smoothingRef.current = false;
+        if (!atBottomRef.current || draggingRef.current) return;
+        if (distanceRef.current <= SETTLE_TOLERANCE) return;
+        listRef.current?.scrollToEnd({ animated: true });
+      }, SMOOTH_SCROLL_MS);
+    } else {
+      requestAnimationFrame(settle);
+      setTimeout(settle, 120);
+    }
+  }, []);
 
   const loadFlags = useCallback(() => {
     apiRequest<Flags>(`/conversations/${id}/flags`).then(setFlags).catch(() => {});
@@ -233,6 +442,8 @@ export default function ChatScreen() {
         }
 
         const history = await apiRequest<Message[]>(`/conversations/${id}/messages`);
+        // Marqué AVANT le rendu : sinon tout l'historique s'animerait à l'ouverture.
+        for (const m of history) seenIdsRef.current.add(m.id);
         setMessages(history.reverse());
 
         // La conversation est ouverte : tout ce qui précède est lu.
@@ -249,11 +460,14 @@ export default function ChatScreen() {
             if (msg.sender?.id !== me.id) {
               apiRequest(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
             }
-            // On ne ré-aimante en bas que si on y était déjà, ou si c'est notre propre message
-            // (sinon on interromprait la lecture de l'historique).
-            if (atBottomRef.current || msg.sender?.id === me.id) {
-              setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
-            }
+            // On se contente d'armer le suivi : envoyer un message ramène toujours en bas,
+            // recevoir n'y ramène que si on y était déjà (sinon on couperait la lecture).
+            // Le repositionnement lui-même est fait par onContentSizeChange, une fois la
+            // bulle montée — deux scrolls concurrents s'interrompaient l'un l'autre.
+            if (msg.sender?.id === me.id) atBottomRef.current = true;
+            // Ce repositionnement-là accompagne une bulle qui apparaît : il doit glisser,
+            // pas sauter. (À l'ouverture du chat, au contraire, le calage reste immédiat.)
+            smoothNextRef.current = true;
           }
         });
 
@@ -318,7 +532,6 @@ export default function ChatScreen() {
         socket?.emit('typing', { conversationId: id, typing: false });
         typingSentRef.current = false;
       }
-      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
     };
   }, [id]);
 
@@ -346,15 +559,61 @@ export default function ChatScreen() {
     }, 3000);
   };
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     const content = text.trim();
-    if (!content) return;
+    const queue = pending;
+    if (!content && queue.length === 0) return;
     const socket = getSocket();
     if (!socket) return;
 
-    socket.emit('send_message', { conversationId: id, content });
+    // Tap haptique dès le départ, sans attendre l'écho serveur.
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+
+    // La barre se vide tout de suite : l'envoi est acté, les uploads suivent en fond.
     setText('');
+    setPending([]);
     stopTyping(socket);
+
+    if (queue.length === 0) {
+      socket.emit('send_message', { conversationId: id, content });
+      return;
+    }
+
+    // Un message ne porte qu'une pièce jointe : N médias = N messages, envoyés dans
+    // l'ordre choisi, et le texte accompagne le dernier — comme WhatsApp. Tous partagent
+    // un `batchId` : c'est lui qui les réunit en un seul album à l'affichage (et non un
+    // intervalle de temps, qui grouperait aussi des envois distincts rapprochés).
+    const batchId = queue.length > 1 ? `${currentUserId}-${Date.now()}` : undefined;
+    setUploading(true);
+    let failed = 0;
+    let captionSent = false;
+    for (let i = 0; i < queue.length; i++) {
+      const item = queue[i];
+      const isLast = i === queue.length - 1;
+      try {
+        const url = await uploadFile(item.uri, item.contentType, 'chat');
+        sendMedia(
+          {
+            mediaUrl: url,
+            mediaType: item.mediaType,
+            mimeType: item.contentType,
+            durationMs: item.durationMs,
+            batchId,
+          },
+          isLast ? content : '',
+        );
+        if (isLast) captionSent = true;
+      } catch {
+        failed++;
+      }
+    }
+    setUploading(false);
+
+    // Le média porteur de la légende a échoué : le texte ne doit pas disparaître avec lui.
+    if (content && !captionSent) {
+      socket.emit('send_message', { conversationId: id, content });
+    }
+    if (failed) Alert.alert(t('error'), t('media.upload_error'));
   };
 
   // --- Médias / pièces jointes ---
@@ -362,35 +621,69 @@ export default function ChatScreen() {
     getSocket()?.emit('send_message', { conversationId: id, content: caption, ...payload });
   };
 
+  // Un asset du picker → entrée de la zone d'attente (rien n'est envoyé à ce stade).
+  const toPending = (asset: ImagePicker.ImagePickerAsset): PendingMedia => {
+    const isVideo = asset.type === 'video';
+    return {
+      id: `${asset.assetId ?? asset.uri}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      uri: asset.uri,
+      mediaType: isVideo ? 'video' : 'image',
+      contentType: isVideo
+        ? asset.mimeType?.startsWith('video/')
+          ? asset.mimeType
+          : 'video/mp4'
+        : 'image/jpeg',
+      durationMs: asset.duration ? Math.round(asset.duration) : undefined,
+    };
+  };
+
+  // Ajoute en respectant le plafond global (la zone peut déjà contenir des médias venus
+  // d'une autre source), et prévient si la sélection a dû être tronquée.
+  const addPending = (assets: ImagePicker.ImagePickerAsset[]) => {
+    setPending((prev) => {
+      const room = MAX_PENDING - prev.length;
+      if (assets.length > room) {
+        Alert.alert('', t('media.max_selection', { count: MAX_PENDING }));
+      }
+      return [...prev, ...assets.slice(0, room).map(toPending)];
+    });
+  };
+
+  const removePending = (pendingId: string) =>
+    setPending((prev) => prev.filter((p) => p.id !== pendingId));
+
   const pickFromGallery = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
+    const room = MAX_PENDING - pending.length;
+    if (room <= 0) {
+      Alert.alert('', t('media.max_selection', { count: MAX_PENDING }));
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'videos'],
+      quality: 0.8,
+      allowsMultipleSelection: true,
+      selectionLimit: room,
+    });
+    if (result.canceled) return;
+    addPending(result.assets);
+  };
+
+  // Caméra directe : photo ou vidéo prise sur le moment, qui rejoint la même zone
+  // d'attente. (Les stories, elles, passent par StoryCamera — caméra in-app avec gestes.)
+  const takePhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(t('media.camera_permission'));
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images', 'videos'],
       quality: 0.8,
     });
     if (result.canceled) return;
-    const asset = result.assets[0];
-    const isVideo = asset.type === 'video';
-    const contentType = isVideo
-      ? asset.mimeType?.startsWith('video/')
-        ? asset.mimeType
-        : 'video/mp4'
-      : 'image/jpeg';
-    setUploading(true);
-    try {
-      const url = await uploadFile(asset.uri, contentType, 'chat');
-      sendMedia({
-        mediaUrl: url,
-        mediaType: isVideo ? 'video' : 'image',
-        mimeType: contentType,
-        durationMs: asset.duration ? Math.round(asset.duration) : undefined,
-      });
-    } catch {
-      Alert.alert(t('error'), t('media.upload_error'));
-    } finally {
-      setUploading(false);
-    }
+    addPending(result.assets);
   };
 
   const pickDocument = async () => {
@@ -420,61 +713,73 @@ export default function ChatScreen() {
     sendMedia({ mediaUrl: url, mediaType: 'gif' });
   };
 
-  const toggleAttach = () => {
-    setAttachOpen((o) => {
-      const next = !o;
-      plusRotation.value = withTiming(next ? 45 : 0, { duration: 200 });
-      return next;
-    });
+  // Le « + » pivote en croix tant que le panneau est ouvert (ressort, pas un timing
+  // linéaire : le retour doit avoir le même caractère que le reste des interactions).
+  const setAttach = (open: boolean) => {
+    setAttachOpen(open);
+    plusRotation.value = withSpring(open ? 45 : 0, { damping: 14, stiffness: 220 });
   };
-  // Ferme le panneau (en remettant le « + » droit) puis lance l'action choisie.
-  const runAttach = (fn: () => void) => {
-    setAttachOpen(false);
-    plusRotation.value = withTiming(0, { duration: 200 });
-    fn();
-  };
-  const attachItems = [
-    { key: 'gallery', icon: 'images' as const, color: '#8B5CF6', label: t('media.gallery'), action: pickFromGallery },
-    { key: 'document', icon: 'document-text' as const, color: '#3B82F6', label: t('media.document'), action: pickDocument },
-    { key: 'gif', icon: 'happy' as const, color: '#EC4899', label: t('media.gif'), action: () => setGiphyOpen(true) },
+
+  const attachActions: AttachAction[] = [
+    {
+      key: 'camera',
+      icon: 'camera',
+      color: '#1E40AF',
+      label: t('media.camera'),
+      onPress: takePhoto,
+    },
+    {
+      key: 'gallery',
+      icon: 'images',
+      color: '#8B5CF6',
+      label: t('media.gallery'),
+      onPress: pickFromGallery,
+    },
+    {
+      key: 'document',
+      icon: 'document-text',
+      color: '#3B82F6',
+      label: t('media.document'),
+      onPress: pickDocument,
+    },
+    {
+      key: 'gif',
+      icon: 'happy',
+      color: '#EC4899',
+      label: t('media.gif'),
+      onPress: () => setGiphyOpen(true),
+    },
+    {
+      // Le module de localisation est prévu au Mois 3 : l'entrée existe pour ne pas
+      // avoir à redessiner la grille plus tard, mais elle annonce son indisponibilité
+      // au lieu de faire croire à une action possible.
+      key: 'location',
+      icon: 'location',
+      color: '#10B981',
+      label: t('media.location'),
+      coming: true,
+      onPress: () => Alert.alert('', t('media.location_coming')),
+    },
   ];
 
   // --- Message vocal ---
-  const stopRecordTimer = () => {
-    if (recordTimerRef.current) {
-      clearInterval(recordTimerRef.current);
-      recordTimerRef.current = null;
-    }
-  };
+  // La mécanique d'enregistrement (niveaux, chrono, pause) vit dans VoiceRecorderBar ;
+  // ici on ne fait qu'ouvrir la barre, puis envoyer ce qu'elle produit.
   const startRecording = async () => {
     const perm = await AudioModule.requestRecordingPermissionsAsync();
     if (!perm.granted) {
       Alert.alert(t('media.mic_permission'));
       return;
     }
-    await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
-    await recorder.prepareToRecordAsync();
-    recorder.record();
-    setRecordSeconds(0);
     setIsRecording(true);
-    recordTimerRef.current = setInterval(() => setRecordSeconds((s) => s + 1), 1000);
   };
-  const cancelRecording = async () => {
-    stopRecordTimer();
+
+  const sendRecording = async (uri: string, durationMs: number) => {
     setIsRecording(false);
-    await recorder.stop().catch(() => {});
-  };
-  const stopAndSendRecording = async () => {
-    stopRecordTimer();
-    setIsRecording(false);
-    const seconds = recordSeconds;
+    setUploading(true);
     try {
-      await recorder.stop();
-      const uri = recorder.uri;
-      if (!uri || seconds < 1) return;
-      setUploading(true);
       const url = await uploadFile(uri, 'audio/m4a', 'chat');
-      sendMedia({ mediaUrl: url, mediaType: 'audio', mimeType: 'audio/m4a', durationMs: seconds * 1000 });
+      sendMedia({ mediaUrl: url, mediaType: 'audio', mimeType: 'audio/m4a', durationMs });
     } catch {
       Alert.alert(t('error'), t('media.upload_error'));
     } finally {
@@ -572,10 +877,32 @@ export default function ChatScreen() {
   // --- Valeurs dérivées ---
   const displayName = custom.nickname || name || '';
   const bubbleColor = resolveBubbleColor(custom.bubbleColor);
+  // La queue est une View à part : elle ne peut pas hériter du `bg-white dark:bg-zinc-900`
+  // des bulles reçues, il faut donc la couleur en dur (zinc-900 = #18181b).
+  const theirBubble = scheme === 'dark' ? '#18181b' : '#ffffff';
   // « Effacer » local : on masque les messages antérieurs à l'horodatage stocké.
   const visibleMessages = clearedAt
     ? messages.filter((m) => new Date(m.createdAt).getTime() > clearedAt)
     : messages;
+  // Les médias d'un même envoi (`batchId`) sont réunis en une ligne « album » : une seule
+  // bulle, une grille de vignettes, une légende. Tout le reste reste une ligne d'un
+  // message. La liste est rendue à partir de ces lignes, plus des messages bruts.
+  const rows = useMemo(() => {
+    const out: Row[] = [];
+    for (const m of visibleMessages) {
+      const groupable = !!m.batchId && isImageLike(m.mediaType) && m.type !== 'system';
+      const last = out[out.length - 1];
+      const lastGroupable =
+        last && !!last.messages[0].batchId && isImageLike(last.messages[0].mediaType);
+      if (groupable && lastGroupable && last.messages[0].batchId === m.batchId) {
+        last.messages.push(m);
+      } else {
+        out.push({ key: m.id, messages: [m] });
+      }
+    }
+    return out;
+  }, [visibleMessages]);
+
   // Sous-titre (priorité : frappe > en ligne > vu le… > rien).
   const subtitle = peerTyping
     ? t('chat.typing')
@@ -590,14 +917,15 @@ export default function ChatScreen() {
   // Défilement + surlignage temporaire vers un message (épinglé/favori) demandé par le panneau.
   useEffect(() => {
     if (!scrollTarget) return;
-    const idx = visibleMessages.findIndex((m) => m.id === scrollTarget);
+    // Index de la LIGNE qui porte ce message : un album en réunit plusieurs.
+    const idx = rows.findIndex((r) => r.messages.some((m) => m.id === scrollTarget));
     if (idx < 0) return; // message non chargé (trop ancien) → on ignore
     listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
     setHighlightId(scrollTarget);
     setScrollTarget(null);
     const to = setTimeout(() => setHighlightId(null), 2500);
     return () => clearTimeout(to);
-  }, [scrollTarget, visibleMessages]);
+  }, [scrollTarget, rows]);
 
   const openDetails = () => {
     if (convType === 'group') {
@@ -713,7 +1041,7 @@ export default function ChatScreen() {
         <TouchableOpacity className="flex-1 ml-3" onPress={openDetails}>
           <View className="flex-row items-center">
             <Text
-              className="text-lg font-semibold text-gray-900 dark:text-zinc-100 flex-shrink"
+              className="text-xl font-semibold text-gray-900 dark:text-zinc-100 flex-shrink"
               numberOfLines={1}
             >
               {displayName}
@@ -732,7 +1060,7 @@ export default function ChatScreen() {
           </View>
           {subtitle ? (
             <Text
-              className={`text-sm ${subtitleAccent ? 'text-nexa' : 'text-gray-400 dark:text-zinc-500'}`}
+              className={`text-base ${subtitleAccent ? 'text-nexa' : 'text-gray-400 dark:text-zinc-500'}`}
               numberOfLines={1}
             >
               {subtitle}
@@ -783,73 +1111,146 @@ export default function ChatScreen() {
         <ChatBackground wallpaper={wallpaper}>
         <FlatList
           ref={listRef}
-          data={visibleMessages}
-          keyExtractor={(item) => item.id}
+          data={rows}
+          keyExtractor={(row) => row.key}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          contentContainerStyle={{ padding: 12, gap: 8 }}
+          // Pas de `gap` : l'écart est porté par chaque bulle, il varie selon le regroupement.
+          contentContainerStyle={{ padding: 14 }}
           scrollEventThrottle={16}
           onScroll={(e) => {
             const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-            // « en bas » avec une marge de 80px pour tolérer les petits écarts.
-            atBottomRef.current =
-              contentSize.height - layoutMeasurement.height - contentOffset.y < 80;
+            // Marge volontairement large : entre deux passes de calage, le contenu a déjà
+            // grandi d'une bulle. Un seuil serré ferait basculer « plus en bas » à ce
+            // moment-là et couperait le suivi juste après l'avoir armé. C'est le geste de
+            // l'utilisateur, pas la mesure au pixel, qui doit arrêter le suivi.
+            const distance = contentSize.height - layoutMeasurement.height - contentOffset.y;
+            distanceRef.current = distance;
+            atBottomRef.current = distance < 100;
           }}
-          // Auto-scroll seulement si on est déjà en bas (nouveau message / redimensionnement),
-          // pour ne pas interrompre la lecture de l'historique.
+          // Le doigt sur la liste prime sur tout repositionnement automatique.
+          onScrollBeginDrag={() => {
+            draggingRef.current = true;
+          }}
+          onScrollEndDrag={() => {
+            draggingRef.current = false;
+          }}
+          onMomentumScrollEnd={() => {
+            draggingRef.current = false;
+          }}
+          // Seul déclencheur du suivi : le contenu vient de grandir (message, média chargé,
+          // clavier). `scrollToBottom` décide s'il faut suivre et repasse jusqu'à se caler.
           onContentSizeChange={() => {
-            if (atBottomRef.current) listRef.current?.scrollToEnd({ animated: false });
+            const smooth = smoothNextRef.current;
+            smoothNextRef.current = false;
+            scrollToBottom(smooth);
           }}
           // Filet de sécurité à l'ouverture : le contentSize peut arriver avant que la liste
           // ait sa hauteur → on force une fois le positionnement en bas au premier layout.
-          onLayout={() => {
-            if (atBottomRef.current) listRef.current?.scrollToEnd({ animated: false });
-          }}
-          renderItem={({ item }) => {
+          onLayout={() => scrollToBottom()}
+          renderItem={({ item: row, index }: { item: Row; index: number }) => {
+            const album = row.messages.length > 1 ? row.messages : null;
+            const item = row.messages[0];
+
             // Bandeau système centré (rejoint le groupe, éphémères, etc.)
             if (item.type === 'system') {
               return (
                 <View className="items-center my-2 px-6">
-                  <Text className="text-xs text-gray-500 dark:text-zinc-400 bg-gray-100 dark:bg-zinc-800 rounded-full px-3 py-1 text-center">
+                  <Text className="text-sm text-gray-500 dark:text-zinc-400 bg-gray-100 dark:bg-zinc-800 rounded-full px-3.5 py-1.5 text-center">
                     {systemText(item.content)}
                   </Text>
                 </View>
               );
             }
             const isMe = item.sender?.id === currentUserId;
-            const isStoryReply = item.type === 'story_reply' || !!item.storyMediaUrl;
+            const isStoryReply = isStoryReplyMsg(item);
             const reaction = isStoryReply && isEmojiOnly(item.content);
-            const isPinned = flags.pinned.includes(item.id);
-            const isStarred = flags.starred.includes(item.id);
-            const highlighted = highlightId === item.id;
+            // Position dans la série : pilote le nom, l'écart au précédent et les coins.
+            // On compare de ligne à ligne, en prenant les messages qui se font face.
+            const prevRow = rows[index - 1];
+            const nextRow = rows[index + 1];
+            const firstOfGroup = !sameGroup(prevRow?.messages[prevRow.messages.length - 1], item);
+            const lastOfGroup = !sameGroup(row.messages[row.messages.length - 1], nextRow?.messages[0]);
+            const radius = bubbleRadius(isMe, firstOfGroup, lastOfGroup);
+            // Sur un album, ces marqueurs valent pour la ligne entière : un seul média
+            // épinglé suffit à la signaler.
+            const isPinned = row.messages.some((m) => flags.pinned.includes(m.id));
+            const isStarred = row.messages.some((m) => flags.starred.includes(m.id));
+            const highlighted = row.messages.some((m) => m.id === highlightId);
+            // La légende d'un album est portée par le dernier média qui en a une.
+            const albumCaption = album
+              ? [...album].reverse().find((m) => m.content)?.content ?? ''
+              : '';
 
             return (
-              <Pressable
+              <MessageEnter
+                messageId={item.id}
+                seenIds={seenIdsRef}
+                isMe={isMe}
                 onLongPress={() => openMessageMenu(item.id)}
-                delayLongPress={300}
                 className={`max-w-[80%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
-                style={
+                style={[
+                  { marginTop: index === 0 ? 0 : firstOfGroup ? GROUP_GAP : GROUP_GAP_TIGHT },
                   highlighted
                     ? { backgroundColor: 'rgba(250,204,21,0.25)', borderRadius: 14, padding: 2 }
-                    : undefined
-                }
+                    : null,
+                ]}
               >
                 {(isPinned || isStarred) && (
                   <View
                     className={`flex-row items-center gap-1 mb-0.5 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
                   >
-                    {isPinned && <Ionicons name="pin" size={11} color="#9CA3AF" />}
-                    {isStarred && <Ionicons name="star" size={11} color="#F59E0B" />}
+                    {isPinned && <Ionicons name="pin" size={12} color="#9CA3AF" />}
+                    {isStarred && <Ionicons name="star" size={12} color="#F59E0B" />}
                   </View>
                 )}
-                {isStoryReply ? (
+                {album ? (
+                  <>
+                    {!isMe && firstOfGroup && (
+                      <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">
+                        {item.sender?.name}
+                      </Text>
+                    )}
+                    <View
+                      style={[BUBBLE_SHADOW, radius, isMe ? { backgroundColor: bubbleColor } : null]}
+                      className={`rounded-2xl p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+                    >
+                      <MediaGrid
+                        items={album.map((m) => ({
+                          id: m.id,
+                          mediaUrl: m.mediaUrl as string,
+                          mediaType: m.mediaType,
+                        }))}
+                        onOpen={(i) =>
+                          setAlbumView({
+                            items: album.map((m) => ({
+                              id: m.id,
+                              mediaUrl: m.mediaUrl as string,
+                              mediaType: m.mediaType,
+                            })),
+                            index: i,
+                          })
+                        }
+                        onLongPressItem={openMessageMenu}
+                      />
+                      {albumCaption ? (
+                        <Text
+                          className={`text-base px-2 pt-1.5 pb-0.5 ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
+                        >
+                          {albumCaption}
+                        </Text>
+                      ) : null}
+                      {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? bubbleColor : theirBubble} />}
+                    </View>
+                  </>
+                ) : isStoryReply ? (
                   <>
                     {/* Libellé contextuel : répondu / réagi */}
                     <View
                       className={`flex-row items-center gap-1 mb-1 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
                     >
-                      <Ionicons name="arrow-undo" size={12} color="#9CA3AF" />
-                      <Text className="text-[11px] text-gray-400 dark:text-zinc-500">
+                      <Ionicons name="arrow-undo" size={13} color="#9CA3AF" />
+                      <Text className="text-xs text-gray-400 dark:text-zinc-500">
                         {reaction
                           ? isMe
                             ? t('chat.you_reacted')
@@ -865,21 +1266,23 @@ export default function ChatScreen() {
                       <Image
                         source={{ uri: item.storyMediaUrl }}
                         className="rounded-xl border border-gray-200 dark:border-zinc-800 bg-gray-100 dark:bg-zinc-800 mb-1"
-                        style={{ width: 50, height: 84 }}
+                        style={{ width: 56, height: 94 }}
                       />
                     )}
 
                     {/* Réaction emoji en grand, ou bulle de texte */}
                     {reaction ? (
-                      <Text style={{ fontSize: 50, lineHeight: 58 }} className="px-1">
+                      <Text style={{ fontSize: 56, lineHeight: 64 }} className="px-1">
                         {item.content}
                       </Text>
                     ) : (
                       <View
-                        style={[BUBBLE_SHADOW, isMe ? { backgroundColor: bubbleColor } : null]}
-                        className={`rounded-2xl px-4 py-2 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+                        style={[BUBBLE_SHADOW, radius, isMe ? { backgroundColor: bubbleColor } : null]}
+                        className={`rounded-2xl px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
                       >
-                        <Text className={isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}>
+                        <Text
+                          className={`text-lg ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
+                        >
                           {item.content}
                         </Text>
                       </View>
@@ -887,11 +1290,16 @@ export default function ChatScreen() {
                   </>
                 ) : item.mediaUrl ? (
                   <>
-                    {!isMe && (
-                      <Text className="text-sm text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
+                    {!isMe && firstOfGroup && (
+                      <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
                     )}
                     {isImageLike(item.mediaType) ? (
-                      <View>
+                      // Image/vidéo/GIF en bulle : le média affleure les bords (padding
+                      // fin) et la légende vit DANS la bulle, sous le média.
+                      <View
+                        style={[BUBBLE_SHADOW, radius, isMe ? { backgroundColor: bubbleColor } : null]}
+                        className={`rounded-2xl p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+                      >
                         <MessageMedia
                           message={item}
                           tint={bubbleColor}
@@ -899,69 +1307,66 @@ export default function ChatScreen() {
                           onOpenVideo={(url) => setViewer({ type: 'video', url })}
                         />
                         {item.content ? (
-                          <Text className="text-sm text-gray-500 dark:text-zinc-400 mt-1 px-1">{item.content}</Text>
+                          <Text
+                            className={`text-base px-2 pt-1.5 pb-0.5 ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
+                          >
+                            {item.content}
+                          </Text>
                         ) : null}
+                        {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? bubbleColor : theirBubble} />}
                       </View>
                     ) : (
-                      <View style={BUBBLE_SHADOW} className="rounded-2xl px-3 py-2 bg-white dark:bg-zinc-900">
-                        <MessageMedia
-                          message={item}
-                          tint={bubbleColor}
-                          onOpenImage={() => {}}
-                          onOpenVideo={() => {}}
-                        />
+                      // Audio/document : bulle aux couleurs de l'expéditeur, avec la carte
+                      // du fichier posée dessus dans un ton contrasté. Le nom de fichier
+                      // et l'icône teintée gardent ainsi un fond clair sur lequel se lire,
+                      // sans que la bulle ait à renoncer à sa couleur.
+                      <View
+                        style={[BUBBLE_SHADOW, radius, isMe ? { backgroundColor: bubbleColor } : null]}
+                        className={`rounded-2xl p-1.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+                      >
+                        <View
+                          className={`rounded-xl px-3 py-2 ${isMe ? 'bg-white dark:bg-zinc-800' : 'bg-gray-100 dark:bg-zinc-800'}`}
+                        >
+                          <MessageMedia
+                            message={item}
+                            tint={bubbleColor}
+                            onOpenImage={() => {}}
+                            onOpenVideo={() => {}}
+                          />
+                        </View>
+                        {lastOfGroup && (
+                          <BubbleTail isMe={isMe} color={isMe ? bubbleColor : theirBubble} />
+                        )}
                       </View>
                     )}
                   </>
                 ) : (
                   <>
-                    {!isMe && (
-                      <Text className="text-sm text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
+                    {!isMe && firstOfGroup && (
+                      <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
                     )}
                     <Pressable
                       onPress={
                         firstUrl(item.content) ? () => Linking.openURL(firstUrl(item.content)!) : undefined
                       }
-                      style={[BUBBLE_SHADOW, isMe ? { backgroundColor: bubbleColor } : null]}
-                      className={`rounded-2xl px-4 py-2 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+                      style={[BUBBLE_SHADOW, radius, isMe ? { backgroundColor: bubbleColor } : null]}
+                      className={`rounded-2xl px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
                     >
                       <Text
-                        className={`${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'} ${firstUrl(item.content) ? 'underline' : ''}`}
+                        className={`text-lg ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'} ${firstUrl(item.content) ? 'underline' : ''}`}
                       >
                         {item.content}
                       </Text>
+                      {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? bubbleColor : theirBubble} />}
                     </Pressable>
                   </>
                 )}
-              </Pressable>
+              </MessageEnter>
             );
           }}
           onScrollToIndexFailed={() => {}}
         />
         </ChatBackground>
-
-        {/* Panneau de pièces jointes animé */}
-        {attachOpen && !isRecording && (
-          <View className="flex-row px-5 py-4 border-t border-gray-100 dark:border-zinc-800" style={{ gap: 28 }}>
-            {attachItems.map((it, i) => (
-              <Animated.View
-                key={it.key}
-                entering={FadeInDown.delay(i * 40).springify().damping(26).stiffness(200)}
-                exiting={FadeOutDown.duration(120)}
-              >
-                <TouchableOpacity className="items-center" onPress={() => runAttach(it.action)}>
-                  <View
-                    className="w-14 h-14 rounded-full items-center justify-center"
-                    style={{ backgroundColor: it.color }}
-                  >
-                    <Ionicons name={it.icon} size={26} color="white" />
-                  </View>
-                  <Text className="text-sm text-gray-600 dark:text-zinc-300 mt-1.5">{it.label}</Text>
-                </TouchableOpacity>
-              </Animated.View>
-            ))}
-          </View>
-        )}
 
         {uploading && (
           <Text className="text-sm text-gray-400 dark:text-zinc-500 px-4 pt-1">{t('media.uploading')}</Text>
@@ -978,31 +1383,23 @@ export default function ChatScreen() {
             </Text>
           </View>
         ) : isRecording ? (
-          <View className="flex-row items-center px-3 py-3 border-t border-gray-100 dark:border-zinc-800">
-            <TouchableOpacity onPress={cancelRecording} className="px-2">
-              <Ionicons name="trash-outline" size={22} color="#EF4444" />
-            </TouchableOpacity>
-            <View className="flex-1 flex-row items-center ml-2">
-              <View className="w-2.5 h-2.5 rounded-full bg-red-500 mr-2" />
-              <Text className="text-gray-700 dark:text-zinc-300">{recFmt(recordSeconds)}</Text>
-            </View>
-            <TouchableOpacity
-              onPress={stopAndSendRecording}
-              className="w-10 h-10 bg-nexa rounded-full items-center justify-center"
-            >
-              <Ionicons name="send" size={18} color="white" />
-            </TouchableOpacity>
-          </View>
+          <VoiceRecorderBar onCancel={() => setIsRecording(false)} onSend={sendRecording} />
         ) : (
           /* Input */
-          <View className="flex-row items-center px-3 py-2 border-t border-gray-100 dark:border-zinc-800">
-            <TouchableOpacity onPress={toggleAttach} disabled={uploading} className="mr-1 px-1">
+          <>
+            <PendingMediaBar items={pending} onRemove={removePending} />
+            <View className="flex-row items-center px-3 py-2 border-t border-gray-100 dark:border-zinc-800">
+            <TouchableOpacity
+              onPress={() => setAttach(!attachOpen)}
+              disabled={uploading}
+              className="mr-1 px-1"
+            >
               <Animated.View style={plusStyle}>
-                <Ionicons name="add-circle-outline" size={26} color={NEXA} />
+                <Ionicons name="add-circle-outline" size={28} color={NEXA} />
               </Animated.View>
             </TouchableOpacity>
             <TextInput
-              className="flex-1 bg-gray-100 dark:bg-zinc-800 rounded-full px-4 py-2 mr-2 text-lg text-gray-900 dark:text-zinc-100"
+              className="flex-1 bg-gray-100 dark:bg-zinc-800 rounded-full px-4 py-2.5 mr-2 text-lg text-gray-900 dark:text-zinc-100"
               placeholder={t('chat.message_placeholder')}
               value={text}
               onChangeText={handleChangeText}
@@ -1010,22 +1407,26 @@ export default function ChatScreen() {
               returnKeyType="send"
               onSubmitEditing={sendMessage}
             />
-            {text.trim() ? (
+            {/* Des médias en attente suffisent à rendre l'envoi disponible, sans texte. */}
+            {text.trim() || pending.length ? (
               <TouchableOpacity
-                className="w-10 h-10 bg-nexa rounded-full items-center justify-center"
+                className="w-11 h-11 bg-nexa rounded-full items-center justify-center"
                 onPress={sendMessage}
+                disabled={uploading}
+                style={{ opacity: uploading ? 0.5 : 1 }}
               >
-                <Ionicons name="send" size={18} color="white" />
+                <Ionicons name="send" size={20} color="white" />
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                className="w-10 h-10 bg-nexa rounded-full items-center justify-center"
+                className="w-11 h-11 bg-nexa rounded-full items-center justify-center"
                 onPress={startRecording}
               >
-                <Ionicons name="mic" size={20} color="white" />
+                <Ionicons name="mic" size={22} color="white" />
               </TouchableOpacity>
             )}
-          </View>
+            </View>
+          </>
         )}
       </KeyboardAvoidingView>
 
@@ -1039,7 +1440,22 @@ export default function ChatScreen() {
       {viewer && (
         <MediaViewer type={viewer.type} url={viewer.url} onClose={() => setViewer(null)} />
       )}
+      {albumView && (
+        <AlbumViewer
+          items={albumView.items}
+          initialIndex={albumView.index}
+          onClose={() => setAlbumView(null)}
+        />
+      )}
       <GiphyPicker visible={giphyOpen} onClose={() => setGiphyOpen(false)} onSelect={onGifSelect} />
+
+      <AttachmentSheet
+        visible={attachOpen}
+        onClose={() => setAttach(false)}
+        title={t('media.attach')}
+        comingLabel={t('media.coming_soon')}
+        actions={attachActions}
+      />
     </SafeAreaView>
   );
 }

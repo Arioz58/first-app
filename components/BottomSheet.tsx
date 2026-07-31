@@ -31,6 +31,13 @@ type Props = {
   height?: number;
   /** Opacité max du backdrop noir (défaut 0.55 ; baisser pour laisser voir le contenu derrière). */
   backdropOpacity?: number;
+  /**
+   * Appelé une fois la feuille refermée ET le Modal démonté. À utiliser pour enchaîner sur
+   * autre chose qui présente un écran (picker natif, autre Modal) : le faire depuis
+   * `onClose` revient à présenter par-dessus une feuille encore en cours de fermeture, ce
+   * qui laisse un modal fantôme qui capte les touches et fige l'app.
+   */
+  onClosed?: () => void;
   children: ReactNode;
 };
 
@@ -44,11 +51,17 @@ export default function BottomSheet({
   onClose,
   height,
   backdropOpacity = 0.55,
+  onClosed,
   children,
 }: Props) {
   const [rendered, setRendered] = useState(false);
   const renderedRef = useRef(false);
   const opened = useRef(false);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const onClosedRef = useRef(onClosed);
+  onClosedRef.current = onClosed;
+  const failsafeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sheetY = useSharedValue(height ?? HIDDEN);
   const sheetH = useSharedValue(height ?? HIDDEN);
@@ -56,6 +69,19 @@ export default function BottomSheet({
   const setRenderedSync = (v: boolean) => {
     renderedRef.current = v;
     setRendered(v);
+  };
+
+  // Démontage effectif : purge le filet de sécurité et prévient l'appelant. Garde sur
+  // `visibleRef` car une réouverture pendant la fermeture doit annuler ce démontage.
+  const finishClose = () => {
+    if (visibleRef.current) return;
+    if (failsafeRef.current) {
+      clearTimeout(failsafeRef.current);
+      failsafeRef.current = null;
+    }
+    if (!renderedRef.current) return; // déjà démonté (par le ressort ou par le filet)
+    setRenderedSync(false);
+    onClosedRef.current?.();
   };
 
   useEffect(() => {
@@ -72,11 +98,23 @@ export default function BottomSheet({
     } else if (renderedRef.current) {
       // fermeture (depuis n'importe quelle position) puis démontage
       sheetY.value = withSpring(sheetH.value, SHEET_SPRING, (finished) => {
-        if (finished) runOnJS(setRenderedSync)(false);
+        if (finished) runOnJS(finishClose)();
       });
+      // Filet : si le ressort est interrompu, son callback arrive avec finished=false et
+      // le Modal resterait monté — backdrop invisible mais capteur de touches, donc app
+      // figée. On force alors le démontage.
+      if (failsafeRef.current) clearTimeout(failsafeRef.current);
+      failsafeRef.current = setTimeout(finishClose, 600);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
+
+  useEffect(
+    () => () => {
+      if (failsafeRef.current) clearTimeout(failsafeRef.current);
+    },
+    [],
+  );
 
   // Mesure la hauteur réelle (mode auto) et lance l'ouverture au premier layout.
   const onLayout = (e: { nativeEvent: { layout: { height: number } } }) => {

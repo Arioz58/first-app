@@ -16,11 +16,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AudioMessage } from '../../components/AudioMessage';
 import { MediaViewer } from '../../components/MediaViewer';
+import { DocumentViewer } from '../../components/DocumentViewer';
+import * as MediaLibrary from 'expo-media-library';
 import { apiRequest } from '../../lib/api';
 import { firstUrl, formatFileSize } from '../../lib/upload';
 
 const NEXA = '#1E40AF';
 const PAGE = 30;
+// Catégories dont le contenu a sa place dans la galerie de l'appareil. Les documents et
+// l'audio n'ont pas de destination commune : ils se partagent un par un.
+const VISUAL_CATEGORIES = ['media', 'images', 'videos', 'gifs'];
 
 type Msg = {
   id: string;
@@ -46,6 +51,9 @@ export default function MediaScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [viewer, setViewer] = useState<{ type: 'image' | 'video'; url: string } | null>(null);
+  // Document ouvert dans la visionneuse intégrée (audio exclu : il se lit sur place).
+  const [doc, setDoc] = useState<Msg | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const isGrid = category === 'media' || category === 'gifs';
 
@@ -78,21 +86,56 @@ export default function MediaScreen() {
     load(items[items.length - 1].id);
   };
 
-  // Télécharge toutes les pièces jointes chargées dans le stockage de l'app.
-  const downloadAll = async () => {
+  // Enregistre les photos/vidéos chargées dans la galerie de l'appareil.
+  //
+  // Avant, tout partait dans `documentDirectory` — le bac à sable de l'app : les fichiers
+  // étaient introuvables pour l'utilisateur. La pellicule est la destination attendue pour
+  // des médias, et `expo-media-library` y écrit aussi bien sur iOS que sur Android.
+  // (Pour les documents, pas de destination commune : ils se partagent un par un depuis
+  // leur visionneuse, d'où un bouton réservé aux catégories visuelles.)
+  // Confirmation d'abord : le lot peut être long et va écrire dans la galerie
+  // personnelle. L'utilisateur doit savoir combien d'éléments partent.
+  const saveAll = () => {
+    const count = items.filter((m) => m.mediaUrl).length;
+    if (!count) return;
+    Alert.alert('', t('media.save_all_confirm', { count }), [
+      { text: t('cancel'), style: 'cancel' },
+      { text: t('media.download'), onPress: runSaveAll },
+    ]);
+  };
+
+  const runSaveAll = async () => {
     const withMedia = items.filter((m) => m.mediaUrl);
     if (!withMedia.length) return;
+
+    const perm = await MediaLibrary.requestPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('', t('media.library_permission'));
+      return;
+    }
+
+    setSaving(true);
     let ok = 0;
     for (const m of withMedia) {
       try {
-        const name = m.fileName || m.mediaUrl!.split('/').pop() || `file_${m.id}`;
-        await FileSystem.downloadAsync(m.mediaUrl!, `${FileSystem.documentDirectory}${name}`);
+        const name = (m.fileName || m.mediaUrl!.split('/').pop() || `file_${m.id}`).replace(
+          /[/\\]/g,
+          '_',
+        );
+        // La galerie n'accepte qu'un fichier local : on passe par le cache, qu'iOS et
+        // Android purgent d'eux-mêmes ensuite.
+        const { uri } = await FileSystem.downloadAsync(
+          m.mediaUrl!,
+          `${FileSystem.cacheDirectory}${name}`,
+        );
+        await MediaLibrary.saveToLibraryAsync(uri);
         ok += 1;
       } catch {
         // ignore
       }
     }
-    Alert.alert('', t('media.downloaded', { count: ok }));
+    setSaving(false);
+    Alert.alert('', t('media.saved_to_gallery', { count: ok }));
   };
 
   const openItem = (m: Msg) => {
@@ -105,7 +148,7 @@ export default function MediaScreen() {
     if (m.mediaType === 'video') setViewer({ type: 'video', url: m.mediaUrl });
     else if (m.mediaType === 'image' || m.mediaType === 'gif')
       setViewer({ type: 'image', url: m.mediaUrl });
-    else Linking.openURL(m.mediaUrl);
+    else if (m.mediaType === 'document') setDoc(m);
   };
 
   return (
@@ -115,9 +158,13 @@ export default function MediaScreen() {
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
         <Text className="text-xl font-semibold text-gray-900 dark:text-zinc-100 flex-1">{title}</Text>
-        {category !== 'links' && items.some((m) => m.mediaUrl) ? (
-          <TouchableOpacity onPress={downloadAll}>
-            <Ionicons name="download-outline" size={22} color={NEXA} />
+        {VISUAL_CATEGORIES.includes(category) && items.some((m) => m.mediaUrl) ? (
+          <TouchableOpacity onPress={saveAll} disabled={saving}>
+            {saving ? (
+              <ActivityIndicator size="small" color={NEXA} />
+            ) : (
+              <Ionicons name="download-outline" size={22} color={NEXA} />
+            )}
           </TouchableOpacity>
         ) : null}
       </View>
@@ -193,6 +240,15 @@ export default function MediaScreen() {
 
       {viewer && (
         <MediaViewer type={viewer.type} url={viewer.url} onClose={() => setViewer(null)} />
+      )}
+
+      {doc?.mediaUrl && (
+        <DocumentViewer
+          url={doc.mediaUrl}
+          fileName={doc.fileName}
+          fileSize={doc.fileSize}
+          onClose={() => setDoc(null)}
+        />
       )}
     </SafeAreaView>
   );

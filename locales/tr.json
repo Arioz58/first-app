@@ -170,6 +170,8 @@
   "media": {
     "attach": "Ek",
     "gallery": "Galeri",
+    "camera": "Kamera",
+    "location": "Konum",
     "document": "Belge",
     "gif": "GIF",
     "gif_search": "GIF ara",
@@ -178,7 +180,16 @@
     "uploading": "Gönderiliyor…",
     "mic_permission": "Mikrofon erişimine izin verin",
     "download_all": "Tümünü indir",
-    "downloaded": "{{count}} dosya indirildi"
+    "downloaded": "{{count}} dosya indirildi",
+    "coming_soon": "Yakında",
+    "camera_permission": "Kamera erişimine izin verin",
+    "location_coming": "Konum paylaşımı yakında geliyor.",
+    "max_selection": "En fazla {{count}} medya ekleyebilirsiniz.",
+    "doc_preview_error": "Bu belge burada görüntülenemiyor.",
+    "download": "İndir",
+    "saved_to_gallery": "{{count}} medya galerinize kaydedildi.",
+    "library_permission": "Medyaları kaydetmek için galeri erişimine izin verin.",
+    "save_all_confirm": "{{count}} medya galerinize kaydedilsin mi?"
   },
   "group": {
     "title": "Grup bilgisi",

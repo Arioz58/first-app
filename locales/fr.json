@@ -170,6 +170,8 @@
   "media": {
     "attach": "Pièce jointe",
     "gallery": "Galerie",
+    "camera": "Appareil photo",
+    "location": "Position",
     "document": "Document",
     "gif": "GIF",
     "gif_search": "Rechercher des GIFs",
@@ -178,7 +180,16 @@
     "uploading": "Envoi…",
     "mic_permission": "Autorisez l'accès au micro",
     "download_all": "Tout télécharger",
-    "downloaded": "{{count}} fichier(s) téléchargé(s)"
+    "downloaded": "{{count}} fichier(s) téléchargé(s)",
+    "coming_soon": "Bientôt",
+    "camera_permission": "Autorisez l'accès à l'appareil photo",
+    "location_coming": "Le partage de position arrive prochainement.",
+    "max_selection": "Vous pouvez joindre {{count}} médias au maximum.",
+    "doc_preview_error": "Ce document ne peut pas être affiché ici.",
+    "download": "Télécharger",
+    "saved_to_gallery": "{{count}} média(s) enregistré(s) dans votre galerie.",
+    "library_permission": "Autorisez l'accès à la galerie pour enregistrer les médias.",
+    "save_all_confirm": "Enregistrer {{count}} média(s) dans votre galerie ?"
   },
   "group": {
     "title": "Infos du groupe",

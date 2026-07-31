@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import * as Linking from 'expo-linking';
+import { useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+import { isViewableDocument } from '../lib/documents';
 import { formatFileSize } from '../lib/upload';
 import { AudioMessage } from './AudioMessage';
+import { DocumentViewer } from './DocumentViewer';
 
 type MediaMessage = {
   mediaUrl?: string | null;
@@ -32,7 +34,7 @@ export function MessageMedia({
       <TouchableOpacity onPress={() => onOpenImage(mediaUrl)} activeOpacity={0.9}>
         <Image
           source={{ uri: mediaUrl }}
-          style={{ width: 220, height: 220, borderRadius: 12 }}
+          style={{ width: 244, height: 244, borderRadius: 14 }}
           contentFit="cover"
         />
       </TouchableOpacity>
@@ -45,9 +47,9 @@ export function MessageMedia({
         onPress={() => onOpenVideo(mediaUrl)}
         activeOpacity={0.9}
         style={{
-          width: 220,
-          height: 260,
-          borderRadius: 12,
+          width: 244,
+          height: 288,
+          borderRadius: 14,
           backgroundColor: '#111827',
           alignItems: 'center',
           justifyContent: 'center',
@@ -63,22 +65,56 @@ export function MessageMedia({
   }
 
   // Document
+  return <DocumentCard message={message} url={mediaUrl} tint={tint} />;
+}
+
+/**
+ * Carte d'un document : ouvre la visionneuse intégrée. Celle-ci gère elle-même le repli
+ * vers le téléchargement quand le format n'est pas affichable — l'icône annonce
+ * simplement à quoi s'attendre.
+ */
+function DocumentCard({
+  message,
+  url,
+  tint,
+}: {
+  message: MediaMessage;
+  url: string;
+  tint: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const viewable = isViewableDocument(message.fileName, url);
+
   return (
     <TouchableOpacity
-      onPress={() => Linking.openURL(mediaUrl)}
+      onPress={() => setOpen(true)}
       className="flex-row items-center"
       style={{ minWidth: 200 }}
       activeOpacity={0.7}
     >
-      <Ionicons name="document-text" size={30} color={tint} />
+      <Ionicons name="document-text" size={33} color={tint} />
       <View className="ml-2 flex-1">
-        <Text numberOfLines={1} className="text-gray-900 dark:text-zinc-100 font-medium">
+        <Text numberOfLines={1} className="text-base text-gray-900 dark:text-zinc-100 font-medium">
           {message.fileName || 'Document'}
         </Text>
         {message.fileSize ? (
           <Text className="text-gray-400 dark:text-zinc-500 text-sm">{formatFileSize(message.fileSize)}</Text>
         ) : null}
       </View>
+
+      {/* L'icône annonce ce qui va se passer : lecture intégrée ou enregistrement. */}
+      <View className="ml-2 w-6 items-center">
+        <Ionicons name={viewable ? 'eye-outline' : 'download-outline'} size={19} color={tint} />
+      </View>
+
+      {open && (
+        <DocumentViewer
+          url={url}
+          fileName={message.fileName}
+          fileSize={message.fileSize}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </TouchableOpacity>
   );
 }

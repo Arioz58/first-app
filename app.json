@@ -72,6 +72,14 @@
         {
           "contactsPermission": "Nexa utilise vos contacts pour retrouver qui utilise déjà l'application et inviter les autres. Vos contacts ne sont jamais stockés."
         }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Nexa accède à votre galerie pour partager vos photos et vidéos.",
+          "savePhotosPermission": "Nexa enregistre dans votre galerie les photos et vidéos que vous choisissez.",
+          "isAccessMediaLocationEnabled": false
+        }
       ]
     ],
     "experiments": {
