@@ -62,10 +62,17 @@ const MAX_PENDING = 10;
 const SMOOTH_SCROLL_MS = 420;
 // De combien la liste déborde SOUS la zone de saisie : c'est ce débordement qui fait
 // passer les messages derrière son verre quand on fait défiler, au lieu de les couper.
+//
 // ⚠️ Valeur FIXE et non hauteur mesurée : la barre change de taille à chaque frappe sur
-// plusieurs lignes, et recalculer la mise en page de la liste à ce rythme la fait
-// saccader. Correspond à la barre au repos (44 de bouton + 12 de marges).
-const COMPOSER_OVERLAP = 60;
+// plusieurs lignes, et recalculer la mise en page de la liste à ce rythme la fait saccader.
+// Dimensionnée sur le PIRE cas (champ à 5 lignes ≈ 142 + rangée de vignettes ≈ 84), pas
+// sur la barre au repos : au-delà du débordement, la liste s'arrête net et cette coupure
+// se voit à travers le verre de la barre.
+//
+// La générosité ne coûte rien : le pied de liste vaut toujours `débordement + 24`, donc
+// le dernier message se pose 24 px au-dessus de la barre quelle que soit la valeur — seul
+// change ce qui déborde hors écran, qui n'est jamais rendu.
+const COMPOSER_OVERLAP = 240;
 // Hauteurs des dégradés de flou qui adoucissent les deux bords du fil.
 const HEADER_H = 62;
 // La carte du header se détache du fond : ombre plus large que celle des boutons.
@@ -77,7 +84,6 @@ const HEADER_SHADOW = {
   elevation: 5,
 };
 const FADE_TOP = 46;
-const FADE_BOTTOM_EXTRA = 20; // au-delà de la zone recouverte, pour amorcer plus tôt
 // Le champ grandit avec le texte, puis défile : au-delà, la saisie mangerait le fil.
 const INPUT_LINE_H = 22;
 const INPUT_MAX_LINES = 5;
@@ -1438,20 +1444,11 @@ export default function ChatScreen() {
           onScrollToIndexFailed={() => {}}
         />
 
-        {/* Dégradés de flou aux deux bords du fil : les messages s'y fondent au lieu
-            d'être tranchés net sous le header ou derrière la zone de saisie. Posés
-            APRÈS la liste (donc au-dessus) mais avant les contrôles, et transparents
-            aux gestes. */}
-        <ProgressiveBlur
-          edge="top"
-          height={insets.top + HEADER_H + FADE_TOP}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0 }}
-        />
-        <ProgressiveBlur
-          edge="bottom"
-          height={composerOverlap + FADE_BOTTOM_EXTRA}
-          style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}
-        />
+        {/* ⚠️ Pas de dégradé de flou en bas, volontairement. Il a été essayé puis retiré :
+            vivant dans le conteneur que le clavier décale, il était recomposé à chaque
+            image et hachait l'animation — y compris allégé à deux couches, à hauteur fixe,
+            ou monté/démonté autour du mouvement. Il faisait par ailleurs double emploi :
+            le verre de la zone de saisie floute déjà les messages qui passent derrière. */}
         </View>
 
         {/* Bloc de saisie, en flux : c'est ce qui lui permet de suivre le clavier — un
@@ -1533,6 +1530,16 @@ export default function ChatScreen() {
         )}
         </View>
       </KeyboardAvoidingView>
+
+      {/* ⚠️ HORS du KeyboardAvoidingView : ce dégradé ne bouge pas avec le clavier, et
+          l'y laisser le faisait redessiner à chaque frame de l'animation — 6 couches de
+          flou masquées, de quoi hacher l'ouverture. Rendu après la liste (donc au-dessus
+          d'elle) et sous le header, qui porte un zIndex. */}
+      <ProgressiveBlur
+        edge="top"
+        height={insets.top + HEADER_H + FADE_TOP}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0 }}
+      />
 
       <ChatWallpaperPicker
         visible={pickerOpen}

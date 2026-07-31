@@ -18,8 +18,10 @@ import { Platform, StyleSheet, View, useColorScheme, type StyleProp, type ViewSt
  * dépend toute l'app.
  */
 
-// 6 couches suffisent à ne plus distinguer les paliers ; au-delà, on paie sans voir.
-const IOS_LAYERS = 6;
+// Chaque couche est un flou masqué à redessiner : le compte se paie dès qu'une animation
+// déplace le dégradé (ouverture du clavier). 4 suffisent à ne plus distinguer les paliers
+// sur une bande de cette hauteur ; 6 se voyaient surtout dans les images par seconde.
+const IOS_LAYERS = 4;
 // Le flou d'Android passe par une implémentation nettement plus coûteuse : on allège.
 const ANDROID_LAYERS = 3;
 
@@ -27,17 +29,20 @@ export function ProgressiveBlur({
   edge,
   height,
   intensity = 60,
+  layers: layersProp,
   style,
 }: {
   /** Bord net : `top` = flou en haut qui s'efface vers le bas, et inversement. */
   edge: 'top' | 'bottom';
   height: number;
   intensity?: number;
+  /** À baisser quand le dégradé est redessiné pendant une animation (clavier). */
+  layers?: number;
   style?: StyleProp<ViewStyle>;
 }) {
   const scheme = useColorScheme();
   const tint = scheme === 'dark' ? 'dark' : 'light';
-  const layers = Platform.OS === 'ios' ? IOS_LAYERS : ANDROID_LAYERS;
+  const layers = layersProp ?? (Platform.OS === 'ios' ? IOS_LAYERS : ANDROID_LAYERS);
   const layerIntensity = Math.max(1, intensity / layers);
 
   return (
