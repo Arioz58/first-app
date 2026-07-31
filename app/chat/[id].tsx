@@ -39,13 +39,14 @@ import {
   type ConversationCustomization,
 } from '../../lib/storage';
 import type { ChatWallpaper } from '../../lib/chatWallpapers';
-import { resolveBubbleColor } from '../../lib/bubbleColors';
+import { bubbleGradient, resolveBubbleColor } from '../../lib/bubbleColors';
 import { consumeScrollTarget } from '../../lib/chatNav';
 // ⚠️ Ce KeyboardAvoidingView n'est PAS celui de React Native : il suit la position
 // réelle du clavier, mesurée nativement à chaque image. Celui de RN applique son
 // décalage d'un bloc, et le piloter depuis l'événement JS laisse un décalage dans le
 // temps — le temps que le callback soit traité, le clavier a déjà commencé à bouger.
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ChatBackground } from '../../components/ChatBackground';
 import { GlassSurface, FLOATING_SHADOW } from '../../components/GlassSurface';
 import { ProgressiveBlur } from '../../components/ProgressiveBlur';
@@ -257,6 +258,63 @@ const TAIL_H = 13;
 const TAIL_CORNER = 0;
 // Chevauchement de la queue sur la bulle : garantit la continuité, ombre comprise.
 const TAIL_OVERLAP = 2;
+
+/**
+ * Remplissage dégradé d'une bulle « moi ».
+ *
+ * ⚠️ Posé en couche absolue et NON via `overflow: 'hidden'` sur la bulle : ce dernier
+ * clipperait la queue, qui déborde volontairement du cadre. La couche reprend donc les
+ * mêmes rayons que la bulle pour épouser ses coins.
+ */
+function BubbleFill({ color, radius }: { color: string; radius: object }) {
+  const [from, to] = bubbleGradient(color);
+  return (
+    <LinearGradient
+      pointerEvents="none"
+      colors={[from, to]}
+      // Légèrement diagonal : un dégradé strictement vertical paraît plat sur une surface
+      // aussi courte qu'une bulle.
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
+      style={[StyleSheet.absoluteFill, { borderRadius: 16 }, radius]}
+    />
+  );
+}
+
+// Heure d'envoi, au format local de l'appareil.
+const formatTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+
+/**
+ * Heure affichée dans une bulle.
+ *
+ * `overlay` la pose en pastille sur le média : sur une image sans légende, une ligne
+ * ajoutée sous la photo créerait une bande vide au seul usage de l'horodatage.
+ */
+function BubbleTime({
+  iso,
+  isMe,
+  overlay = false,
+}: {
+  iso: string;
+  isMe: boolean;
+  overlay?: boolean;
+}) {
+  if (overlay) {
+    return (
+      <View className="absolute bottom-1.5 right-1.5 rounded-full bg-black/45 px-1.5 py-0.5">
+        <Text className="text-[10px] text-white">{formatTime(iso)}</Text>
+      </View>
+    );
+  }
+  return (
+    <Text
+      className={`text-[11px] self-end mt-0.5 ${isMe ? 'text-white/70' : 'text-gray-400 dark:text-zinc-500'}`}
+    >
+      {formatTime(iso)}
+    </Text>
+  );
+}
 
 function BubbleTail({ isMe, color }: { isMe: boolean; color: string }) {
   return (
@@ -930,6 +988,9 @@ export default function ChatScreen() {
   // La queue est une View à part : elle ne peut pas hériter du `bg-white dark:bg-zinc-900`
   // des bulles reçues, il faut donc la couleur en dur (zinc-900 = #18181b).
   const theirBubble = scheme === 'dark' ? '#18181b' : '#ffffff';
+  // La queue est unie : elle prend la nuance BASSE du dégradé, celle du bord auquel
+  // elle s'accroche, sans quoi la jonction se voit.
+  const myTailColor = bubbleGradient(bubbleColor)[1];
   // « Effacer » local : on masque les messages antérieurs à l'horodatage stocké.
   const visibleMessages = clearedAt
     ? messages.filter((m) => new Date(m.createdAt).getTime() > clearedAt)
@@ -1289,9 +1350,10 @@ export default function ChatScreen() {
                       </Text>
                     )}
                     <View
-                      style={[BUBBLE_SHADOW, radius, isMe ? { backgroundColor: bubbleColor } : null]}
+                      style={[BUBBLE_SHADOW, radius]}
                       className={`rounded-2xl p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
                     >
+                      {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
                       <MediaGrid
                         items={album.map((m) => ({
                           id: m.id,
@@ -1311,13 +1373,18 @@ export default function ChatScreen() {
                         onLongPressItem={openMessageMenu}
                       />
                       {albumCaption ? (
-                        <Text
-                          className={`text-base px-2 pt-1.5 pb-0.5 ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
-                        >
-                          {albumCaption}
-                        </Text>
-                      ) : null}
-                      {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? bubbleColor : theirBubble} />}
+                        <View className="px-2 pt-1.5 pb-0.5">
+                          <Text
+                            className={`text-base ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
+                          >
+                            {albumCaption}
+                          </Text>
+                          <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} />
+                        </View>
+                      ) : (
+                        <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} overlay />
+                      )}
+                      {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
                     </View>
                   </>
                 ) : isStoryReply ? (
@@ -1354,14 +1421,16 @@ export default function ChatScreen() {
                       </Text>
                     ) : (
                       <View
-                        style={[BUBBLE_SHADOW, radius, isMe ? { backgroundColor: bubbleColor } : null]}
+                        style={[BUBBLE_SHADOW, radius]}
                         className={`rounded-2xl px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
                       >
+                        {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
                         <Text
                           className={`text-lg ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
                         >
                           {item.content}
                         </Text>
+                        <BubbleTime iso={item.createdAt} isMe={isMe} />
                       </View>
                     )}
                   </>
@@ -1374,9 +1443,10 @@ export default function ChatScreen() {
                       // Image/vidéo/GIF en bulle : le média affleure les bords (padding
                       // fin) et la légende vit DANS la bulle, sous le média.
                       <View
-                        style={[BUBBLE_SHADOW, radius, isMe ? { backgroundColor: bubbleColor } : null]}
+                        style={[BUBBLE_SHADOW, radius]}
                         className={`rounded-2xl p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
                       >
+                        {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
                         <MessageMedia
                           message={item}
                           tint={bubbleColor}
@@ -1384,13 +1454,18 @@ export default function ChatScreen() {
                           onOpenVideo={(url) => setViewer({ type: 'video', url })}
                         />
                         {item.content ? (
-                          <Text
-                            className={`text-base px-2 pt-1.5 pb-0.5 ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
-                          >
-                            {item.content}
-                          </Text>
-                        ) : null}
-                        {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? bubbleColor : theirBubble} />}
+                          <View className="px-2 pt-1.5 pb-0.5">
+                            <Text
+                              className={`text-base ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
+                            >
+                              {item.content}
+                            </Text>
+                            <BubbleTime iso={item.createdAt} isMe={isMe} />
+                          </View>
+                        ) : (
+                          <BubbleTime iso={item.createdAt} isMe={isMe} overlay />
+                        )}
+                        {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
                       </View>
                     ) : (
                       // Audio/document : bulle aux couleurs de l'expéditeur, avec la carte
@@ -1398,9 +1473,10 @@ export default function ChatScreen() {
                       // et l'icône teintée gardent ainsi un fond clair sur lequel se lire,
                       // sans que la bulle ait à renoncer à sa couleur.
                       <View
-                        style={[BUBBLE_SHADOW, radius, isMe ? { backgroundColor: bubbleColor } : null]}
+                        style={[BUBBLE_SHADOW, radius]}
                         className={`rounded-2xl p-1.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
                       >
+                        {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
                         <View
                           className={`rounded-xl px-3 py-2 ${isMe ? 'bg-white dark:bg-zinc-800' : 'bg-gray-100 dark:bg-zinc-800'}`}
                         >
@@ -1411,8 +1487,9 @@ export default function ChatScreen() {
                             onOpenVideo={() => {}}
                           />
                         </View>
+                        <BubbleTime iso={item.createdAt} isMe={isMe} />
                         {lastOfGroup && (
-                          <BubbleTail isMe={isMe} color={isMe ? bubbleColor : theirBubble} />
+                          <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />
                         )}
                       </View>
                     )}
@@ -1426,15 +1503,17 @@ export default function ChatScreen() {
                       onPress={
                         firstUrl(item.content) ? () => Linking.openURL(firstUrl(item.content)!) : undefined
                       }
-                      style={[BUBBLE_SHADOW, radius, isMe ? { backgroundColor: bubbleColor } : null]}
+                      style={[BUBBLE_SHADOW, radius]}
                       className={`rounded-2xl px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
                     >
+                      {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
                       <Text
                         className={`text-lg ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'} ${firstUrl(item.content) ? 'underline' : ''}`}
                       >
                         {item.content}
                       </Text>
-                      {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? bubbleColor : theirBubble} />}
+                      <BubbleTime iso={item.createdAt} isMe={isMe} />
+                      {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
                     </Pressable>
                   </>
                 )}
