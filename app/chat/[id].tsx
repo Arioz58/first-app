@@ -48,6 +48,7 @@ import { consumeScrollTarget } from '../../lib/chatNav';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { ChatBackground } from '../../components/ChatBackground';
 import { GlassSurface, FLOATING_SHADOW } from '../../components/GlassSurface';
+import { ProgressiveBlur } from '../../components/ProgressiveBlur';
 import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
 import { UserAvatar } from '../../components/UserAvatar';
 
@@ -65,6 +66,18 @@ const SMOOTH_SCROLL_MS = 420;
 // plusieurs lignes, et recalculer la mise en page de la liste à ce rythme la fait
 // saccader. Correspond à la barre au repos (44 de bouton + 12 de marges).
 const COMPOSER_OVERLAP = 60;
+// Hauteurs des dégradés de flou qui adoucissent les deux bords du fil.
+const HEADER_H = 62;
+// La carte du header se détache du fond : ombre plus large que celle des boutons.
+const HEADER_SHADOW = {
+  shadowColor: '#000',
+  shadowOpacity: 0.12,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 3 },
+  elevation: 5,
+};
+const FADE_TOP = 46;
+const FADE_BOTTOM_EXTRA = 20; // au-delà de la zone recouverte, pour amorcer plus tôt
 // Le champ grandit avec le texte, puis défile : au-delà, la saisie mangerait le fil.
 const INPUT_LINE_H = 22;
 const INPUT_MAX_LINES = 5;
@@ -1048,9 +1061,25 @@ export default function ChatScreen() {
       {/* Couche de fond unique, derrière la page entière : sans elle, la bande de safe
           area et le fond du conteneur laissent un aplat sous la zone de saisie. */}
       <ChatBackground wallpaper={wallpaper} style={StyleSheet.absoluteFill} />
-      <SafeAreaView className="flex-1">
-      {/* Header */}
-      <View className="flex-row items-center px-3 py-2 border-b border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+      {/* Seul le bas est réservé : en haut, c'est le bandeau flottant qui gère la marge
+          d'écran, et laisser le SafeAreaView la poser aussi la compterait deux fois. */}
+      <SafeAreaView className="flex-1" edges={['bottom']}>
+      {/* Header : carte OPAQUE détachée des bords, posée sur le fil qui défile derrière.
+          Hauteur fixe — le sous-titre apparaît et disparaît (frappe, présence, « vu le… »)
+          et une hauteur variable ferait sauter le contenu de la liste à chaque
+          changement. */}
+      <View
+        className="absolute rounded-3xl bg-white dark:bg-zinc-900"
+        style={{
+          top: insets.top + 4,
+          left: 10,
+          right: 10,
+          height: HEADER_H,
+          zIndex: 10,
+          ...HEADER_SHADOW,
+        }}
+      >
+      <View className="flex-row items-center px-3 flex-1">
         <TouchableOpacity onPress={() => router.back()} className="px-1 py-1">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
         </TouchableOpacity>
@@ -1136,12 +1165,14 @@ export default function ChatScreen() {
           <Ionicons name="ellipsis-vertical" size={20} color="#374151" />
         </TouchableOpacity>
       </View>
+      </View>
 
       {/* Messages */}
       <KeyboardAvoidingView className="flex-1" behavior="padding">
+        <View style={{ flex: 1, marginBottom: -composerOverlap }}>
         <FlatList
           ref={listRef}
-          style={{ flex: 1, marginBottom: -composerOverlap }}
+          style={{ flex: 1 }}
           data={rows}
           keyExtractor={(row) => row.key}
           keyboardShouldPersistTaps="handled"
@@ -1153,6 +1184,9 @@ export default function ChatScreen() {
           // rendre au fil exactement cette hauteur. Un pied de liste est un enfant réel,
           // donc mesuré et compté dans la taille du contenu — ce dont dépend
           // `scrollToEnd`, alors qu'un padding de conteneur ne l'était pas ici.
+          // Rend au fil la hauteur occupée par la carte du header (marge d'écran + décalage
+          // de 4 + hauteur), moins le paddingTop déjà appliqué au contenu.
+          ListHeaderComponent={<View style={{ height: insets.top + HEADER_H + 6 }} />}
           ListFooterComponent={<View style={{ height: composerOverlap + 24 }} />}
           scrollEventThrottle={16}
           onScroll={(e) => {
@@ -1403,6 +1437,22 @@ export default function ChatScreen() {
           }}
           onScrollToIndexFailed={() => {}}
         />
+
+        {/* Dégradés de flou aux deux bords du fil : les messages s'y fondent au lieu
+            d'être tranchés net sous le header ou derrière la zone de saisie. Posés
+            APRÈS la liste (donc au-dessus) mais avant les contrôles, et transparents
+            aux gestes. */}
+        <ProgressiveBlur
+          edge="top"
+          height={insets.top + HEADER_H + FADE_TOP}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0 }}
+        />
+        <ProgressiveBlur
+          edge="bottom"
+          height={composerOverlap + FADE_BOTTOM_EXTRA}
+          style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}
+        />
+        </View>
 
         {/* Bloc de saisie, en flux : c'est ce qui lui permet de suivre le clavier — un
             élément positionné en absolu ignorerait le padding du KeyboardAvoidingView. */}

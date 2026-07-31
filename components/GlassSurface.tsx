@@ -22,11 +22,17 @@ export const FLOATING_SHADOW = {
 export function GlassSurface({
   radius,
   intensity = 60,
+  bordered = true,
+  tintOpacity = 0.55,
   style,
   children,
 }: {
   radius: number;
   intensity?: number;
+  /** Le liseré fait le tour ; à désactiver sur un bandeau pleine largeur. */
+  bordered?: boolean;
+  /** Force du voile blanc (clair) ou anthracite (sombre) posé sur le flou. */
+  tintOpacity?: number;
   style?: StyleProp<ViewStyle>;
   children?: ReactNode;
 }) {
@@ -42,8 +48,15 @@ export function GlassSurface({
           {
             borderRadius: radius,
             overflow: 'hidden',
-            borderWidth: 1,
+            // Voile posé sur le flou. Le flou seul prend la couleur de ce qu'il y a
+            // derrière : sur un fond de conversation chargé, la surface se confond avec
+            // lui et le champ devient difficile à situer. Ce voile lui redonne une assise
+            // sans l'opacifier.
+            backgroundColor: isDark
+              ? `rgba(24,24,27,${tintOpacity})`
+              : `rgba(255,255,255,${tintOpacity})`,
             // Un liseré très discret détache la surface du fond sans la cerner.
+            borderWidth: bordered ? 1 : 0,
             borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
           },
           style,
@@ -59,7 +72,7 @@ export function GlassSurface({
       style={[
         {
           borderRadius: radius,
-          borderWidth: 1,
+          borderWidth: bordered ? 1 : 0,
           backgroundColor: isDark ? 'rgba(24,24,27,0.90)' : 'rgba(255,255,255,0.90)',
           borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
         },
