@@ -29,6 +29,7 @@ import { clearTokens } from '../../lib/storage';
 import { unregisterPushToken } from '../../lib/notifications';
 import { disconnectSocket } from '../../lib/socket';
 import { requestContactsSegment } from '../../lib/tabsNav';
+import { setUnreadCounts } from '../../lib/unreadMessages';
 import { getThemePref, setThemePref, useThemeColors, type ThemePref } from '../../lib/theme';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
@@ -145,6 +146,8 @@ export default function ProfileScreen() {
           // Avant d'effacer la session : la requête a besoin du jeton d'accès, et
           // l'appareil ne doit plus recevoir les notifications de ce compte.
           await unregisterPushToken();
+          // Les non-lus du compte quitté ne doivent pas rester sur l'icône de l'app.
+          setUnreadCounts({});
           disconnectSocket();
           await clearTokens();
           router.replace('/(auth)/welcome');

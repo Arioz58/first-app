@@ -42,7 +42,7 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
   Restant : lien d'invite = placeholder store (universal links plus tard) ; recherche locale dans le repertoire si besoin.
   → [FAIT 30/07, suite] refonte de l'onglet Contacts : segments « Repertoire / Amis », le repertoire s'ouvre directement, l'ajout par numero passe en drawer (AddContactSheet) + bouton scan QR dans le header. ⚠️ `app/contacts.tsx` n'existe plus : le repertoire est devenu `components/DirectoryPanel.tsx`, monte dans l'onglet Contacts (`app/(tabs)/search.tsx`).
 
-[EN COURS - non commite au 01/08] Notifications push : bascule de firebase-admin vers le service Expo Push.
+[FAIT 01-02/08] Notifications push : bascule de firebase-admin vers le service Expo Push.
   Cause : l'app enregistrait un jeton APNs (`getDevicePushTokenAsync`) la ou firebase-admin attend un jeton FCM → tous les envois echouaient, et le serveur purgeait le jeton au passage. Aucune notification n'arrivait donc jamais.
   → mobile : `getExpoPushTokenAsync({ projectId })`, `unregisterPushToken()` appele AVANT `clearTokens()` a la deconnexion, ouverture depuis une notification (deep link vers la conversation, y compris app fermee via `getLastNotificationResponseAsync`), extension iOS `targets/notification` (@bacons/apple-targets) pour la vignette de l'expediteur.
   → backend : `src/lib/push.ts` (expo-server-sdk) remplace `src/lib/fcm.ts` ; jeton rattache a UN SEUL compte (transaction) + `DELETE /users/me/fcm-token` ; titre/illustration adaptes aux groupes.
@@ -52,7 +52,15 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
   ⚠️ entitlement `usernotifications.communication` : ACCEPTÉ sur l'app (`com.berke.nexa2`), REFUSÉ sur l'extension, qui a son propre App ID (`com.berke.nexa2.notification-service`) — le déclarer là fait échouer TOUT le build. Déclaré dans `ios.entitlements` seulement. Pour l'avoir aussi sur l'extension : cocher « Communication Notifications » à la main sur developer.apple.com pour cet App ID, puis rétablir les 3 lignes dans `targets/notification/expo-target.config.js`.
   → Android : photo posée en grande icône (à droite depuis Android 12) + petite icône monochrome `assets/images/notification-icon.png` et couleur `#1E40AF` (sans elle : carré blanc dans la barre d'état). Rendu « conversation » facon WhatsApp = `MessagingStyle`, non expose par expo-notifications → module natif, non fait.
   [OK 01/08] Teste sur iPhone : notification recue, titre/corps corrects, photo de profil AFFICHEE A GAUCHE (a la place de l'icone de l'app). L'entitlement sur la seule app principale suffit — iOS le verifie sur l'app conteneur, pas sur l'extension. NE PAS le remettre sur l'extension.
-  Restant : tester sur Android (`npx expo prebuild -p android`) ; au 1er build EAS release, verifier que le profil de DISTRIBUTION est regenere avec la capability (sinon meme erreur de signature → `npx eas-cli credentials`).
+  [02/08] Groupes en 3 lignes (« nom du groupe / expediteur / message ») : le sous-titre n'est PAS un champ qu'on remplit — un `content.subtitle` pose a la main est ignore des qu'une intention est appliquee. Il faut plusieurs `recipients` + `speakableGroupName`, et les roles sont VOLONTAIREMENT inverses (le groupe passe en `sender`, l'expediteur en `speakableGroupName`) car iOS met le `sender` en titre — l'inverse de ce qu'annonce la doc. Verifie sur iPhone.
+  [02/08] Avatars par defaut dessines par l'extension quand il n'y a pas de photo : initiale pour une personne, deux silhouettes pour un groupe.
+  Restant : tester sur Android (`npx expo prebuild -p android`, voir android.md) ; au 1er build EAS release, verifier que le profil de DISTRIBUTION est regenere avec la capability (sinon meme erreur de signature → `npx eas-cli credentials`).
+
+[FAIT 02/08] Pastilles : onglet Discussion + icone de l'app avec le nombre de messages non lus.
+  Store lib/unreadMessages.ts (detail par conversation, conversation ouverte exclue du comptage) pour l'onglet ; la pastille de l'icone suit le meme total, et le serveur l'envoie dans le push (champ `badge`, calcule par destinataire) pour qu'elle bouge app fermee — backend src/lib/unread.ts.
+  ⚠️ champ `badge` du push = iOS uniquement ; sur Android la pastille depend du launcher (voir android.md).
+
+[FAIT 02/08] Groupes : la photo du groupe s'affiche partout (liste, recherche, en-tete de chat, « ajouter a un groupe ») au lieu du placeholder. Prop `group` sur UserAvatar ; le backend la renvoyait deja, sauf dans la recherche de messages.
 
 [FAIT - hors liste] Chantiers menes en parallele, pour memoire :
   - 27/07 groupes enrichis : roles admin/moderateur/membre, permissions, « qui peut envoyer », ecran group/[id].

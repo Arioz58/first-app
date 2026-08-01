@@ -1,3 +1,4 @@
+import * as Notifications from 'expo-notifications';
 import { useSyncExternalStore } from 'react';
 
 /**
@@ -34,6 +35,15 @@ const getSnapshot = () => total;
 
 const recompute = () => {
   const next = Object.values(counts).reduce((sum, n) => sum + n, 0);
+
+  // La pastille de l'icône porte le même nombre que celle de l'onglet. Le serveur l'envoie
+  // aussi dans les notifications (champ `badge`), ce qui la tient à jour app fermée.
+  //
+  // ⚠️ Resynchronisée même quand le total n'a pas bougé côté app : elle a pu être posée
+  // par une notification reçue hors ligne alors que la conversation a depuis été lue sur
+  // un autre appareil — sans cela, la pastille resterait à un nombre périmé.
+  Notifications.setBadgeCountAsync(next).catch(() => {});
+
   if (next === total) return;
   total = next;
   listeners.forEach((l) => l());
