@@ -88,7 +88,7 @@ type MediaCounts = {
 };
 
 // Groupe où je suis admin et où le contact n'est pas encore membre.
-type AdminGroup = { id: string; name: string; memberCount: number };
+type AdminGroup = { id: string; name: string; photoUrl: string | null; memberCount: number };
 
 type MiniUser = { id: string; name: string; photoUrl: string | null };
 
@@ -98,6 +98,7 @@ type ConvListItem = {
   id: string;
   type: 'direct' | 'group';
   name: string | null;
+  photoUrl: string | null; // groupes
   members: ConvMember[];
 };
 
@@ -220,7 +221,12 @@ export default function ConversationDetailsScreen() {
           const contactAlreadyIn = c.members.some((m) => m.userId === userId);
           return iAmAdmin && !contactAlreadyIn;
         })
-        .map((c) => ({ id: c.id, name: c.name ?? '', memberCount: c.members.length }));
+        .map((c) => ({
+          id: c.id,
+          name: c.name ?? '',
+          photoUrl: c.photoUrl ?? null,
+          memberCount: c.members.length,
+        }));
       setAdminGroups(groups);
     } catch {
       setAdminGroups([]);
@@ -779,8 +785,8 @@ export default function ConversationDetailsScreen() {
                 onPress={() => addToGroup(g)}
                 disabled={!!addingTo}
               >
-                <View className="w-11 h-11 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center mr-3">
-                  <Ionicons name="people" size={20} color={NEXA} />
+                <View className="mr-3">
+                  <UserAvatar photoUrl={g.photoUrl} size={44} group />
                 </View>
                 <View className="flex-1">
                   <Text className="text-gray-900 dark:text-zinc-100 font-semibold" numberOfLines={1}>

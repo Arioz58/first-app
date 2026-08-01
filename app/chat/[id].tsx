@@ -96,6 +96,7 @@ type ConvMeta = {
   id: string;
   type: 'direct' | 'group';
   name: string | null;
+  photoUrl?: string | null; // groupes
   members: ConvMember[];
   ephemeralDuration: number | null;
   myMutedUntil: string | null;
@@ -400,6 +401,7 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [convType, setConvType] = useState<'direct' | 'group'>('direct');
+  const [groupPhoto, setGroupPhoto] = useState<string | null>(null);
   const [whoCanSend, setWhoCanSend] = useState<'all' | 'admins'>('all');
   const [myRole, setMyRole] = useState<'admin' | 'moderator' | 'member'>('member');
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
@@ -524,6 +526,7 @@ export default function ChatScreen() {
         // Métadonnées de la conversation → identifier l'autre participant (conv directe).
         const meta = await apiRequest<ConvMeta>(`/conversations/${id}`);
         setConvType(meta.type);
+        setGroupPhoto(meta.photoUrl ?? null);
         setEphemeralDuration(meta.ephemeralDuration);
         setMutedUntil(meta.myMutedUntil);
         setWhoCanSend(meta.whoCanSend ?? 'all');
@@ -618,6 +621,13 @@ export default function ChatScreen() {
           },
         );
 
+        // Photo du groupe changée (par moi depuis les détails, ou par un autre admin) :
+        // le header suit sans qu'on ait à rouvrir la conversation.
+        socket.on('group_updated', (d: { conversationId: string; photoUrl?: string | null }) => {
+          if (d.conversationId !== id) return;
+          setGroupPhoto(d.photoUrl ?? null);
+        });
+
         // Reconnexion — retour au premier plan, ou réseau retrouvé. La conversation a été
         // quittée côté serveur en même temps que la connexion : sans ce rattrapage, l'écran
         // resterait ouvert sans plus rien recevoir, et sans les messages arrivés entre-temps.
@@ -649,6 +659,7 @@ export default function ChatScreen() {
       socket?.off('message_deleted');
       socket?.off('peer_typing');
       socket?.off('presence_update');
+      socket?.off('group_updated');
       socket?.off('connect');
       // On arrête proprement notre propre indicateur de frappe.
       if (typingStopRef.current) clearTimeout(typingStopRef.current);
@@ -1171,9 +1182,7 @@ export default function ChatScreen() {
         {/* Avatar + point de statut */}
         <TouchableOpacity onPress={openDetails} className="ml-1">
           {convType === 'group' ? (
-            <View className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center">
-              <Ionicons name="people" size={20} color={NEXA} />
-            </View>
+            <UserAvatar photoUrl={groupPhoto} size={48} group />
           ) : (
             <View>
               <UserAvatar photoUrl={header?.photoUrl ?? null} name={displayName} size={48} />

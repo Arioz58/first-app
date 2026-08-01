@@ -340,13 +340,7 @@ export default function GroupDetailsScreen() {
           <View className="items-center -mt-11 pb-5 px-6">
             <TouchableOpacity disabled={!isAdmin || uploading} onPress={changePhoto} activeOpacity={0.85}>
               <View className="rounded-full bg-white dark:bg-zinc-900 p-1">
-                {data.photoUrl ? (
-                  <UserAvatar photoUrl={data.photoUrl} name={data.name ?? ''} size={96} />
-                ) : (
-                  <View className="w-24 h-24 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center">
-                    <Ionicons name="people" size={44} color={NEXA} />
-                  </View>
-                )}
+                <UserAvatar photoUrl={data.photoUrl} size={96} group />
               </View>
               {isAdmin && (
                 <View className="absolute bottom-1 right-1 w-8 h-8 rounded-full bg-nexa items-center justify-center border-2 border-white">

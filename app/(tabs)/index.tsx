@@ -67,6 +67,7 @@ type SearchMsg = {
   conversation: {
     type: 'direct' | 'group';
     name: string | null;
+    photoUrl: string | null; // groupes
     members: { userId: string; user: { id: string; name: string; photoUrl: string | null } }[];
   };
 };
@@ -86,6 +87,7 @@ type Conversation = {
   id: string;
   type: 'direct' | 'group';
   name: string | null;
+  photoUrl: string | null; // groupes
   members: Member[];
   messages: Message[];
   unreadCount: number;
@@ -506,9 +508,7 @@ export default function ConversationsScreen() {
               delayLongPress={300}
             >
               {item.type === 'group' ? (
-                <View className="w-14 h-14 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center">
-                  <Ionicons name="people" size={26} color={NEXA} />
-                </View>
+                <UserAvatar photoUrl={item.photoUrl} size={56} group />
               ) : (
                 <UserAvatar photoUrl={other?.user.photoUrl} name={other?.user.name} size={56} />
               )}
@@ -707,9 +707,7 @@ function SearchResults({
                 onPress={() => onOpenConv(c)}
               >
                 {c.type === 'group' ? (
-                  <View className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center">
-                    <Ionicons name="people" size={22} color={NEXA} />
-                  </View>
+                  <UserAvatar photoUrl={c.photoUrl} size={48} group />
                 ) : (
                   <UserAvatar photoUrl={other?.user.photoUrl} name={other?.user.name} size={48} />
                 )}
@@ -735,9 +733,7 @@ function SearchResults({
                 onPress={() => onOpenMessage(m)}
               >
                 {m.conversation.type === 'group' ? (
-                  <View className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center">
-                    <Ionicons name="people" size={22} color={NEXA} />
-                  </View>
+                  <UserAvatar photoUrl={m.conversation.photoUrl} size={48} group />
                 ) : (
                   <UserAvatar photoUrl={avatar?.photoUrl} name={avatar?.name} size={48} />
                 )}
