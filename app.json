@@ -18,7 +18,14 @@
         "NSPhotoLibraryUsageDescription": "Nexa accède à votre galerie pour choisir des photos et vidéos à publier en story.",
         "NSPhotoLibraryAddUsageDescription": "Nexa peut enregistrer des médias dans votre galerie.",
         "NSContactsUsageDescription": "Nexa utilise vos contacts pour retrouver qui utilise déjà l'application et inviter les autres. Vos contacts ne sont jamais stockés.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSUserActivityTypes": [
+          "INSendMessageIntent"
+        ]
+      },
+      "appleTeamId": "9JH8GHKDVY",
+      "entitlements": {
+        "com.apple.developer.usernotifications.communication": true
       }
     },
     "android": {
@@ -68,6 +75,14 @@
       "expo-localization",
       "expo-audio",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#1E40AF",
+          "defaultChannel": "default"
+        }
+      ],
+      [
         "expo-contacts",
         {
           "contactsPermission": "Nexa utilise vos contacts pour retrouver qui utilise déjà l'application et inviter les autres. Vos contacts ne sont jamais stockés."
@@ -80,7 +95,8 @@
           "savePhotosPermission": "Nexa enregistre dans votre galerie les photos et vidéos que vous choisissez.",
           "isAccessMediaLocationEnabled": false
         }
-      ]
+      ],
+      "@bacons/apple-targets"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -617,6 +617,22 @@ export default function ChatScreen() {
             if (d.lastSeenAt) setLastSeen(d.lastSeenAt);
           },
         );
+
+        // Reconnexion — retour au premier plan, ou réseau retrouvé. La conversation a été
+        // quittée côté serveur en même temps que la connexion : sans ce rattrapage, l'écran
+        // resterait ouvert sans plus rien recevoir, et sans les messages arrivés entre-temps.
+        socket.on('connect', () => {
+          socket.emit('join_conversation', id);
+          apiRequest<Message[]>(`/conversations/${id}/messages`)
+            .then((history) => {
+              // Marqués avant le rendu : ce sont des messages rattrapés, pas des arrivées
+              // en direct — les animer ferait défiler tout l'historique.
+              for (const m of history) seenIdsRef.current.add(m.id);
+              setMessages(history.reverse());
+              apiRequest(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
+            })
+            .catch(() => {});
+        });
       } catch {
         router.replace('/(tabs)');
       } finally {
@@ -633,6 +649,7 @@ export default function ChatScreen() {
       socket?.off('message_deleted');
       socket?.off('peer_typing');
       socket?.off('presence_update');
+      socket?.off('connect');
       // On arrête proprement notre propre indicateur de frappe.
       if (typingStopRef.current) clearTimeout(typingStopRef.current);
       if (peerTypingRef.current) clearTimeout(peerTypingRef.current);

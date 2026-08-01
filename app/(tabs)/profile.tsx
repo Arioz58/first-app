@@ -26,6 +26,7 @@ import QrCode from '../../components/QrCode';
 import { apiRequest } from '../../lib/api';
 import { SUPPORTED_LANGUAGES, setAppLanguage } from '../../lib/i18n';
 import { clearTokens } from '../../lib/storage';
+import { unregisterPushToken } from '../../lib/notifications';
 import { disconnectSocket } from '../../lib/socket';
 import { requestContactsSegment } from '../../lib/tabsNav';
 import { getThemePref, setThemePref, useThemeColors, type ThemePref } from '../../lib/theme';
@@ -141,6 +142,9 @@ export default function ProfileScreen() {
         text: t('logout'),
         style: 'destructive',
         onPress: async () => {
+          // Avant d'effacer la session : la requête a besoin du jeton d'accès, et
+          // l'appareil ne doit plus recevoir les notifications de ce compte.
+          await unregisterPushToken();
           disconnectSocket();
           await clearTokens();
           router.replace('/(auth)/welcome');

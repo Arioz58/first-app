@@ -183,9 +183,15 @@ export default function ConversationsScreen() {
 
     socket.on('added_to_group', () => fetchConversations());
 
+    // Reconnexion (retour au premier plan, réseau retrouvé) : les `conversation_updated`
+    // émis pendant la coupure sont perdus. `useFocusEffect` ne rejoue pas au retour
+    // d'arrière-plan — l'écran n'a jamais perdu le focus — d'où ce rechargement.
+    socket.on('connect', () => fetchConversations());
+
     return () => {
       socket.off('conversation_updated');
       socket.off('added_to_group');
+      socket.off('connect');
     };
   }, []);
 

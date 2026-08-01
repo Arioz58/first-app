@@ -1,6 +1,8 @@
 import { Image, Text, View } from 'react-native';
 
-// Avatar circulaire réutilisable : photo de profil ou initiale sur fond vert nexa.
+// Avatar circulaire réutilisable : photo de profil ou initiale sur fond bleu nexa.
+// ⚠️ Ces couleurs sont redessinées à l'identique dans l'extension de notification iOS
+// (`targets/notification`) : les changer ici demande de les y reporter.
 export function UserAvatar({
   photoUrl,
   name,
