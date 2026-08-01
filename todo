@@ -16,17 +16,18 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 
 [FAIT 24/07] Dans les story affiché uniquement les story de ses amis.
 
-[A FAIRE] Messages systeme dans la conversation (bandeaux automatiques centres) :
+[FAIT 27/07] Messages systeme dans la conversation (bandeaux automatiques centres) :
   - "X a rejoint le groupe" / a quitte / a ete ajoute
   - "Messages ephemeres actives (24h/7j/30j)" / desactives quand qqn change le reglage
-  - "Chiffrement de bout en bout" -> le client PREVOIT d'ajouter l'E2E, donc ce message deviendra legitime.
+  → `createSystemMessage` (messages.service) émet un message `type:'system'` dont le `content` est un JSON `{ k: clé i18n, by, ...params }` : la traduction se fait côté app, dans la langue du LECTEUR (clés `system.*`), rendu en bandeau centré. 9 événements couverts : group_created / group_renamed / member_added / member_removed / member_left / ephemeral_on / ephemeral_off / role_set / role_removed. Exclus des non-lus (`type != 'system'` dans le COUNT), exclus de la recherche, pas de push.
+  [A FAIRE] "Chiffrement de bout en bout" -> uniquement APRES le vrai E2E (item suivant), sinon le bandeau serait factuellement faux.
     ⚠️ note CLAUDE.md : E2EE = pas en V1 (incompatible moderation + dashboard admin + loi turque KVKK, acces autorites). Prevu V2 si demande client. A trancher avant de l'implementer : on perd la moderation centralisee.
 
 [A FAIRE - E2E chiffrement] (repousse le 29/07, a faire avant le bandeau systeme "chiffre de bout en bout")
   Decisions prises : VRAI E2E (serveur aveugle), conversations DIRECTES d'abord.
   Crypto retenue : react-native-libsodium (primitives eprouvees, module natif -> rebuild EAS) + protocoles standards Signal par-dessus (X3DH pour etablir la session, Double Ratchet pour la forward secrecy). PAS libsignal pur (aucun binding RN maintenu = mur en Expo). Ne JAMAIS inventer d'algo ; suivre la spec + vecteurs de test ; audit externe conseille avant prod.
   Plan : Ph1 cles (identity + signed prekey + one-time prekeys, cle privee en Keychain/expo-secure-store, endpoints POST/GET /users/.../keys). Ph2 direct X3DH + chiffrement session. Ph3 Double Ratchet. Ph4 groupes (sender keys). Ph5 medias (chiffrer avant upload S3). Ph6 bandeau systeme "chiffre de bout en bout".
-  ⚠️ Impacts a assumer : casse la recherche serveur des messages (-> recherche locale), l'apercu dans les push FCM (-> generique), la moderation centralisee (-> via signalement), risque legal KVKK (pas d'acces autorites). Reinstall sans backup de cle = historique illisible.
+  ⚠️ Impacts a assumer : casse la recherche serveur des messages (-> recherche locale), l'apercu dans les notifications push (-> generique), la moderation centralisee (-> via signalement), risque legal KVKK (pas d'acces autorites). Reinstall sans backup de cle = historique illisible.
 
 [A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
   → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.
@@ -39,3 +40,22 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
   -> backend POST /users/contacts/match (batch E.164, gated+relationStatus, block-aware, non-stockage, rate limit 12/h) ; User.phone deja indexe (@unique).
   -> lib/contacts.ts (expo-contacts + normalisation libphonenumber-js) ; app/contacts.tsx (pre-consentement + SectionList) ; NSContactsUsageDescription dans app.json (ios.infoPlist) ; INVITE_URL placeholder store dans config.ts.
   Restant : lien d'invite = placeholder store (universal links plus tard) ; recherche locale dans le repertoire si besoin.
+  → [FAIT 30/07, suite] refonte de l'onglet Contacts : segments « Repertoire / Amis », le repertoire s'ouvre directement, l'ajout par numero passe en drawer (AddContactSheet) + bouton scan QR dans le header. ⚠️ `app/contacts.tsx` n'existe plus : le repertoire est devenu `components/DirectoryPanel.tsx`, monte dans l'onglet Contacts (`app/(tabs)/search.tsx`).
+
+[EN COURS - non commite au 01/08] Notifications push : bascule de firebase-admin vers le service Expo Push.
+  Cause : l'app enregistrait un jeton APNs (`getDevicePushTokenAsync`) la ou firebase-admin attend un jeton FCM → tous les envois echouaient, et le serveur purgeait le jeton au passage. Aucune notification n'arrivait donc jamais.
+  → mobile : `getExpoPushTokenAsync({ projectId })`, `unregisterPushToken()` appele AVANT `clearTokens()` a la deconnexion, ouverture depuis une notification (deep link vers la conversation, y compris app fermee via `getLastNotificationResponseAsync`), extension iOS `targets/notification` (@bacons/apple-targets) pour la vignette de l'expediteur.
+  → backend : `src/lib/push.ts` (expo-server-sdk) remplace `src/lib/fcm.ts` ; jeton rattache a UN SEUL compte (transaction) + `DELETE /users/me/fcm-token` ; titre/illustration adaptes aux groupes.
+  [01/08] Rendu demandé : titre = nom de la personne ou du groupe, corps = contenu du message, photo de la personne/du groupe à la place de l'icône de l'app.
+  → le titre et la photo sont recopiés dans les données du push par `sendPushToMany` (`displayName` / `avatarUrl`) : tous les envois en héritent (message, groupe, demande d'ami).
+  → iOS : l'extension reconstruit un `INSendMessageIntent` → notification de conversation (avatar rond à gauche), avec repli automatique sur une vignette à droite si l'API est refusée.
+  ⚠️ entitlement `usernotifications.communication` : ACCEPTÉ sur l'app (`com.berke.nexa2`), REFUSÉ sur l'extension, qui a son propre App ID (`com.berke.nexa2.notification-service`) — le déclarer là fait échouer TOUT le build. Déclaré dans `ios.entitlements` seulement. Pour l'avoir aussi sur l'extension : cocher « Communication Notifications » à la main sur developer.apple.com pour cet App ID, puis rétablir les 3 lignes dans `targets/notification/expo-target.config.js`.
+  → Android : photo posée en grande icône (à droite depuis Android 12) + petite icône monochrome `assets/images/notification-icon.png` et couleur `#1E40AF` (sans elle : carré blanc dans la barre d'état). Rendu « conversation » facon WhatsApp = `MessagingStyle`, non expose par expo-notifications → module natif, non fait.
+  [OK 01/08] Teste sur iPhone : notification recue, titre/corps corrects, photo de profil AFFICHEE A GAUCHE (a la place de l'icone de l'app). L'entitlement sur la seule app principale suffit — iOS le verifie sur l'app conteneur, pas sur l'extension. NE PAS le remettre sur l'extension.
+  Restant : tester sur Android (`npx expo prebuild -p android`) ; au 1er build EAS release, verifier que le profil de DISTRIBUTION est regenere avec la capability (sinon meme erreur de signature → `npx eas-cli credentials`).
+
+[FAIT - hors liste] Chantiers menes en parallele, pour memoire :
+  - 27/07 groupes enrichis : roles admin/moderateur/membre, permissions, « qui peut envoyer », ecran group/[id].
+  - 28/07 Actus : suggestions d'amis en orbite animee.
+  - 29/07 mode sombre (auto systeme + choix manuel dans le Profil) ; refonte de l'onglet « Vous » (stats, QR de profil, sections en cartes) ; scheme de l'app renomme firstapp → nexa.
+  - 30-31/07 refonte visuelle du chat : barre de saisie en verre + clavier synchronise nativement, flou progressif en haut du fil, bulles en degrade avec heure, albums (plusieurs medias d'un meme envoi), vocaux (onde + vitesse de lecture), visionneuse de documents in-app.

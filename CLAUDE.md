@@ -27,14 +27,16 @@ Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintena
 - **Point « en ligne » conservé en vert** (`bg-green-500`) : convention universelle de statut, volontairement pas bleu.
 - `lib/bubbleColors.ts` : palette de personnalisation (choix perso des bulles) — défaut désormais `#1E40AF`, mais la palette garde de la variété (dont des verts) car ce sont des choix utilisateur, pas la marque.
 - Tab bar : **native iOS** (`expo-router/unstable-native-tabs`) avec SF Symbols — pas de tab bar custom JS ; onglet actif teinté via `tintColor="#1E40AF"` sur `<NativeTabs>`.
+- **Mode clair / sombre** (depuis le 29 juil. 2026) : variants `dark:` de NativeWind pilotés par `lib/theme.ts` (`colorScheme.set`), préférence `system` (défaut) / `light` / `dark` persistée en SecureStore, restaurée par `initTheme()` dans `app/_layout.tsx` **avant le rendu**, réglable dans le Profil. Pour les props de couleur en dur (icônes, `ActivityIndicator`, `LinearGradient`), utiliser le hook `useThemeColors()` — palette sémantique (`canvas`/`surface`/`card`/`content`/`muted`/`faint`/`line`/`nexa`), l'accent passant de `#1E40AF` (clair) à un bleu plus lumineux en sombre. `userInterfaceStyle: "automatic"` dans `app.json`.
+- **Titres d'écran** : `text-4xl font-bold text-nexa` en tête des onglets (Discussion, Actus, Contacts, Vous).
 - ⚠️ Le renom `#128C7E`→`#1E40AF` a touché `app.json` (adaptiveIcon + splash sombre `#0f172a`) → **rebuild natif requis** pour voir ces changements-là (les couleurs JS suffisent d'un reload Metro).
 - **Taille de police = échelle Tailwind d'origine** (partout). ⚠️ **Ne pas** réintroduire d'override `theme.extend.fontSize` pour « agrandir » globalement : essayé le 25-26 juil. 2026, abandonné car agrandir la police **sans** agrandir les paddings/margins/hauteurs de conteneurs **casse les proportions** (texte trop gros dans des boîtes inchangées). L'agrandissement « +1 cran » validé n'a été conservé que sur les **avatars/éléments** (dimensions en props, cf. `UserAvatar` défaut 52 + `size={}` montés). Si un jour « plus grand » est redemandé : le faire **par écran**, police **et** espacements ensemble.
 
 ### Planning
 
 - **Mois 1** ✅ — Architecture, BDD, auth (JWT + OTP), profils, consentement politique de confidentialité, i18n (tr/fr/en)
-- **Mois 2** ✅ — Messagerie temps réel (Socket.io), groupes (API + rooms + gestion membres), FCM push, frontend mobile complet
-- **Mois 3** 🔄 — Stories 24h ✅ (éditeur texte riche + photo/vidéo, voir section dédiée), médias S3 ✅ (upload presigned + CloudFront), chat enrichi ✅ (Phases A→D : header profil, présence/frappe, mute/éphémères/épinglés/favoris, pièces jointes — voir section dédiée), localisation 🔜 (**⚠️ inclure : afficher la localisation dans le profil utilisateur — gated par `privacyLocation` + `locationEnabled`, déjà câblés Phase 3 mais sans donnée à afficher ; voir `GET /users/:id/profile`**), version web Next.js 🔜
+- **Mois 2** ✅ — Messagerie temps réel (Socket.io), groupes (API + rooms + gestion membres), push, frontend mobile complet
+- **Mois 3** 🔄 — Stories 24h ✅ (éditeur texte riche + photo/vidéo, voir section dédiée), médias S3 ✅ (upload presigned + CloudFront), chat enrichi ✅ (Phases A→E : header profil, présence/frappe, mute/éphémères/épinglés/favoris, pièces jointes, refonte visuelle « verre » — voir section dédiée), messages système ✅, groupes enrichis (rôles/permissions) ✅, mode sombre ✅, répertoire de contacts façon WhatsApp ✅, QR de profil ✅, notifications push Expo 🔄 (**chantier en cours, non commité — voir section dédiée**), localisation 🔜 (**⚠️ inclure : afficher la localisation dans le profil utilisateur — gated par `privacyLocation` + `locationEnabled`, déjà câblés Phase 3 mais sans donnée à afficher ; voir `GET /users/:id/profile`**), version web Next.js 🔜
 - **Mois 4** — Appels audio/vidéo (Agora.io)
 - **Mois 5** — Points, leaderboard, anti-spam, module B2B, dashboard admin, site vitrine + DA verte + sécurité hardening (rate limiting, helmet, validation stricte)
 - **Mois 6** — QA, corrections, mise en production (App Store + Google Play + AWS)
@@ -62,7 +64,7 @@ first-app-web/       → Next.js — à créer au Mois 3
 - **expo-localization** — détection de la langue de l'appareil (i18n auto au 1er lancement) ⚠️ **module natif** (config plugin → rebuild requis après install)
 - **expo-secure-store** — stockage JWT chiffré (pas AsyncStorage)
 - **socket.io-client** — messagerie temps réel
-- **expo-notifications + expo-device** — notifications push FCM
+- **expo-notifications + expo-device** — notifications push (jeton **Expo**, pas le jeton natif de l'appareil) + notifications locales in-app
 - **react-native-gesture-handler + react-native-reanimated** — gestes (pinch/pan/rotation) + animations (éditeur de stories, zoom viewer)
 - **expo-image-picker + expo-image-manipulator** — sélection + crop des médias stories
 - **expo-camera** — caméra in-app (photo/vidéo) pour les stories ⚠️ **module natif** (rebuild requis après install) ; permissions caméra/micro déclarées dans `app.json`
@@ -74,7 +76,18 @@ first-app-web/       → Next.js — à créer au Mois 3
 - **expo-audio** — enregistrement et lecture des messages vocaux (plugin `expo-audio` dans `app.json`) ⚠️ **module natif** (rebuild requis)
 - **expo-document-picker** — pièces jointes documents du chat ⚠️ **module natif** (rebuild requis)
 - **expo-file-system** — copie du fond de conversation en stockage permanent + téléchargement groupé des médias (import `expo-file-system/legacy`)
-- **expo-blur** — overlay de chargement du viewer stories ⚠️ **module natif** (rebuild requis)
+- **expo-blur** — overlay de chargement du viewer stories + surfaces en verre du chat (`GlassSurface`, `ProgressiveBlur`) ⚠️ **module natif** (rebuild requis)
+- **react-native-keyboard-controller** — position du clavier mesurée **nativement image par image** (`KeyboardProvider` monté dans `app/_layout.tsx`, `KeyboardAvoidingView` dans le chat) ⚠️ **module natif** (rebuild requis) — ne pas confondre avec le `KeyboardAvoidingView` de React Native, qui décale d'un bloc avec un temps de retard
+- **@react-native-masked-view/masked-view** — masques en dégradé du flou progressif (`ProgressiveBlur`)
+- **expo-contacts** + **libphonenumber-js** — répertoire du téléphone et normalisation E.164 (voir section Répertoire) ⚠️ **module natif** (rebuild requis)
+- **expo-sms** — SMS d'invitation pré-rempli pour les contacts sans compte
+- **expo-sharing** — partage de fichiers **iOS + Android** (`content://` via FileProvider) ; ⚠️ ne pas repartir sur `Share` de React Native, qui n'accepte pas d'URL `file://` sur Android
+- **expo-media-library** — enregistrement des médias dans la galerie ⚠️ **module natif** (rebuild requis)
+- **react-native-webview** — visionneuse de documents in-app (`DocumentViewer`) ⚠️ **module natif** (rebuild requis)
+- **qrcode** (+ `@types/qrcode`) — QR de profil rendu en **pur JS** (aucun module natif), voir `components/QrCode.tsx`
+- **expo-haptics** — retours haptiques (capture, envoi, scan QR, tuiles de pièces jointes)
+- **@bacons/apple-targets** — extension de notification iOS (`targets/`) ⚠️ **module natif** (rebuild requis) — voir la section Notifications push
+- **moti** — animations déclaratives de l'onboarding et de `StepIndicator`
 - TypeScript strict
 
 ### Backend (`first-app-backend/`)
@@ -84,7 +97,7 @@ first-app-web/       → Next.js — à créer au Mois 3
 - Redis (ElastiCache en prod, Docker en local)
 - Socket.io — messagerie temps réel + vérification membership
 - JWT access (15min) + refresh tokens (7j) — auto-refresh côté client
-- firebase-admin — FCM push notifications
+- **expo-server-sdk** — envoi des notifications push par le service Expo (🔄 remplace `firebase-admin`, supprimé)
 - Nettoyage automatique stories expirées toutes les heures + messages éphémères expirés toutes les 5 min (setInterval)
 
 ### Infrastructure AWS (prod)
@@ -94,9 +107,9 @@ first-app-web/       → Next.js — à créer au Mois 3
 ### Services tiers
 
 - **Agora.io** — appels audio/vidéo (Mois 4)
-- **Firebase / FCM** — notifications push
-  - ⚠️ iOS : nécessite compte Apple Developer payant (99€/an) + clés APNs dans Firebase Console
-  - Android : fonctionne directement
+- **Expo Push** — notifications push (🔄 remplace l'envoi direct Firebase/FCM, chantier en cours — voir la section dédiée)
+  - Expo relaie vers APNs et FCM avec ses propres identifiants : plus de clé APNs ni de `GoogleService-Info.plist` côté serveur
+  - ⚠️ iOS : compte Apple Developer payant (99€/an) toujours nécessaire — c'est lui qui porte l'entitlement `aps-environment`
 - **Google Maps + expo-location** — localisation (Mois 3)
 - **Twilio** — OTP SMS en prod (simulé en local via console.log)
 
@@ -106,7 +119,7 @@ first-app-web/       → Next.js — à créer au Mois 3
 
 ```
 app/
-├── _layout.tsx          # Layout racine — vérif JWT expiry + handler SESSION_EXPIRED global + socket + FCM
+├── _layout.tsx          # Layout racine — vérif JWT expiry + handler SESSION_EXPIRED global + socket + push + `initTheme()` (thème restauré avant rendu) + `KeyboardProvider` + listeners sociaux (notifs in-app) + **ouverture depuis une notification** (deep link → `/chat/<conversationId>`)
 ├── globals.css
 ├── (auth)/              # Flux : welcome → security → intro → login → verify
 │   ├── _layout.tsx
@@ -117,11 +130,11 @@ app/
 │   └── verify.tsx       # Saisie OTP (6 champs individuels, auto-avance, coller) → JWT + socket + FCM ; renvoi du code après cooldown `RESEND_COOLDOWN` (45s, compte à rebours) ; si `isNew=1` → POST /users/me/privacy-consent (consentement + version PRIVACY_POLICY_VERSION)
 ├── (tabs)/
 │   ├── _layout.tsx      # NativeTabs (SF Symbols) — 5 onglets : Messages · Actus (`sparkles`) · Contacts · Appels · Vous
-│   ├── index.tsx        # Liste conversations : **barre de recherche toujours visible** (résultats groupés Discussions [local] / Messages [GET /conversations/search-messages, débouncé] / Contacts [GET /friends?q=]), filtres (Toutes/Non lues/Favoris/Groupes), avatars réels, horodatage, badge non-lus, épinglé/favori/muet, temps réel via `conversation_updated`, appui long → actions, FAB « + ». ⚠️ Plus de StoriesBar ici (migrée vers Actus)
-│   ├── updates.tsx      # Onglet **Actus** : StoriesBar en tête (fixe) + 2 segments — **Activité** (demandes d'ami reçues + suggestions « personnes que tu connais peut-être ») et **Communauté** (coquille « en développement » : points/leaderboard/B2B au Mois 5)
-│   ├── search.tsx       # Onglet **« Contacts »** (fichier/route toujours `search`), segmenté « Recherche / Amis ». Recherche = par NUMÉRO (CountryPicker, debounce, carte → profil, cas limites, historique récent). Amis = `<FriendsPanel>` + pastille rouge des demandes en attente sur le segment. Ouverture sur un segment imposé via `consumeContactsSegment()`
+│   ├── index.tsx        # Onglet **« Discussion »** (libellé i18n `messages`) — liste des conversations : **barre de recherche toujours visible** (résultats groupés Discussions [local] / Messages [GET /conversations/search-messages, débouncé] / Contacts [GET /friends?q=]), filtres (Toutes/Non lues/Favoris/Groupes), avatars réels, horodatage, badge non-lus, épinglé/favori/muet, temps réel via `conversation_updated`, appui long → actions, FAB « + » (`FAB_BOTTOM = 96`, la tab bar native flotte au-dessus du contenu) → nouvelle conversation / nouveau groupe / **répertoire** (`requestContactsSegment('directory')`). ⚠️ Plus de StoriesBar ici (migrée vers Actus)
+│   ├── updates.tsx      # Onglet **Actus** : StoriesBar en tête (fixe) + 2 segments — **Activité** (demandes d'ami reçues + `<FloatingSuggestions>` : suggestions « personnes que tu connais peut-être » en **orbite animée façon iCloud** autour de mon avatar, tap → profil) et **Communauté** (coquille « en développement » : points/leaderboard/B2B au Mois 5)
+│   ├── search.tsx       # Onglet **« Contacts »** (fichier/route toujours `search`), segmenté **« Répertoire / Amis »**. Répertoire = `<DirectoryPanel>` (carnet du téléphone, voir section Répertoire). Amis = `<FriendsPanel>` + pastille rouge des demandes en attente sur le segment. Header : bouton **scan QR** (`<QrScanner>`, overlay magic-move depuis le bouton via `measureInWindow`) + bouton **ajout par numéro** (`<AddContactSheet>` — l'ancienne recherche par NUMÉRO, désormais en drawer : CountryPicker, debounce, carte → profil, historique récent). Ouverture sur un segment imposé via `consumeContactsSegment()`
 │   ├── saved.tsx        # Appels (à implémenter Mois 4)
-│   └── profile.tsx      # Profil (thème bleu nexa) : avatar+photo (upload S3 ; appui = Changer/Supprimer → PATCH photoUrl:null = retour à l'initiale), édition nom + bio (modale combinée, bio 140 car.), sélecteur de langue i18n (PATCH + persistance), statut consentement confidentialité, déconnexion → welcome
+│   └── profile.tsx      # Onglet **« Vous »** (refonte 29 juil.) : bannière + avatar+photo (upload S3 ; appui = Changer/Supprimer → PATCH photoUrl:null = retour à l'initiale), édition nom + bio (modale combinée, bio 140 car.), **3 stats cliquables** (amis/groupes/stories via `GET /users/me/stats`), **QR de profil** (modale, `Linking.createURL('/user/<id>')` → `nexa://user/<id>`) + partage du contact, puis sections en cartes : Préférences (**apparence** clair/sombre/système, langue i18n), Confidentialité (réglages, bloqués, statut de consentement), À propos (version), déconnexion → welcome (⚠️ `unregisterPushToken()` **avant** `clearTokens()`)
 ├── chat/
 │   ├── [id].tsx         # Écran chat temps réel (Socket.io) — header profil, présence/frappe, médias, vocal, épinglés/favoris (voir section Chat)
 │   ├── details.tsx      # Panneau de détails d'une conversation directe (UI en cartes, en-tête bannière + point de présence) : profil gated, actions rapides (appel/vidéo/favori/muet/recherche), personnalisation (fond/surnom/couleur de bulle/éphémère), **groupes (gated ami : créer un groupe avec / ajouter à un groupe admin)**, **amis en commun (avatars empilés → liste)**, médias (tuiles compteur), épinglés, favoris, gestion (effacer/bloquer/signaler)
@@ -140,6 +153,23 @@ app/
     └── create.tsx       # Éditeur de story (photo/vidéo, textes stylables multiples, guides d'alignement, upload S3)
 components/
 ├── StoriesBar.tsx       # Barre stories horizontale (style WhatsApp, useFocusEffect refresh) — montée en tête de l'onglet **Actus** (`updates.tsx`), plus dans Messages
+├── DirectoryPanel.tsx   # Répertoire du téléphone (SectionList) : raccourcis + « Sur Nexa » + « Inviter » (SMS) — voir section Répertoire
+├── AddContactSheet.tsx  # Drawer d'ajout par NUMÉRO (CountryPicker + POST /users/search-by-phone + historique récent)
+├── QrCode.tsx           # QR de profil rendu en pur JS (lib `qrcode`, segments de modules → peu de Views ; fond blanc fixe même en sombre)
+├── QrScanner.tsx        # Scanner QR plein écran (expo-camera) — ouverture « magic move » depuis le bouton, cadre animé, haptique
+├── GlassSurface.tsx     # Surface en verre dépoli (`BlurView` iOS / translucide Android) + `FLOATING_SHADOW` — barre de saisie et boutons flottants du chat
+├── ProgressiveBlur.tsx  # Flou en **dégradé** (couches masquées empilées, `MaskedView`) — bord haut du fil de discussion
+├── AttachmentSheet.tsx  # Drawer de pièces jointes (tuiles en cascade, haptique ; `coming` = action annoncée non livrée)
+├── PendingMediaBar.tsx  # Vignettes des médias choisis mais pas encore envoyés (miniature vidéo, retrait à l'unité)
+├── MediaGrid.tsx        # Grille d'un **album** (médias d'un même envoi) : 2 côte à côte, 3 = 2+1, 4+ = 2×2 avec « +N »
+├── AlbumViewer.tsx      # Visionneuse d'album plein écran (pagination + bande de miniatures)
+├── DocumentViewer.tsx   # Visionneuse de documents in-app (WebView : PDF/texte/images ; repli téléchargement sinon). ⚠️ **Aucun** service de conversion tiers (ne pas envoyer d'URL privée à Google Docs Viewer)
+├── VoiceRecorderBar.tsx # Barre d'enregistrement vocal (chrono, annulation, envoi) + niveaux via `metering`
+├── VoiceWaveform.tsx    # Tracé d'onde : `LiveWaveform` (fenêtre glissante à l'enregistrement) et lecture avec seek au doigt
+├── FloatingSuggestions.tsx # Suggestions d'amis en orbite animée (onglet Actus)
+├── BlueAura.tsx         # Lueur bleue diffuse de l'onboarding (28 disques superposés, pur JS — aucun bord visible)
+├── StepIndicator.tsx    # Indicateur d'étape de l'onboarding (5 segments, Moti)
+├── DismissKeyboard.tsx  # Ferme le clavier au tap dans le vide (`accessible={false}`) ; pour les listes préférer `keyboardShouldPersistTaps="handled"` + `keyboardDismissMode="on-drag"`
 ├── StoryBackground.tsx  # Fond de story texte (uni / dégradé via expo-linear-gradient)
 ├── StoryCamera.tsx      # Caméra in-app (photo tap / vidéo maintien, flash, switch)
 ├── VideoTrimmer.tsx     # Rognage vidéo : preview + timeline à miniatures (trim headless)
@@ -147,7 +177,7 @@ components/
 ├── BottomSheet.tsx      # Drawer bottom-sheet réutilisable (SHEET_SPRING partagé : montage différé piloté par `visible`, drag-to-dismiss sur la poignée, backdrop en fondu) — hauteur fixe (liste) ou auto (contenu)
 ├── CountryPicker.tsx    # Sélecteur pays + indicatif — utilise `BottomSheet` (hauteur fixe 85% + recherche + FlatList)
 ├── UserAvatar.tsx       # Avatar circulaire réutilisable (photo ou initiale sur fond bleu nexa, prop `size`)
-├── FriendsPanel.tsx     # Panneau Amis (sous-onglets mes amis / reçues / envoyées, actions inline, badge demandes) — segment de l'onglet Recherche
+├── FriendsPanel.tsx     # Panneau Amis (sous-onglets mes amis / reçues / envoyées, actions inline, badge demandes) — segment « Amis » de l'onglet Contacts
 ├── ChatBackground.tsx   # Fond de conversation (asset nexa clair/sombre par défaut, preset couleur/dégradé, ou photo perso)
 ├── ChatWallpaperPicker.tsx # Sélecteur de fond de conversation (BottomSheet, presets + galerie, aperçu live)
 ├── MessageMedia.tsx     # Rendu d'une pièce jointe dans la bulle selon `mediaType` (image/gif, vidéo, audio, document)
@@ -159,7 +189,7 @@ lib/
 ├── socket.ts            # Client Socket.io singleton
 ├── storage.ts           # SecureStore : accessToken, refreshToken, userId, language + réglages **locaux** de conversation (fond, surnom/couleur de bulle, horodatage « effacer »)
 ├── useUserSearch.ts     # Hook recherche d'utilisateurs (debounce 300ms + anti-race) → GET /users/search
-├── notifications.ts     # Demande permission + enregistre token FCM au backend
+├── notifications.ts     # Permission + enregistrement du **jeton Expo** au backend (`getExpoPushTokenAsync`) + `unregisterPushToken()` à la déconnexion
 ├── countries.ts         # Liste pays avec drapeau, nom et indicatif téléphonique
 ├── storyText.ts         # Styles texte stories (couleur, fond none/translucent/solid, gras/italique/souligné) — partagé create + viewer
 ├── storyBackgrounds.ts  # Presets de fond stories texte (id → couleurs unies/dégradés)
@@ -170,6 +200,11 @@ lib/
 ├── chatNav.ts           # Relais mémoire one-shot : détails → chat, « défiler jusqu'à ce message » (épinglé/favori)
 ├── tabsNav.ts           # Relais mémoire one-shot : FAB → onglet Contacts, segment à ouvrir (un param de route ne se redéclencherait pas au 2ᵉ passage, valeur identique)
 ├── friendRequests.ts    # Store externe (`useSyncExternalStore`) du **compteur de demandes d'ami reçues** — alimente le badge natif de l'onglet Contacts et la pastille du segment Amis
+├── config.ts            # BASE_URL (local/Railway selon `__DEV__`) + PRIVACY_URL / PRIVACY_POLICY_VERSION + GIPHY_API_KEY + INVITE_URL (⚠️ 3 placeholders + 1 clé en dur, cf. Sécurité)
+├── theme.ts             # Thème clair/sombre : `ThemePref`, `getThemePref`/`setThemePref` (SecureStore), `initTheme()` au démarrage, `useThemeColors()` (palette sémantique pour les props en dur)
+├── contacts.ts          # Répertoire : permission, normalisation E.164 (libphonenumber-js, région déduite de `expo-localization`, défaut TR), `POST /users/contacts/match`, **cache mémoire** du dernier résultat (évite de re-synchroniser à chaque bascule de segment → rate limit)
+├── documents.ts         # Documents : extension/MIME, `isViewableDocument` (formats rendus par WebView), téléchargement + partage **iOS et Android** (`expo-sharing`, type MIME requis côté Android)
+├── audioMode.ts         # Session audio : `enterRecordingMode` / `enterPlaybackMode`. ⚠️ À rappeler après tout enregistrement — sur iOS `allowsRecording:true` laisse la sortie sur l'**écouteur téléphonique** (son très faible) pour tout ce qui est lu ensuite, vocaux comme vidéos
 └── i18n.ts              # Config i18next (tr/fr/en) + SUPPORTED_LANGUAGES + setAppLanguage (changeLanguage + persistance SecureStore) ; restaure la langue sauvegardée au démarrage
 locales/
 ├── tr.json
@@ -186,7 +221,7 @@ src/
 │   ├── prisma.ts                   # Client Prisma singleton
 │   ├── redis.ts                    # Client Redis
 │   ├── socket.ts                   # Socket.io : auth JWT + membership check + events + helpers emit
-│   └── fcm.ts                      # Firebase Admin : sendPushNotification / sendPushToMany
+│   └── push.ts                     # **Expo Push** : sendPushNotification / sendPushToMany (⚠️ remplace `fcm.ts`/firebase-admin — voir section Notifications push)
 ├── middlewares/
 │   └── auth.middleware.ts          # Middleware JWT → AuthRequest.userId
 └── modules/
@@ -210,6 +245,8 @@ POST /auth/refresh                                → renouvelle access token
 
 GET  /users/search?q=                             → recherche d'utilisateurs (nom/numéro, ≥2 car., exclut soi-même, max 20 → id/name/photoUrl) — usage interne (membres de groupe)
 POST /users/search-by-phone                       → recherche contact par numéro exact `{ phone }` (rate limit Redis 20/h, block-aware = compte masqué si bloqué, self-detection, photo gated) → `{ found, self?, user: { id, name, phone, photoUrl, relationStatus } }`
+POST /users/contacts/match                        → matching du carnet d'adresses `{ phones: string[] }` en E.164 (rate limit 12/h, block-aware, gated + `relationStatus`, **non-stockage** des numéros) → cartes des contacts inscrits
+GET  /users/me/stats                              → compteurs du profil `{ friends, groups, stories }`
 GET  /users/:id/profile                           → profil complet gated (404 si bloqué) → champs filtrés selon la matrice de confidentialité + `relationStatus`, `requestId`, `isFriend`, `mutualFriendsCount`, `canMessage`, `canCall`, `canFriendRequest`, `online`
 GET  /users/:id/mutual-friends                    → liste des amis en commun (id/name/photoUrl, triés par nom ; 404 si bloqué)
 
@@ -231,7 +268,8 @@ GET  /users/me                                    → profil complet
 PATCH /users/me                                   → mise à jour (name, photoUrl, language sur User ; bio/privacyPresence/privacyPhoto routés sur Profile — `bio` effaçable via chaîne vide)
 POST /users/me/privacy-consent                    → consentement politique de confidentialité (body `{ version }` → privacyConsent + privacyConsentAt + privacyPolicyVersion)
 PATCH /users/me/privacy                            → met à jour la matrice de confidentialité (valeurs validées serveur : triple everyone/friends/nobody, friend_requests everyone/friends_of_friends/nobody, locationEnabled bool)
-POST /users/me/fcm-token                          → enregistrer/mettre à jour token FCM
+POST /users/me/fcm-token                          → enregistrer le jeton push (colonne `User.fcmToken`, contient désormais un **jeton Expo**) ; ⚠️ **transaction** qui le retire de tous les autres comptes — un jeton identifie un APPAREIL, pas un utilisateur
+DELETE /users/me/fcm-token                        → libérer le jeton (appelé à la déconnexion, **avant** d'effacer la session)
 
 POST /conversations/direct                        → créer/récupérer conv directe (refus si bloqué ou privacyMessages l'interdit ; non-ami avec privacyMessages=everyone → conv en « demande » pour la cible)
 POST /conversations/group                         → créer groupe (admin = créateur)
@@ -276,23 +314,24 @@ DELETE /stories/:storyId                          → supprimer (propriétaire u
 ```
 // Client → Serveur (vérification membership sur chaque event)
 join_conversation(conversationId)
-send_message({ conversationId, content, type, mediaUrl?, mediaType?, fileName?, fileSize?, mimeType?, durationMs? })
+send_message({ conversationId, content, type, mediaUrl?, mediaType?, fileName?, fileSize?, mimeType?, durationMs?, batchId? })
+                                                  → `batchId` = médias envoyés d'un même geste (migration `message_batch`) : regroupés en UN album à l'affichage. Généré côté app (`<userId>-<timestamp>`) et non côté serveur, chaque média partant dans son propre `send_message`
 typing({ conversationId, typing })                → relayé aux autres membres en `peer_typing`
 leave_conversation(conversationId)
 
 // Serveur → Client
-new_message(message)                              → refus si blocage (conv directe) ; pièces jointes + `hasLink` (détection d'URL) + `expiresAt` si la conv est en éphémère ; + FCM push aux destinataires offline **acceptés** (pas de push aux membres en « demande » accepted=false → badge uniquement, ni aux membres ayant coupé les notifs `mutedUntil` dans le futur). ⚠️ **Messages système** (`type:'system'`, `content` = JSON `{ k: clé i18n, by, ...params }`) émis via `createSystemMessage` (`messages.service`) sur événements groupe/éphémère (member_added/removed/left, group_created/renamed, ephemeral_on/off) : rendus en **bandeau centré** côté app (traduits via `system.*` selon la langue du lecteur), **exclus des non-lus** (`type != 'system'` dans le COUNT), exclus de la recherche, pas de push. Pas de message « chiffrement bout en bout » tant que l'E2E n'existe pas (V2).
+new_message(message)                              → refus si blocage (conv directe) ; pièces jointes + `hasLink` (détection d'URL) + `expiresAt` si la conv est en éphémère ; + push aux destinataires offline **acceptés** (titre = nom de l'expéditeur en direct, **nom du groupe** en groupe avec « Alice : … » dans le corps ; illustration = photo du groupe ou de l'expéditeur ; `data` porte `conversationId`, `senderName`, `avatarUrl` — lus par l'extension iOS) (pas de push aux membres en « demande » accepted=false → badge uniquement, ni aux membres ayant coupé les notifs `mutedUntil` dans le futur). ⚠️ **Messages système** (`type:'system'`, `content` = JSON `{ k: clé i18n, by, ...params }`) émis via `createSystemMessage` (`messages.service`) sur événements groupe/éphémère (member_added/removed/left, group_created/renamed, ephemeral_on/off) : rendus en **bandeau centré** côté app (traduits via `system.*` selon la langue du lecteur), **exclus des non-lus** (`type != 'system'` dans le COUNT), exclus de la recherche, pas de push. Pas de message « chiffrement bout en bout » tant que l'E2E n'existe pas (V2).
 peer_typing({ conversationId, userId, typing })   → le correspondant écrit (masquage auto après 5 s côté app)
 conversation_updated({ conversationId, message }) → **room `user:<id>`** (≠ `new_message` qui part dans `conv:<id>`) : met à jour la LISTE des conversations même si la conv n'a jamais été ouverte dans la session. Payload allégé volontairement (l'objet `message` complet embarque `sender` avec téléphone + token FCM). Émis à tous les membres, **émetteur inclus** (ses autres appareils)
 presence_update({ userId, online, lastSeenAt })   → connexion/déconnexion d'un contact (gating `privacyLastSeen` appliqué serveur)
-members_added({ conversationId, memberIds })      → + FCM push aux nouveaux membres
-member_removed({ conversationId, userId })        → + FCM push au membre expulsé
+members_added({ conversationId, memberIds })      → + push aux nouveaux membres
+member_removed({ conversationId, userId })        → + push au membre expulsé
 member_left({ conversationId, userId, newAdminId? })
 added_to_group({ conversationId })
 removed_from_group({ conversationId })            → redirige vers accueil côté app
-group_updated({ conversationId, name })           → + FCM push à tous les membres
-friend_request_received({ from })                 → demande d'ami reçue (in-app si en ligne, sinon FCM push) — notif locale côté app via `_layout`
-friend_request_accepted({ by })                   → demande d'ami acceptée (in-app si en ligne, sinon FCM push)
+group_updated({ conversationId, name })           → + push à tous les membres
+friend_request_received({ from })                 → demande d'ami reçue (in-app si en ligne, sinon push) — notif locale côté app via `_layout`
+friend_request_accepted({ by })                   → demande d'ami acceptée (in-app si en ligne, sinon push)
 error({ message })
 ```
 
@@ -380,7 +419,7 @@ Pipeline média : source (**galerie** expo-image-picker / **caméra in-app** exp
 
 ---
 
-## Chat enrichi (Phases A→D) ✅ — détail
+## Chat enrichi (Phases A→E) ✅ — détail
 
 Chantier livré par phases, sur `app/chat/[id].tsx` + `app/chat/details.tsx` + `app/chat/media.tsx`.
 Principe transverse : **ce qui est cosmétique et personnel reste local** (SecureStore), **ce qui est partagé ou modéré passe par le backend**.
@@ -404,7 +443,7 @@ Principe transverse : **ce qui est cosmétique et personnel reste local** (Secur
 
 ### Phase C — Mute / éphémères / épinglés / favoris
 
-- **Mute** (`PATCH /:id/mute`) : 8 h / 1 semaine / toujours (sentinelle `MUTE_FOREVER` = an 2999) / réactiver. Par membre (`ConversationMember.mutedUntil`) → **le backend saute le push FCM** si muté.
+- **Mute** (`PATCH /:id/mute`) : 8 h / 1 semaine / toujours (sentinelle `MUTE_FOREVER` = an 2999) / réactiver. Par membre (`ConversationMember.mutedUntil`) → **le backend saute le push** si muté.
 - **Éphémères** (`PATCH /:id/ephemeral`) : 24 h / 7 j / 30 j / off, **au niveau de la conversation** (`Conversation.ephemeralDuration`, en secondes). À l'envoi, le socket calcule `expiresAt` ; un `setInterval` (5 min) purge les expirés ; toutes les requêtes médias filtrent sur `expiresAt`.
 - **Épinglés** (`PinnedMessage`) = **niveau conversation, visibles par tous**. **Favoris** (`StarredMessage`) = **personnels**. Appui long sur une bulle → menu épingler/favori ; `GET /:id/flags` fournit les ids pour décorer les bulles (icônes 📌 / ⭐).
 - Depuis les détails, tap sur un épinglé/favori → `lib/chatNav.ts` (relais one-shot) → retour au chat, `scrollToIndex` + **surlignage jaune 2,5 s**. Si le message n'est pas dans la page chargée, l'action est ignorée (pas de fetch remontant).
@@ -418,6 +457,18 @@ Principe transverse : **ce qui est cosmétique et personnel reste local** (Secur
 - **Galerie par catégorie** (`chat/media.tsx`) depuis les détails : grille 3 colonnes (media/gifs) ou liste (documents/audio/links), pagination curseur 30/page, **téléchargement groupé** dans le stockage de l'app.
 - Détection de lien côté serveur (`hasLink`) → alimente la catégorie « Liens » sans re-scanner les textes.
 
+### Phase E — Refonte visuelle (30-31 juil. 2026)
+
+- **Zone de saisie flottante en verre** (`GlassSurface`) : le fond de conversation transparaît. ⚠️ Le `BlurView` n'est appliqué **que sur iOS** (rendu natif) ; sur Android on pose une surface légèrement translucide — `expo-blur` y est bien plus coûteux et la barre est redessinée à chaque frappe.
+- **Clavier synchronisé** : `KeyboardAvoidingView` de **react-native-keyboard-controller** (position mesurée nativement image par image). Celui de React Native décale d'un bloc, et le piloter depuis l'événement JS laisse un décalage visible.
+- **Flou progressif en haut du fil** (`ProgressiveBlur`) — retiré en bas, où la barre de saisie en verre joue déjà ce rôle. Technique reprise de `beautiful-expo` (MIT) et **réécrite** : le paquet d'origine exige Reanimated 4.5 / SDK 57, le projet est en SDK 54.
+- **Débordement de liste FIXE sous la barre de saisie** (`COMPOSER_OVERLAP = 240`), dimensionné sur le pire cas (champ 5 lignes + vignettes) : c'est lui qui fait passer les messages *derrière* le verre au défilement. ⚠️ Volontairement **pas** une hauteur mesurée — la barre change de taille à chaque frappe et recalculer la mise en page de la liste à ce rythme la fait saccader.
+- **Bulles** : « moi » en **dégradé** (`bubbleGradient` dérivé de la couleur d'accent choisie), **heure** dans la bulle, header en carte flottante, animation d'entrée `MessageEnter` (⚠️ ressort sur la translation, jamais sur l'échelle — cf. règle « pas de rebond »).
+- **Albums** : plusieurs médias envoyés d'un même geste partagent un `batchId` et s'affichent en **une** ligne (`MediaGrid` → `AlbumViewer`). Plafond `MAX_PENDING = 10` (chaque pièce part en upload S3 depuis le mobile). Avant envoi, les médias choisis attendent dans `PendingMediaBar` (retrait à l'unité).
+- **Vocaux** : `VoiceRecorderBar` (chrono, annulation, envoi ; < 1 s ignoré) avec tracé d'onde live dérivé du `metering` — plage resserrée −50→0 dB et courbe accentuée, sinon le tracé paraît plat. À la lecture (`AudioMessage`), onde **seekable au doigt** + **multiplicateur de vitesse** (1×/1,5×/2×).
+- **Documents** : `DocumentViewer` in-app (WebView). Formats bureautiques non garantis → écran de repli avec téléchargement. ⚠️ Aucun service de conversion tiers (transmettre l'URL d'un document privé à Google Docs Viewer reviendrait à le lui faire télécharger).
+- ⚠️ **Session audio** : toujours repasser par `enterPlaybackMode()` (`lib/audioMode.ts`) après un enregistrement, sinon iOS garde `PlayAndRecord` et **tout** ce qui est lu ensuite sort par l'écouteur téléphonique.
+
 ### Points d'attention
 
 - `GIPHY_API_KEY` est dans `lib/config.ts` ; sans clé (ou avec le placeholder), `GiphyPicker` affiche un écran « clé absente » au lieu de planter. ⚠️ **clé en dur à sortir avant la prod** (voir Sécurité).
@@ -426,7 +477,7 @@ Principe transverse : **ce qui est cosmétique et personnel reste local** (Secur
 
 ---
 
-## Liste de conversations (page Messages) ✅
+## Liste de conversations (onglet Discussion) ✅
 
 Migration `conversation_list` : `ConversationMember.lastReadAt` / `pinnedAt` / `favoritedAt` (tout est **par membre**, donc personnel — épingler une conv ne l'épingle pas chez l'autre).
 
@@ -443,7 +494,47 @@ Migration `conversation_list` : `ConversationMember.lastReadAt` / `pinnedAt` / `
 - **Onglet « Contacts »** (`tabs.contacts`, SF Symbol `person.2.fill`). ⚠️ La **route reste `search`** (`app/(tabs)/search.tsx`) — seul le libellé a changé ; ne pas renommer le fichier sans mettre à jour `NativeTabs.Trigger name="search"` et tous les `router.navigate('/(tabs)/search')`.
 - **Badge natif de demandes d'ami** : `<Badge>` d'`expo-router/unstable-native-tabs`. ⚠️ Le « petit point » sans texte est documenté **Android uniquement** ; sur iOS le badge s'affiche comme une **chaîne** → on passe le **nombre** (`99+` au-delà). `hidden` quand le compteur est à 0.
 - **Source du compteur** : `lib/friendRequests.ts`, store externe via `useSyncExternalStore`. Un Context ne conviendrait pas : le badge est rendu par `(tabs)/_layout`, qui serait aussi le fournisseur — un composant ne peut pas consommer le Context qu'il fournit. Alimenté par (1) `refreshPendingFriendRequests()` au démarrage dans `app/_layout.tsx`, (2) `incrementPendingFriendRequests()` sur socket `friend_request_received` (optimiste, sans aller-retour), (3) `setPendingFriendRequests(r.length)` dans le `load()` de `FriendsPanel` — ce `load()` étant rejoué au focus **et** après chaque accept/refuse, c'est le point unique de resynchronisation.
-- **FAB « + »** en bas à droite de la page Messages → `BottomSheet` (hauteur auto) à 3 actions : nouvelle conversation (`chat/new`), nouveau groupe (`group/new`), ajouter un contact (→ onglet Contacts, segment recherche via `requestContactsSegment`). Il **remplace** l'ancienne icône « nouveau groupe » du header, devenue redondante.
+- **FAB « + »** en bas à droite de la page Discussion → `BottomSheet` (hauteur auto) à 3 actions : nouvelle conversation (`chat/new`), nouveau groupe (`group/new`), ajouter un contact (→ onglet Contacts, **segment Répertoire** via `requestContactsSegment('directory')`). Il **remplace** l'ancienne icône « nouveau groupe » du header, devenue redondante.
+
+## Répertoire & ajout de contacts (façon WhatsApp) ✅
+
+Livré le 30 juil. 2026 — la saisie manuelle d'un numéro était jugée trop longue par le client (frein à l'adoption).
+
+- **`components/DirectoryPanel.tsx`** (segment « Répertoire » de l'onglet Contacts) : écran de **pré-consentement** avant toute lecture du carnet, puis `SectionList` — raccourcis Nouveau groupe / Nouvelle conversation en tête, section **« Sur Nexa »** (bouton Message ou Ajouter en ami selon `relationStatus`), section **« Inviter »** (SMS pré-rempli via `expo-sms`, lien `INVITE_URL`).
+- **`lib/contacts.ts`** : permission → lecture `expo-contacts` → normalisation **E.164** (`libphonenumber-js`, région déduite de `expo-localization`, défaut `TR` — « 0532… » → « +90532… ») → `POST /users/contacts/match`. **Cache mémoire** du dernier résultat : sans lui, chaque bascule de segment relancerait une synchronisation et mangerait le quota.
+- **Backend** `POST /users/contacts/match` : batch de numéros E.164 (filtre `/^\+\d{6,15}$/`), **rate limit Redis 12/h/utilisateur** (anti-scraping), block-aware, champs gated + `relationStatus`, **aucun stockage** des numéros reçus. `User.phone` est déjà `@unique` (indexé).
+- **Décisions assumées** : numéros envoyés **en clair** (hacher des numéros = fausse sécurité, l'espace est énumérable — même constat que WhatsApp) ; **non-stockage** des non-inscrits ; consentement explicite ; rate limit. Hachage envisageable en V2 si le juriste KVKK l'exige.
+- **Ajout par numéro** conservé en repli : `components/AddContactSheet.tsx` (drawer depuis le header de l'onglet Contacts) — `POST /users/search-by-phone`, historique récent en SecureStore.
+- **QR de profil** : `QrCode` (rendu pur JS) affiche `Linking.createURL('/user/<id>')` → `nexa://user/<id>` en build ; `QrScanner` (expo-camera) ouvre le profil scanné. Le `scheme` de l'app est **`nexa`** (rebranding du 29 juil., ex-`firstapp`).
+- ⏳ Restant : `INVITE_URL` est un **placeholder** (vrai lien store / universal link une fois publié) ; pas de recherche locale dans le répertoire.
+
+## Notifications push — bascule Expo (chantier en cours 🔄)
+
+⚠️ **Non commité au 1er août 2026** (mobile : `app.json`, `app/_layout.tsx`, `lib/notifications.ts`, `app/(tabs)/profile.tsx`, `targets/` — backend : `src/lib/push.ts`, suppression de `src/lib/fcm.ts`, `users.*`, `socket.ts`).
+
+- **Pourquoi** : l'app enregistrait un jeton **APNs** (`getDevicePushTokenAsync`) là où firebase-admin attend un jeton **FCM**. Tous les envois échouaient, et le serveur purgeait le jeton en réponse à l'erreur. → passage au **service push d'Expo** (`expo-server-sdk` côté backend, `getExpoPushTokenAsync({ projectId })` côté app), qui relaie vers Apple et Google avec ses propres identifiants : plus de clé APNs ni de `GoogleService-Info.plist` à gérer côté serveur.
+- **Un jeton = un APPAREIL, pas un utilisateur** : `updateFcmToken` est une **transaction** qui retire le jeton de tous les autres comptes ; `DELETE /users/me/fcm-token` le libère à la déconnexion (appelé **avant** `clearTokens()`, la requête a besoin du JWT). Sans ça, deux comptes utilisés successivement sur le même téléphone recevaient tous deux leurs notifications dessus — jusqu'à être notifié de ses propres messages.
+- Les jetons d'ancien format (APNs bruts) sont détectés par `Expo.isExpoPushToken` et purgés : l'appareil en réenregistre un correct au lancement suivant. **La colonne reste `User.fcmToken`** (pas de migration) mais contient désormais un `ExponentPushToken[…]`.
+- **Socket coupé en arrière-plan** (`AppState` → `pauseSocket()` / `resumeSocket()` dans `app/_layout.tsx`) : le serveur ne pousse qu'aux utilisateurs **hors ligne**, et une app en arrière-plan gardait son socket ouvert — donc restait « en ligne » quelques secondes, pendant lesquelles les messages partaient en événement socket dans le vide, **sans notification**. On ferme donc explicitement sur `background` (pas sur `inactive` : bascule d'app, centre de contrôle, appel entrant). Effet voulu : la présence « en ligne / vu le … » devient exacte.
+  - ⚠️ `pauseSocket` fait `socket.disconnect()` en **conservant l'instance** (les écrans gardent la référence obtenue à leur montage) ; `disconnectSocket()` — qui met l'instance à `null` — reste réservé au changement de compte. `connectSocket()` réutilise l'instance existante au lieu d'en créer une seconde, sinon écouteurs éparpillés et messages en double.
+  - `resumeSocket` **relit le jeton d'accès** avant de rouvrir : après une longue veille, l'ancien (15 min) est expiré et le serveur refuserait la connexion.
+  - Rattrapage à la reconnexion : le chat ré-émet `join_conversation` et recharge sa dernière page ; la liste des conversations se recharge (`useFocusEffect` ne rejoue pas au retour d'arrière-plan, l'écran n'ayant jamais perdu le focus).
+- **Ouverture depuis une notification** (`app/_layout.tsx`) : `addNotificationResponseReceivedListener` (app lancée) **+** `getLastNotificationResponseAsync` (app démarrée *par* la notification — l'événement est déjà passé au montage) → `router.push('/chat/<conversationId>')`.
+- **Mise en forme voulue (1ᵉʳ août)** : **titre** = nom de la personne ou du groupe, **corps** = contenu du message, **photo** de la personne ou du groupe à la place de l'icône de l'app. En **groupe**, l'expéditeur passe en **sous-titre** (iOS) : le serveur envoie le corps complet « Alice : salut » *et*, dans les données, `senderName` + `messageBody` séparés — l'extension iOS les rescinde, les plateformes sans sous-titre gardent la ligne complète.
+  - Le titre et l'image sont recopiés dans `data` par `sendPushToMany` (`displayName`, `avatarUrl`) : **tous** les appelants en héritent (message, ajout/retrait de groupe, renommage, demande d'ami), inutile de les repasser à la main.
+  - **iOS** : l'extension reconstruit un `INSendMessageIntent` (`INPerson` + `INImage`) et appelle `content.updating(from:)` → **notification de conversation** : avatar rond à gauche, à la place de l'icône de l'app. Repli automatique (`try?`) sur une pièce jointe — photo en vignette **à droite** — si l'API est refusée.
+  - ⚠️ **Groupes — les 3 lignes « groupe / expéditeur / message »** : le **sous-titre n'est pas un champ qu'on remplit**. Dès qu'une intention est appliquée, un `content.subtitle` posé à la main est ignoré ; c'est le système qui compose les deux premières lignes. Il faut réunir **trois** conditions, toutes nécessaires (constaté le 1er août 2026, deux tentatives ratées avant) :
+    1. **plusieurs `recipients`** dans l'`INSendMessageIntent` — c'est ce qui fait traiter la conversation comme un groupe ; avec `nil` ou un seul, la seconde ligne est **ignorée** ;
+    2. **`sender`** → **titre**, **`speakableGroupName`** → **sous-titre**. ⚠️ Vérifié sur iPhone : c'est l'**inverse** de ce qu'indique la doc communautaire. Les rôles sont donc **volontairement inversés** dans le code — le **groupe** est passé comme `sender`, l'**expéditeur** comme `speakableGroupName`. Ne pas « corriger » sans revérifier sur un appareil ;
+    3. la **photo est posée sur les deux** (`INPerson` du groupe + `setImage(…, forParameterNamed: \.speakableGroupName)`) : c'est la même image, et cela évite de dépendre de celle que le système consulte en premier.
+    En conversation directe, rien de tout ça — `recipients: nil`, pas de `speakableGroupName`, photo sur le `sender`.
+  - **Sans photo** : l'extension **dessine l'avatar par défaut** au lieu de laisser iOS retomber sur l'icône de l'app — l'**initiale** sur pastille pour une personne (`UserAvatar`), **deux silhouettes** (`person.2.fill`) pour un groupe (`Ionicons people` côté app), aux mêmes couleurs `#EFF6FF`/`#1E40AF`. Idem si le téléchargement de la photo échoue. ⚠️ Un groupe sans photo **ne retombe pas** sur le portrait de l'expéditeur (choix : l'avatar de groupe dit mieux d'où vient le message). ⚠️ Toujours la variante **claire** : une extension ne connaît pas le thème de l'appareil. **Android n'a pas d'équivalent** : sa grande icône vient d'une **URL** (`richContent.image`), donc sans photo il n'y a rien à afficher — il faudrait servir un avatar généré (route backend ou jeu de PNG sur S3/CloudFront), non fait.
+  - ✅ **Rendu confirmé sur iPhone le 1er août 2026** : la photo s'affiche bien **à gauche**, à la place de l'icône de l'app, avec l'entitlement porté par **la seule app principale** — iOS le vérifie sur l'app conteneur, pas sur le binaire de l'extension. **Ne pas** le rétablir sur l'extension : aucun gain, et le build casse (voir ci-dessous).
+  - ⚠️ **Entitlement `com.apple.developer.usernotifications.communication` : accepté sur l'app, refusé sur l'extension** (constaté le 1er août 2026, build vérifié). L'extension a son **propre App ID** (`com.berke.nexa2.notification-service`) ; le provisioning automatique active la capability « Communication Notifications » sur `com.berke.nexa2` mais **pas** sur celui de l'extension → `error: Entitlement … not found and could not be included in profile (in target 'NexaNotificationService')`, et **tout le build échoue**, pas seulement l'extension. Il est donc déclaré dans `ios.entitlements` uniquement, **pas** dans `targets/notification/expo-target.config.js`. Pour l'obtenir sur l'extension : cocher la capability à la main sur developer.apple.com (Identifiers → l'App ID de l'extension), puis rétablir les 3 lignes dans `expo-target.config.js`.
+  - **Android** : la photo part en `richContent.image` → `expo-notifications` la pose en **grande icône** (`setLargeIcon`) ; elle est à gauche jusqu'à Android 11, **à droite depuis Android 12** (changement de gabarit système). Un rendu « conversation » façon WhatsApp y demanderait `MessagingStyle` + shortcuts, **non exposé par `expo-notifications`** → module natif à écrire, non fait.
+  - **Petite icône Android** : `assets/images/notification-icon.png` (96×96, silhouette blanche + alpha, dérivée du logo) déclarée via le plugin `expo-notifications` avec `color: "#1E40AF"`. ⚠️ Sans elle, Android affiche l'icône de l'app pleine → **carré blanc** dans la barre d'état.
+- `app.json` : `appleTeamId`, `NSUserActivityTypes: ["INSendMessageIntent"]`, `ios.entitlements`, plugins `@bacons/apple-targets` et `expo-notifications`. **Rebuild natif requis** (`npx expo prebuild -p ios` puis build — `ios/` et `android/` sont gitignorés, donc régénérables).
+- ⏳ À vérifier avant de considérer le chantier clos : réception réelle sur les 2 iPhones (dont le rendu avatar, qui dépend de la signature) et sur **Android**.
 
 ## Social : amis, confidentialité, blocage (épopée multi-phases) 🔄
 
@@ -461,11 +552,11 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 ### Statut des phases
 
 - **Phase 1 ✅** — Fondation backend (modèles + migration `social_foundation`) + `relation.service` + `POST /users/search-by-phone` (rate limit Redis 20/h, block-aware, self, photo gated) + écran recherche par numéro (`(tabs)/search.tsx`) avec historique récent.
-- **Phase 2 ✅** — Amis E2E : module `social/friends.*` (envoyer/accepter/refuser/annuler/cooldown 7j/supprimer + listes) + `GET /users/:id/profile` gated ; **écran profil** (`app/user/[id].tsx`, skeleton, champs gated, boutons dynamiques selon `relationStatus`, message/appels selon canMessage/canCall, amis en commun) ; **`FriendsPanel`** (mes amis + reçues + envoyées, actions inline, badge demandes) intégré comme **segment « Amis » dans l'onglet Recherche** (`(tabs)/search.tsx`). La carte de recherche ouvre désormais le profil.
+- **Phase 2 ✅** — Amis E2E : module `social/friends.*` (envoyer/accepter/refuser/annuler/cooldown 7j/supprimer + listes) + `GET /users/:id/profile` gated ; **écran profil** (`app/user/[id].tsx`, skeleton, champs gated, boutons dynamiques selon `relationStatus`, message/appels selon canMessage/canCall, amis en commun) ; **`FriendsPanel`** (mes amis + reçues + envoyées, actions inline, badge demandes) intégré comme **segment « Amis » de l'onglet Contacts** (`(tabs)/search.tsx`). La carte de recherche ouvre désormais le profil.
 - **Phase 3 ✅** — `PATCH /users/me/privacy` (validation serveur) + écran **Confidentialité** (`app/privacy.tsx`, 8 réglages via `BottomSheet` + toggle localisation), accessible depuis le profil. Les règles sont déjà appliquées serveur (Phases 1-2).
 - **Phase 4 ✅** — `social/moderation.*` : `POST/DELETE/GET /blocks` (effets blocage : amitié + demandes supprimées, recherche/profil masqués) + `POST /reports` (4 catégories). Menu **« ... » Bloquer/Signaler** sur le profil + page **`app/blocked.tsx`** (accessible depuis Confidentialité). ⏳ Restant : masquer les messages existants côté bloqué + rejet d'appels (Mois 4).
 - **Phase 5 ✅** — Demandes de messages : `ConversationMember.accepted` (migration `message_requests`) ; `getOrCreateDirectConversation` applique blocage + `privacyMessages` (nobody/friends/everyone) et met la cible en « demande » si non-ami ; liste normale filtrée sur `accepted=true` ; `GET /conversations/requests` + accept/decline ; **socket `send_message`** refuse si blocage (direct) et **ne pousse pas** aux membres en demande (badge seul). Front : écran **`app/requests.tsx`** + **bannière badge** dans la liste des conversations. ⏳ Pas d'accusés de lecture dans l'app (donc rien à geler).
-- **Phase 6 ✅** — `social/notify.service.ts` : demande d'ami **reçue** + **acceptée** → push FCM si hors-ligne, sinon event socket → **notif in-app locale** (listeners globaux dans `_layout`). Demande de message = badge seul (Phase 5). ⏳ Appel entrant = Mois 4 (Agora).
+- **Phase 6 ✅** — `social/notify.service.ts` : demande d'ami **reçue** + **acceptée** → push si hors-ligne, sinon event socket → **notif in-app locale** (listeners globaux dans `_layout`). Demande de message = badge seul (Phase 5). ⏳ Appel entrant = Mois 4 (Agora).
 
 **→ Épopée sociale : Phases 1-6 terminées.** Restant transverse : afficher la localisation au profil (Mois 3, voir planning), masquer messages existants côté bloqué + rejet d'appels (Mois 4), notif appel entrant (Mois 4).
 
@@ -487,7 +578,9 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 - Chat : `assertMember` sur toutes les routes de conversation (médias, épinglés, favoris, mute, éphémère) — jamais d'accès à une conv dont on n'est pas membre
 - SecureStore côté client (chiffré, pas AsyncStorage)
 - Consentement à la politique de confidentialité intégré — case opt-in **obligatoire à l'inscription** (`login.tsx`, signup uniquement), persisté via `POST /users/me/privacy-consent` après création du compte (stocke `privacyConsent` + `privacyConsentAt` + `privacyPolicyVersion`) ; lien vers la politique = `PRIVACY_URL`, version = `PRIVACY_POLICY_VERSION` (`lib/config.ts`, ⚠️ **URL placeholder à remplacer** par la vraie page web)
-- `firebase-service-account.json` dans `.gitignore`
+- `firebase-service-account.json` dans `.gitignore` (devenu inutile depuis la bascule sur Expo Push, mais la règle reste)
+- Jeton push **rattaché à un seul compte** (transaction) et **libéré à la déconnexion** — un appareil ne reçoit jamais les notifications d'un compte qu'il a quitté
+- Répertoire : **pré-consentement** avant lecture du carnet, numéros **non stockés** côté serveur, rate limit 12/h (anti-scraping)
 
 ### À faire en Mois 5 (avant prod) ⚠️
 
@@ -517,23 +610,26 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 - Logs centralisés via AWS CloudWatch (en prod).
 - **Priorité features > finitions UI** — les polissages (tri, timestamps, animations) sont pour Mois 5/QA.
 - Médias : jamais stockés en BDD — uniquement URLs vers S3/CDN.
+- **Backlog** : le fichier **`todo`** à la racine du repo mobile fait foi pour ce qui reste à faire (items barrés = livrés, avec un résumé de ce qui a été fait). Le tenir à jour en même temps que ce fichier.
+- **Android** : le fichier **`android.md`** à la racine recense tout ce qui n'a pas été vérifié sur Android ou y demande un travail à part (le dev se fait sur iOS). À compléter dès qu'une livraison laisse un écart entre les deux plateformes.
 
 ## Notes techniques importantes
 
 - **Prisma v5** — ne pas upgrader en v7 (breaking changes majeurs sur la config datasource).
 - **OTP** simulé en local (log console). Remplacer par Twilio avant la mise en prod.
-- **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'`. **Langue détectée automatiquement au 1er lancement** depuis la langue de l'appareil (`expo-localization`, mappée sur tr/fr/en sinon turc) ; un choix explicite sauvegardé (SecureStore) prime ensuite. Modifiable via le profil (`setAppLanguage` + `PATCH /users/me`). Clés organisées par groupes imbriqués (`onboarding`, `auth`, `country_picker`, …) — **garder les 3 fichiers `locales/*.json` strictement alignés** (mêmes clés). Écrans déjà branchés sur `t()` : onboarding (welcome/security/intro/login/verify), profil, CountryPicker, liste conversations (`(tabs)/index`), chat (`chat/[id]`), création de groupe (`group/new`), StoriesBar, viewer/éditeur de stories (`story/[id]`, `story/create`), caméra in-app (`StoryCamera`). Groupes de clés dédiés : `stories.*` (viewer + éditeur, ex. `time_now`/`minutes_short`/`views`), `camera.*`, `chat.*`, `details.*`, `media.*`, `mute.*`, `ephemeral.*`, `moderation.*`, `relation.*`, `fab.*`, `new_chat.*`. ⚠️ `tabs.search` a été **supprimé** (onglet renommé) : le libellé du segment recherche est `search_phone.segment`, celui de l'onglet `tabs.contacts`. **Pas encore traduits** : écran stub `saved` (Appels, Mois 4). `VideoTrimmer`/`MediaViewer` n'ont pas de texte.
+- **i18n** : initialisé dans `app/_layout.tsx` via `import '../lib/i18n'`. **Langue détectée automatiquement au 1er lancement** depuis la langue de l'appareil (`expo-localization`, mappée sur tr/fr/en sinon turc) ; un choix explicite sauvegardé (SecureStore) prime ensuite. Modifiable via le profil (`setAppLanguage` + `PATCH /users/me`). Clés organisées par groupes imbriqués (`onboarding`, `auth`, `country_picker`, …) — **garder les 3 fichiers `locales/*.json` strictement alignés** (mêmes clés). Écrans déjà branchés sur `t()` : onboarding (welcome/security/intro/login/verify), profil, CountryPicker, liste conversations (`(tabs)/index`), chat (`chat/[id]`), création de groupe (`group/new`), StoriesBar, viewer/éditeur de stories (`story/[id]`, `story/create`), caméra in-app (`StoryCamera`). Groupes de clés dédiés : `stories.*` (viewer + éditeur, ex. `time_now`/`minutes_short`/`views`), `camera.*`, `chat.*`, `details.*`, `media.*`, `mute.*`, `ephemeral.*`, `moderation.*`, `relation.*`, `fab.*`, `new_chat.*`, `system.*` (bandeaux de messages système), `theme.*` (apparence), `sections.*`/`about.*`/`profile_stats.*`/`share.*` (onglet Vous), `contacts_sync.*`/`scan.*` (répertoire + QR), `filters.*`/`conv_actions.*`/`preview.*`/`time.*` (liste des conversations), `roles.*` (groupes), `activity.*`/`community.*` (Actus), `notifications.*`. ⚠️ `tabs.search` a été **supprimé** (onglet renommé) : le libellé du segment recherche est `search_phone.segment`, celui de l'onglet `tabs.contacts`. **Pas encore traduits** : écran stub `saved` (Appels, Mois 4). `VideoTrimmer`/`MediaViewer` n'ont pas de texte.
 - En local : PostgreSQL + Redis tournent via `docker-compose up -d` dans `first-app-backend/`.
-- **FCM iOS** : nécessite compte Apple Developer payant (99€/an) + clés APNs dans Firebase Console.
+- **Push iOS** : compte Apple Developer payant (99€/an) requis (entitlement `aps-environment`). Depuis la bascule sur Expo Push, **plus besoin de clés APNs dans Firebase Console** ni de `GoogleService-Info.plist` — voir la section Notifications push.
 - **`lib/config.ts`** contient aussi `PRIVACY_URL` / `PRIVACY_POLICY_VERSION` (⚠️ URL placeholder) et `GIPHY_API_KEY` (⚠️ clé en dur, à sortir avant la prod).
 - **URL backend** : centralisée dans `lib/config.ts` (`BASE_URL = __DEV__ ? LOCAL_URL : CLOUD_URL`). En dev (Metro) → backend **local** (mettre à jour `LOCAL_URL` à chaque changement de réseau Wi-Fi) ; en build release/EAS → backend **Railway** (`CLOUD_URL`). `api.ts` et `socket.ts` importent `BASE_URL` depuis `config.ts`.
 - **Native tabs** : import depuis `expo-router/unstable-native-tabs` — API peut changer (alpha).
-- **Bundle ID iOS** : `com.berke.nexa2` (rebranding Nexa ; historique `org.name.firstapp` → `com.berke.firstapp` → `com.berke.nexa2`).
-- **Signing iPhone physique** : `npx expo run:ios --device` échoue sur un bundle neuf (`No profiles for '…' were found`) car il ne passe pas `-allowProvisioningUpdates` à `xcodebuild`, seul moyen de faire créer l'App ID + le profil. Solution **une fois par bundle**, sans passer par Xcode : `xcodebuild -workspace ios/firstapp.xcworkspace -scheme firstapp -configuration Debug -destination "id=<UDID>" -allowProvisioningUpdates build`. ⚠️ L'iPhone doit être **branché, déverrouillé et écran allumé** pendant toute la commande, sinon elle échoue sur `Development services need to be enabled` / `Timed out waiting for all destinations` — un message trompeur qui ne parle pas de signature, et `xcodebuild` **sort alors en code 0** malgré l'échec.
+- **Bundle ID iOS** : `com.berke.nexa2` (rebranding Nexa ; historique `org.name.firstapp` → `com.berke.firstapp` → `com.berke.nexa2`). **Scheme deep link** : `nexa` (ex-`firstapp`, changé le 29 juil. 2026) — utilisé par le QR de profil (`nexa://user/<id>`).
+- **`reactCompiler: true`** dans `app.json` (`experiments`) : le compilateur React mémoïse automatiquement. Ne pas s'en remettre à lui pour la stabilité des **gestes** ni des **worklets** — continuer à stabiliser explicitement (`useMemo`, callbacks via ref), cf. `StoryCamera`/`VideoTrimmer`.
+- **Signing iPhone physique** : `npx expo run:ios --device` échoue sur un bundle neuf (`No profiles for '…' were found`) car il ne passe pas `-allowProvisioningUpdates` à `xcodebuild`, seul moyen de faire créer l'App ID + le profil. Solution **une fois par bundle** (et à rejouer après tout ajout de capability, ex. Communication Notifications), sans passer par Xcode : `xcodebuild -workspace ios/Nexa.xcworkspace -scheme Nexa -configuration Debug -destination "id=<UDID>" -allowProvisioningUpdates build` (⚠️ le projet généré s'appelle **`Nexa`** depuis le rebranding, plus `firstapp`). ⚠️ L'iPhone doit être **branché, déverrouillé et écran allumé** pendant toute la commande, sinon elle échoue sur `Development services need to be enabled` / `Timed out waiting for all destinations` — un message trompeur qui ne parle pas de signature, et `xcodebuild` **sort alors en code 0** malgré l'échec.
 - **Icône iOS 26 (Liquid Glass)** : bundle **Icon Composer** `assets/images/Nexa-icon-comp.icon` référencé via `ios.icon` dans `app.json` (supporté SDK 54+). Fallback auto sur iOS ancien ; `icon.png` racine = Android + base. Modif **native** → rebuild EAS requis ; bien **committer le `.icon`** avant le build.
 - **expo-video** : module natif (plugin config) — après son install, **rebuild requis** (`npx expo run:ios`), un reload Metro ne suffit pas.
 - **Stories texts** : colonne `Json` côté backend → ajouter un champ de style ne nécessite **aucune migration** ni changement backend (passe par `lib/storyText.ts` côté app).
 - **Réglages locaux de conversation** (fond, surnom, couleur de bulle, « effacer ») : stockés en **SecureStore**, donc **aucun backend** — ne pas chercher d'endpoint côté serveur pour ces réglages.
-- **Migrations chat** : `phase_c_mute_ephemeral_pin_star` (mute, éphémères, `PinnedMessage`, `StarredMessage`), `phase_d_message_media` (`mediaUrl`/`mediaType`/`fileName`/`fileSize`/`mimeType`/`durationMs`/`hasLink`) et `conversation_list` (`lastReadAt`/`pinnedAt`/`favoritedAt` sur `ConversationMember`).
+- **Migrations chat** : `phase_c_mute_ephemeral_pin_star` (mute, éphémères, `PinnedMessage`, `StarredMessage`), `phase_d_message_media` (`mediaUrl`/`mediaType`/`fileName`/`fileSize`/`mimeType`/`durationMs`/`hasLink`) , `conversation_list` (`lastReadAt`/`pinnedAt`/`favoritedAt` sur `ConversationMember`) et `message_batch` (`Message.batchId` — médias d'un même envoi regroupés en album).
 - ⚠️ **Ne pas confondre** : `PinnedMessage`/`StarredMessage` = un **message** épinglé/favori dans une conversation (Phase C) ; `ConversationMember.pinnedAt`/`favoritedAt` = la **conversation entière** épinglée/favorite dans la liste. Endpoints voisins mais distincts (`/messages/:msgId/pin` vs `/:id/pin`).
 - **Groupes enrichis** (migration `group_roles_info`) : `Conversation.photoUrl`/`description`/`whoCanSend` (`all`|`admins`) ; `ConversationMember.role` accepte `admin`|`moderator`|`member` (String, pas de migration schéma). Permissions : **admin** = tout ; **modérateur** = ajouter/retirer membres (pas un admin), épingler/supprimer messages ; **membre** = poster (sauf groupe `whoCanSend:admins`) + supprimer ses propres messages. Rôles gérés dans `messages.service` (helper `canManage`), `GET /conversations/:id` renvoie `whoCanSend`/`myRole`/membres+rôles. Le socket `send_message` refuse si `whoCanSend:admins` et pas admin/mod. Écran = `app/group/[id].tsx`.
