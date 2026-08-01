@@ -80,20 +80,15 @@ export function AudioMessage({ uri, tint }: { uri: string; tint: string }) {
           <Text className="text-xs text-gray-500 dark:text-zinc-400">
             {fmt(current > 0 ? current : duration)}
           </Text>
-          {/* La vitesse n'apparaît qu'une fois la lecture engagée : sur un vocal jamais
-              ouvert, c'est un réglage sans objet qui alourdit la bulle. */}
-          {current > 0 || playing ? (
-            <TouchableOpacity onPress={cycleRate} hitSlop={8} className="ml-auto">
-              <View
-                className="px-1.5 py-0.5 rounded-md"
-                style={{ backgroundColor: `${tint}1A` }} // même teinte, très diluée
-              >
-                <Text className="text-[11px] font-semibold" style={{ color: tint }}>
-                  {rate}×
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ) : null}
+          {/* Toujours présente, même avant lecture : c'est un réglage qu'on veut pouvoir
+              poser AVANT d'écouter, et une commande qui apparaît en cours de route se
+              remarque mal. Pastille pleine en permanence — sur une carte claire, un fond
+              teinté dilué se confond avec elle. */}
+          <TouchableOpacity onPress={cycleRate} hitSlop={10} className="ml-auto">
+            <View className="px-2.5 py-1 rounded-full" style={{ backgroundColor: tint }}>
+              <Text className="text-xs font-bold text-white">{rate}×</Text>
+            </View>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
