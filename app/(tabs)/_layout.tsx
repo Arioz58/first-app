@@ -1,17 +1,24 @@
 import { Badge, Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useTranslation } from 'react-i18next';
 import { usePendingFriendRequests } from '../../lib/friendRequests';
+import { useUnreadMessages } from '../../lib/unreadMessages';
 import '../../lib/i18n';
 
 export default function TabLayout() {
   const { t } = useTranslation();
   const pendingRequests = usePendingFriendRequests();
+  const unreadMessages = useUnreadMessages();
 
   return (
     <NativeTabs tintColor="#1E40AF">
       <NativeTabs.Trigger name="index">
         <Label>{t('tabs.messages')}</Label>
         <Icon sf="message.fill" />
+        {/* Même contrainte que le badge des demandes d'ami plus bas : le nombre, et
+            l'élément n'est pas monté du tout tant qu'il n'y a rien à signaler. */}
+        {unreadMessages > 0 && (
+          <Badge>{unreadMessages > 99 ? '99+' : String(unreadMessages)}</Badge>
+        )}
       </NativeTabs.Trigger>
 
       {/* Actus (stories + activité + communauté) — les stories vivent ici, plus

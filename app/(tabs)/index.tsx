@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../../lib/api';
 import { getSocket } from '../../lib/socket';
+import { bumpUnread, clearUnread, setUnreadCounts } from '../../lib/unreadMessages';
 import { getUserId } from '../../lib/storage';
 import { requestContactsSegment } from '../../lib/tabsNav';
 import BottomSheet from '../../components/BottomSheet';
@@ -131,6 +132,8 @@ export default function ConversationsScreen() {
     try {
       const data = await apiRequest<Conversation[]>('/conversations');
       setConversations(sortConversations(data));
+      // Le badge de l'onglet suit la liste : le serveur fait foi à chaque rechargement.
+      setUnreadCounts(Object.fromEntries(data.map((c) => [c.id, c.unreadCount])));
     } catch {
     } finally {
       setLoading(false);
@@ -168,6 +171,7 @@ export default function ConversationsScreen() {
             return prev;
           }
           const fromMe = message.senderId === currentUserIdRef.current;
+          if (!fromMe) bumpUnread(conversationId);
           const updated = [...prev];
           updated[idx] = {
             ...updated[idx],
@@ -348,6 +352,7 @@ export default function ConversationsScreen() {
     setConversations((prev) =>
       prev.map((c) => (c.id === conv.id ? { ...c, unreadCount: 0 } : c)),
     );
+    clearUnread(conv.id);
     try {
       await apiRequest(`/conversations/${conv.id}/read`, { method: 'POST' });
     } catch {
@@ -361,6 +366,7 @@ export default function ConversationsScreen() {
       setConversations((prev) =>
         prev.map((c) => (c.id === conv.id ? { ...c, unreadCount: 0 } : c)),
       );
+      clearUnread(conv.id);
     }
     router.push({
       pathname: '/chat/[id]' as any,

@@ -41,6 +41,7 @@ import {
 import type { ChatWallpaper } from '../../lib/chatWallpapers';
 import { bubbleGradient, resolveBubbleColor } from '../../lib/bubbleColors';
 import { consumeScrollTarget } from '../../lib/chatNav';
+import { setActiveConversation } from '../../lib/unreadMessages';
 // ⚠️ Ce KeyboardAvoidingView n'est PAS celui de React Native : il suit la position
 // réelle du clavier, mesurée nativement à chaque image. Celui de RN applique son
 // décalage d'un bloc, et le piloter depuis l'événement JS laisse un décalage dans le
@@ -516,6 +517,13 @@ export default function ChatScreen() {
     setWallpaper(w);
     setChatWallpaper(id, w);
   };
+
+  // Tant que la conversation est à l'écran, ses messages sont lus au fil de l'eau : le
+  // badge de l'onglet Discussion doit les ignorer.
+  useEffect(() => {
+    setActiveConversation(id);
+    return () => setActiveConversation(null);
+  }, [id]);
 
   useEffect(() => {
     const init = async () => {
