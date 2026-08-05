@@ -368,7 +368,11 @@
     "unpin": "Unpin",
     "favorite": "Add to favourites",
     "unfavorite": "Remove from favourites",
-    "mark_read": "Mark as read"
+    "mark_read": "Mark as read",
+    "mark_unread": "Mark unread",
+    "archive": "Archive",
+    "unarchive": "Unarchive",
+    "more": "More"
   },
   "preview": {
     "image": "📷 Photo",
@@ -465,5 +469,9 @@
     "invite_button": "Invite",
     "invite_message": "Join me on Nexa: {{link}}",
     "tab": "Directory"
+  },
+  "archived": {
+    "title": "Archived",
+    "empty": "Conversations you archive are kept here. They stay archived even when a new message arrives."
   }
 }

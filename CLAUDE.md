@@ -285,6 +285,8 @@ GET  /conversations/:id/messages                  → historique paginé (cursor
 POST /conversations/:id/read                      → marquer la conv comme lue (`ConversationMember.lastReadAt = now`)
 PATCH /conversations/:id/pin                      → épingler/désépingler la conv pour MOI `{ pinned: bool }`
 PATCH /conversations/:id/favorite                 → mettre/retirer la conv des favoris pour MOI `{ favorite: bool }`
+PATCH /conversations/:id/archive                  → ranger/sortir des archives pour MOI `{ archived: bool }` (archiver retire l'épinglage)
+POST /conversations/:id/unread                    → remettre en « non lu » à la main (`manualUnread`) ; `POST /read` le lève
 PATCH /conversations/:id/mute                     → couper/réactiver mes notifications `{ mutedUntil }` (null = actives ; date lointaine = « toujours »)
 PATCH /conversations/:id/ephemeral                → durée des messages éphémères `{ duration }` en secondes (null = désactivé) — s'applique à toute la conv
 GET  /conversations/:id/pins                      → messages épinglés (niveau conversation, visibles par tous les membres)
@@ -488,7 +490,14 @@ Migration `conversation_list` : `ConversationMember.lastReadAt` / `pinnedAt` / `
 - **Marquage lu** : `POST /:id/read` à l'ouverture du chat **et** à chaque message reçu pendant qu'on y est (sinon il ressortirait non lu au retour sur la liste).
 - **Temps réel** : event `conversation_updated` sur la room `user:<id>` (voir section Socket.io). L'écran écoute **cet event et pas `new_message`** — écouter les deux double-compterait les non-lus des conversations ouvertes.
 - **Filtres** : Toutes / Non lues (avec compteur) / Favoris / Groupes, purement côté client sur la liste déjà chargée. La StoriesBar et la bannière de demandes ne s'affichent que sur « Toutes ». ⏳ **Reste à faire** : filtres personnalisés (bouton « + » façon WhatsApp), volontairement hors périmètre.
-- **Actions** : appui long sur une conversation → `BottomSheet` (épingler, favori, marquer comme lu). Mise à jour **optimiste** puis appel serveur ; en cas d'échec, refetch — le serveur fait foi.
+- **Actions** : appui long sur une conversation → `BottomSheet` (épingler, favori, archiver, marquer comme lu). Mise à jour **optimiste** puis appel serveur ; en cas d'échec, refetch — le serveur fait foi.
+- **Gestes de glissement** (`components/ConversationSwipe.tsx`, `ReanimatedSwipeable` de RNGH) : vers la **droite** = Non lu + Épingler ; vers la **gauche** = Archiver + « … » (rouvre le même `BottomSheet`). ⚠️ Les gestes **doublent** l'appui long, ils ne le remplacent pas : un geste ne s'annonce pas de lui-même. La ligne elle-même (`components/ConversationRow.tsx`, partagée avec l'écran des archives) doit garder un **fond opaque**, sinon les actions se voient au travers.
+- **Archivage** (migration `conversation_archive` : `ConversationMember.archivedAt` + `manualUnread`) : réglage **par membre**, comme l'épinglage. Décisions prises le 5 août 2026 :
+  - un nouveau message **ne désarchive pas** (comportement WhatsApp) — sinon ranger une conversation active n'aurait aucun effet durable ; son compteur reste visible sur l'entrée « Archivées » ;
+  - les archives sont **exclues des pastilles** (onglet + icône, `countUnreadMessages` filtre sur `archivedAt IS NULL`) : sinon la pastille afficherait un nombre que rien ne fait retomber dans la liste visible ;
+  - **archiver retire l'épinglage** (une conversation rangée n'a rien à faire en tête de liste) ;
+  - écran dédié `app/archived.tsx`, atteint depuis l'entrée « Archivées » en tête de liste (visible seulement sur le filtre « Toutes »).
+- **« Non lu » manuel** (`manualUnread`) : un simple recul de `lastReadAt` ne suffirait pas — le compteur ignore mes propres messages, donc une conversation dont le dernier message est de moi resterait à zéro. D'où un drapeau distinct, rendu par une **pastille sans nombre**. Levé par toute lecture.
 - ⚠️ `getUserConversations` renvoyait `members: { include: { user: true } }`, donc **le numéro de téléphone et le token FCM de tous les participants**. Remplacé par un `select` ciblé (`id`, `name`, `photoUrl`) — ne pas réintroduire `user: true` ici.
 
 ## Navigation : onglets, badges, FAB ✅

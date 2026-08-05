@@ -16,11 +16,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../../lib/api';
 import { getSocket } from '../../lib/socket';
-import { bumpUnread, clearUnread, setUnreadCounts } from '../../lib/unreadMessages';
+import {
+  bumpUnread,
+  clearUnread,
+  setConversationUnread,
+  setUnreadCounts,
+} from '../../lib/unreadMessages';
 import { getUserId } from '../../lib/storage';
 import { requestContactsSegment } from '../../lib/tabsNav';
 import BottomSheet from '../../components/BottomSheet';
 import { UserAvatar } from '../../components/UserAvatar';
+import { ConversationRow } from '../../components/ConversationRow';
+import { ConversationSwipe } from '../../components/ConversationSwipe';
 
 const NEXA = '#1E40AF';
 
@@ -92,8 +99,10 @@ type Conversation = {
   members: Member[];
   messages: Message[];
   unreadCount: number;
+  manualUnread: boolean; // remise en non lu à la main : pastille sans nombre
   pinnedAt: string | null;
   favoritedAt: string | null;
+  archivedAt: string | null; // rangée dans les archives (hors de cette liste)
   mutedUntil: string | null;
   lastMessageAt: string;
 };
@@ -133,7 +142,14 @@ export default function ConversationsScreen() {
       const data = await apiRequest<Conversation[]>('/conversations');
       setConversations(sortConversations(data));
       // Le badge de l'onglet suit la liste : le serveur fait foi à chaque rechargement.
-      setUnreadCounts(Object.fromEntries(data.map((c) => [c.id, c.unreadCount])));
+      // Les archives en sont exclues, et un « non lu » posé à la main compte pour un.
+      setUnreadCounts(
+        Object.fromEntries(
+          data
+            .filter((c) => !c.archivedAt)
+            .map((c) => [c.id, c.unreadCount || (c.manualUnread ? 1 : 0)]),
+        ),
+      );
     } catch {
     } finally {
       setLoading(false);
@@ -210,27 +226,8 @@ export default function ConversationsScreen() {
   const getOtherMember = (conv: Conversation) =>
     conv.members.find((m) => m.userId !== currentUserId);
 
-  // Aperçu du dernier message : les pièces jointes n'ont pas de texte.
-  // Traduit un message système (content JSON { k, by, ... }) pour l'aperçu.
-  const systemText = (raw?: string | null): string => {
-    if (!raw) return '';
-    try {
-      const { k, dur, ...params } = JSON.parse(raw);
-      if (dur) params.duration = t(`ephemeral.${dur}`) as string;
-      if (params.role) params.role = t(`roles.${params.role}`) as string;
-      return t(`system.${k}`, params) as string;
-    } catch {
-      return '';
-    }
-  };
-
-  const getLastMessage = (conv: Conversation) => {
-    const msg = conv.messages[0];
-    if (!msg) return t('chat.no_messages');
-    if (msg.type === 'system') return systemText(msg.content);
-    if (msg.mediaType) return t(`preview.${msg.mediaType}`, { defaultValue: t('chat.media') });
-    return msg.content ?? t('chat.media');
-  };
+  // L'aperçu du dernier message vit désormais dans `ConversationRow`, avec le reste du
+  // rendu d'une ligne — les archives affichent exactement la même chose.
 
   // Aujourd'hui → heure, hier → « Hier », au-delà → date courte.
   const formatDate = (iso: string) => {
@@ -246,13 +243,15 @@ export default function ConversationsScreen() {
     return date.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
   };
 
-  const isMuted = (conv: Conversation) =>
-    !!conv.mutedUntil && new Date(conv.mutedUntil) > new Date();
+  // Les archives sortent de la liste et de tous ses filtres : elles ont leur propre écran.
+  const active = conversations.filter((c) => !c.archivedAt);
+  const archived = conversations.filter((c) => c.archivedAt);
+  const archivedUnread = archived.reduce((n, c) => n + c.unreadCount, 0);
 
-  const unreadTotal = conversations.filter((c) => c.unreadCount > 0).length;
+  const unreadTotal = active.filter((c) => c.unreadCount > 0 || c.manualUnread).length;
 
-  const visible = conversations.filter((conv) => {
-    if (filter === 'unread') return conv.unreadCount > 0;
+  const visible = active.filter((conv) => {
+    if (filter === 'unread') return conv.unreadCount > 0 || conv.manualUnread;
     if (filter === 'favorites') return !!conv.favoritedAt;
     if (filter === 'groups') return conv.type === 'group';
     return true;
@@ -350,11 +349,54 @@ export default function ConversationsScreen() {
 
   const markRead = async (conv: Conversation) => {
     setConversations((prev) =>
-      prev.map((c) => (c.id === conv.id ? { ...c, unreadCount: 0 } : c)),
+      prev.map((c) => (c.id === conv.id ? { ...c, unreadCount: 0, manualUnread: false } : c)),
     );
     clearUnread(conv.id);
     try {
       await apiRequest(`/conversations/${conv.id}/read`, { method: 'POST' });
+    } catch {
+      fetchConversations();
+    }
+  };
+
+  /** Bascule lu / non lu. Le « non lu » posé à la main n'attend aucun message réel. */
+  const toggleUnread = async (conv: Conversation) => {
+    if (conv.unreadCount > 0 || conv.manualUnread) return markRead(conv);
+    setConversations((prev) =>
+      prev.map((c) => (c.id === conv.id ? { ...c, manualUnread: true } : c)),
+    );
+    bumpUnread(conv.id);
+    try {
+      await apiRequest(`/conversations/${conv.id}/unread`, { method: 'POST' });
+    } catch {
+      fetchConversations();
+    }
+  };
+
+  const toggleArchive = async (conv: Conversation) => {
+    const archived = !!conv.archivedAt;
+    setConversations((prev) =>
+      sortConversations(
+        prev.map((c) =>
+          c.id === conv.id
+            ? {
+                ...c,
+                archivedAt: archived ? null : new Date().toISOString(),
+                // Archiver déclasse : le serveur retire l'épinglage, l'affichage suit.
+                pinnedAt: archived ? c.pinnedAt : null,
+              }
+            : c,
+        ),
+      ),
+    );
+    // Une conversation archivée sort des pastilles ; désarchivée, elle y revient.
+    if (archived) setConversationUnread(conv.id, conv.unreadCount || (conv.manualUnread ? 1 : 0));
+    else clearUnread(conv.id);
+    try {
+      await apiRequest(`/conversations/${conv.id}/archive`, {
+        method: 'PATCH',
+        body: { archived: !archived },
+      });
     } catch {
       fetchConversations();
     }
@@ -484,6 +526,30 @@ export default function ConversationsScreen() {
                 </View>
               </TouchableOpacity>
             )}
+
+            {/* Entrée « Archivées » — seulement s'il y a quelque chose dedans, et seulement
+                sur « Toutes » : les filtres portent sur la liste visible, pas sur ce qui en
+                est rangé. Le compteur de non-lus reste ici, puisqu'il ne compte plus dans la
+                pastille de l'onglet. */}
+            {filter === 'all' && archived.length > 0 && (
+              <TouchableOpacity
+                className="flex-row items-center px-4 py-3.5 border-b border-gray-100 dark:border-zinc-800"
+                onPress={() => router.push('/archived' as any)}
+              >
+                <View className="w-14 h-14 rounded-full bg-gray-100 dark:bg-zinc-800 items-center justify-center mr-3.5">
+                  <Ionicons name="archive" size={24} color="#6B7280" />
+                </View>
+                <Text className="flex-1 font-semibold text-gray-900 dark:text-zinc-100">
+                  {t('archived.title')}
+                </Text>
+                {archivedUnread > 0 ? (
+                  <Text className="text-nexa font-semibold mr-1">{archivedUnread}</Text>
+                ) : (
+                  <Text className="text-gray-400 dark:text-zinc-500 mr-1">{archived.length}</Text>
+                )}
+                <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+            )}
           </>
         }
         alwaysBounceVertical
@@ -503,65 +569,55 @@ export default function ConversationsScreen() {
             </Text>
           </View>
         }
-        renderItem={({ item }) => {
-          const unread = item.unreadCount > 0;
-          const other = getOtherMember(item);
-          return (
-            <TouchableOpacity
-              className="flex-row items-center px-4 py-3.5 border-b border-gray-50 dark:border-zinc-800"
+        renderItem={({ item }) => (
+          <ConversationSwipe
+            // Glissé vers la droite : ce qui touche à l'état de lecture et au rangement en tête.
+            left={[
+              {
+                key: 'unread',
+                icon: item.unreadCount > 0 || item.manualUnread ? 'mail-open' : 'mail-unread',
+                label: t(
+                  item.unreadCount > 0 || item.manualUnread
+                    ? 'conv_actions.mark_read'
+                    : 'conv_actions.mark_unread',
+                ),
+                color: '#2563EB',
+                onPress: () => toggleUnread(item),
+              },
+              {
+                key: 'pin',
+                icon: 'pin',
+                label: t(item.pinnedAt ? 'conv_actions.unpin' : 'conv_actions.pin'),
+                color: '#64748B',
+                onPress: () => toggleFlag(item, 'pinnedAt'),
+              },
+            ]}
+            // Glissé vers la gauche : ranger, ou ouvrir le reste des actions.
+            right={[
+              {
+                key: 'archive',
+                icon: 'archive',
+                label: t('conv_actions.archive'),
+                color: NEXA,
+                onPress: () => toggleArchive(item),
+              },
+              {
+                key: 'more',
+                icon: 'ellipsis-horizontal',
+                label: t('conv_actions.more'),
+                color: '#475569',
+                onPress: () => setActionTarget(item),
+              },
+            ]}
+          >
+            <ConversationRow
+              conv={item}
+              currentUserId={currentUserId}
               onPress={() => openChat(item)}
               onLongPress={() => setActionTarget(item)}
-              delayLongPress={300}
-            >
-              {item.type === 'group' ? (
-                <UserAvatar photoUrl={item.photoUrl} size={56} group />
-              ) : (
-                <UserAvatar photoUrl={other?.user.photoUrl} name={other?.user.name} size={56} />
-              )}
-
-              <View className="flex-1 ml-3.5">
-                <View className="flex-row items-center">
-                  {item.pinnedAt && (
-                    <Ionicons name="pin" size={15} color="#9CA3AF" style={{ marginRight: 4 }} />
-                  )}
-                  <Text className="font-semibold text-gray-900 dark:text-zinc-100 flex-shrink" numberOfLines={1}>
-                    {getConvName(item)}
-                  </Text>
-                  {item.favoritedAt && (
-                    <Ionicons name="star" size={15} color="#F59E0B" style={{ marginLeft: 4 }} />
-                  )}
-                  {isMuted(item) && (
-                    <Ionicons
-                      name="notifications-off"
-                      size={15}
-                      color="#9CA3AF"
-                      style={{ marginLeft: 4 }}
-                    />
-                  )}
-                </View>
-                <Text
-                  className={`text-base ${unread ? 'text-gray-900 dark:text-zinc-100 font-medium' : 'text-gray-500 dark:text-zinc-400'}`}
-                  numberOfLines={1}
-                >
-                  {getLastMessage(item)}
-                </Text>
-              </View>
-
-              <View className="items-end ml-2">
-                <Text className={`text-sm ${unread ? 'text-nexa font-semibold' : 'text-gray-400 dark:text-zinc-500'}`}>
-                  {formatDate(item.lastMessageAt)}
-                </Text>
-                {unread && (
-                  <View className="bg-nexa rounded-full min-w-[24px] h-[24px] items-center justify-center px-1.5 mt-1">
-                    <Text className="text-white text-sm font-bold">
-                      {item.unreadCount > 99 ? '99+' : item.unreadCount}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
-          );
-        }}
+            />
+          </ConversationSwipe>
+        )}
       />
       </>
       )}
@@ -621,6 +677,16 @@ export default function ConversationsScreen() {
                 )}
                 onPress={() => {
                   toggleFlag(actionTarget, 'favoritedAt');
+                  setActionTarget(null);
+                }}
+              />
+              <ConvAction
+                icon="archive"
+                label={t(
+                  actionTarget.archivedAt ? 'conv_actions.unarchive' : 'conv_actions.archive',
+                )}
+                onPress={() => {
+                  toggleArchive(actionTarget);
                   setActionTarget(null);
                 }}
               />

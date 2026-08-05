@@ -368,7 +368,11 @@
     "unpin": "Sabitlemeyi kaldır",
     "favorite": "Favorilere ekle",
     "unfavorite": "Favorilerden çıkar",
-    "mark_read": "Okundu olarak işaretle"
+    "mark_read": "Okundu olarak işaretle",
+    "mark_unread": "Okunmadı işaretle",
+    "archive": "Arşivle",
+    "unarchive": "Arşivden çıkar",
+    "more": "Daha fazla"
   },
   "preview": {
     "image": "📷 Fotoğraf",
@@ -465,5 +469,9 @@
     "invite_button": "Davet et",
     "invite_message": "Nexa'da bana katıl: {{link}}",
     "tab": "Rehber"
+  },
+  "archived": {
+    "title": "Arşivlenenler",
+    "empty": "Arşivlediğiniz sohbetler burada saklanır. Yeni mesaj gelse bile arşivde kalırlar."
   }
 }

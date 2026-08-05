@@ -32,7 +32,13 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 [A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
   → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.
 
-[A FAIRE] Archivage des conversations (facon WhatsApp).
+[FAIT 05/08] Archivage des conversations (facon WhatsApp) + gestes de glissement sur la liste.
+  Glisser vers la GAUCHE : Archiver + « … » (rouvre le menu d'actions existant). Vers la DROITE : Non lu + Epingler. Les gestes doublent l'appui long, ils ne le remplacent pas.
+  Decisions : un nouveau message NE desarchive PAS (sinon ranger une conversation active n'a aucun effet durable) ; les archives sont exclues des pastilles onglet+icone (sinon un nombre que rien ne fait retomber dans la liste visible) ; archiver retire l'epinglage.
+  → migration `conversation_archive` (ConversationMember.archivedAt + manualUnread) ; PATCH /conversations/:id/archive ; POST /conversations/:id/unread.
+  → `manualUnread` est un drapeau distinct : reculer `lastReadAt` ne suffirait pas, le compteur ignore mes propres messages. Rendu par une pastille SANS nombre.
+  → app/archived.tsx + components/ConversationRow.tsx (ligne partagee) + components/ConversationSwipe.tsx.
+  Restant : etoffer le menu « … » (mode silencieux, infos du groupe, favoris, effacer la discussion) ; « Annuler » apres archivage ; glissement complet pour archiver sans relacher.
 
 [FAIT 30/07] Ajout de contacts facon WhatsApp (le client trouvait la saisie manuelle trop longue -> frein a l'adoption).
   FAB "+" de Messages -> ouvre DIRECTEMENT le repertoire (facon WhatsApp) : raccourcis Nouveau groupe / Nouvelle conversation en tete + section "Sur Nexa" (Message/ami) + section "Inviter" (SMS pre-rempli expo-sms). Recherche par numero gardee en fallback dans l'onglet Contacts.

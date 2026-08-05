@@ -56,6 +56,13 @@ export const setUnreadCounts = (next: Record<string, number>) => {
   recompute();
 };
 
+/** Pose un compte connu pour une conversation (désarchivage, marquage manuel). */
+export const setConversationUnread = (conversationId: string, count: number) => {
+  if (count <= 0) return clearUnread(conversationId);
+  counts[conversationId] = count;
+  recompute();
+};
+
 /** Message reçu dans une conversation qu'on n'est pas en train de lire. */
 export const bumpUnread = (conversationId: string) => {
   if (conversationId === activeConversationId) return;

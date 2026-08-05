@@ -368,7 +368,11 @@
     "unpin": "Désépingler",
     "favorite": "Ajouter aux favoris",
     "unfavorite": "Retirer des favoris",
-    "mark_read": "Marquer comme lu"
+    "mark_read": "Marquer comme lu",
+    "mark_unread": "Marquer non lu",
+    "archive": "Archiver",
+    "unarchive": "Désarchiver",
+    "more": "Plus"
   },
   "preview": {
     "image": "📷 Photo",
@@ -465,5 +469,9 @@
     "invite_button": "Inviter",
     "invite_message": "Rejoins-moi sur Nexa : {{link}}",
     "tab": "Répertoire"
+  },
+  "archived": {
+    "title": "Archivées",
+    "empty": "Les conversations que vous archivez sont rangées ici. Elles y restent même quand un nouveau message arrive."
   }
 }
