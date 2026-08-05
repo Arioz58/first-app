@@ -62,6 +62,19 @@ const MAX_PENDING = 10;
 // Durée laissée au défilement animé de la FlatList avant la passe de calage finale
 // (le scroll animé natif tourne autour de 300 ms).
 const SMOOTH_SCROLL_MS = 420;
+// Après l'envoi, le fil reste collé au bas pendant cette durée, quoi que disent les mesures.
+//
+// ⚠️ Sans elle, un message LONG se retrouvait sous la zone de saisie : la FlatList le rend
+// d'abord à une hauteur estimée, et sa mesure réelle n'arrive qu'après le calage final. Le
+// contenu grandit alors d'un coup de plusieurs centaines de pixels, mais `atBottomRef` —
+// calculé sur le dernier événement de défilement, donc périmé — est déjà retombé à faux :
+// le repositionnement suivant était abandonné. Seul le geste de l'utilisateur referme cette
+// fenêtre, jamais une mesure.
+const FOLLOW_WINDOW_MS = 1500;
+// Même mécanique à l'ouverture, en plus généreux : un envoi n'ajoute qu'une bulle, alors
+// qu'ici tout un historique est monté par lots et mesuré au fil de l'eau — sans quoi le
+// dernier message se retrouvait sous la zone de saisie dès qu'il était un peu long.
+const OPEN_FOLLOW_WINDOW_MS = 2500;
 // De combien la liste déborde SOUS la zone de saisie : c'est ce débordement qui fait
 // passer les messages derrière son verre quand on fait défiler, au lieu de les couper.
 //
@@ -448,6 +461,14 @@ export default function ChatScreen() {
   const smoothNextRef = useRef(false); // le prochain repositionnement suit un message qui arrive
   const smoothingRef = useRef(false); // un défilement animé est en cours : ne pas le couper
   const distanceRef = useRef(0); // pixels restants sous le bas de l'écran (maj à chaque scroll)
+  const followUntilRef = useRef(0); // fin de la fenêtre « collé au bas » armée par un envoi
+
+  // Faut-il ramener le fil en bas ? Soit on y est déjà, soit on vient d'envoyer et la
+  // fenêtre de suivi couvre les mesures qui arrivent encore.
+  const shouldStick = useCallback(
+    () => atBottomRef.current || followUntilRef.current > Date.now(),
+    [],
+  );
 
   // Unique point de repositionnement du fil. Deux raisons de repasser plusieurs fois :
   // - la virtualisation monte les cellules par lots, donc le contenu grandit APRÈS le
@@ -456,14 +477,14 @@ export default function ChatScreen() {
   // Chaque passe se re-teste : dès que l'utilisateur touche la liste, on s'arrête.
   const scrollToBottom = useCallback((animated = false) => {
     const settle = () => {
-      if (atBottomRef.current && !draggingRef.current) {
+      if (shouldStick() && !draggingRef.current) {
         listRef.current?.scrollToEnd({ animated: false });
       }
     };
     // Un défilement animé est en cours : les changements de taille qui suivent (cellules
     // montées par lots) ne doivent PAS déclencher un saut, sinon ils l'interrompent.
     if (smoothingRef.current) return;
-    if (!atBottomRef.current || draggingRef.current) return;
+    if (!shouldStick() || draggingRef.current) return;
 
     listRef.current?.scrollToEnd({ animated });
 
@@ -493,7 +514,7 @@ export default function ChatScreen() {
       requestAnimationFrame(settle);
       setTimeout(settle, 120);
     }
-  }, []);
+  }, [shouldStick]);
 
   const loadFlags = useCallback(() => {
     apiRequest<Flags>(`/conversations/${id}/flags`).then(setFlags).catch(() => {});
@@ -563,6 +584,8 @@ export default function ChatScreen() {
         const history = await apiRequest<Message[]>(`/conversations/${id}/messages`);
         // Marqué AVANT le rendu : sinon tout l'historique s'animerait à l'ouverture.
         for (const m of history) seenIdsRef.current.add(m.id);
+        // Le fil s'ouvre en bas, et doit y rester le temps que les bulles soient mesurées.
+        followUntilRef.current = Date.now() + OPEN_FOLLOW_WINDOW_MS;
         setMessages(history.reverse());
 
         // La conversation est ouverte : tout ce qui précède est lu.
@@ -583,7 +606,11 @@ export default function ChatScreen() {
             // recevoir n'y ramène que si on y était déjà (sinon on couperait la lecture).
             // Le repositionnement lui-même est fait par onContentSizeChange, une fois la
             // bulle montée — deux scrolls concurrents s'interrompaient l'un l'autre.
-            if (msg.sender?.id === me.id) atBottomRef.current = true;
+            if (msg.sender?.id === me.id) {
+              atBottomRef.current = true;
+              // Couvre les mesures tardives d'une bulle haute (cf. FOLLOW_WINDOW_MS).
+              followUntilRef.current = Date.now() + FOLLOW_WINDOW_MS;
+            }
             // Ce repositionnement-là accompagne une bulle qui apparaît : il doit glisser,
             // pas sauter. (À l'ouverture du chat, au contraire, le calage reste immédiat.)
             smoothNextRef.current = true;
@@ -1067,6 +1094,9 @@ export default function ChatScreen() {
     // Index de la LIGNE qui porte ce message : un album en réunit plusieurs.
     const idx = rows.findIndex((r) => r.messages.some((m) => m.id === scrollTarget));
     if (idx < 0) return; // message non chargé (trop ancien) → on ignore
+    // On va ailleurs qu'en bas : la fenêtre de suivi d'ouverture ne doit pas nous y ramener.
+    followUntilRef.current = 0;
+    atBottomRef.current = false;
     listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
     setHighlightId(scrollTarget);
     setScrollTarget(null);
@@ -1303,6 +1333,8 @@ export default function ChatScreen() {
           // Le doigt sur la liste prime sur tout repositionnement automatique.
           onScrollBeginDrag={() => {
             draggingRef.current = true;
+            // L'utilisateur reprend la main : la fenêtre de suivi s'arrête là.
+            followUntilRef.current = 0;
           }}
           onScrollEndDrag={() => {
             draggingRef.current = false;
@@ -1313,7 +1345,10 @@ export default function ChatScreen() {
           // Seul déclencheur du suivi : le contenu vient de grandir (message, média chargé,
           // clavier). `scrollToBottom` décide s'il faut suivre et repasse jusqu'à se caler.
           onContentSizeChange={() => {
-            const smooth = smoothNextRef.current;
+            // Pendant la fenêtre de suivi, le rattrapage reste animé : la mesure d'une
+            // bulle haute déplace le fil de plusieurs centaines de pixels, et un saut sec
+            // juste après le glissement d'entrée se verrait comme un à-coup.
+            const smooth = smoothNextRef.current || followUntilRef.current > Date.now();
             smoothNextRef.current = false;
             scrollToBottom(smooth);
           }}
