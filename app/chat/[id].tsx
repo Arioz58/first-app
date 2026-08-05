@@ -75,6 +75,9 @@ const FOLLOW_WINDOW_MS = 1500;
 // qu'ici tout un historique est monté par lots et mesuré au fil de l'eau — sans quoi le
 // dernier message se retrouvait sous la zone de saisie dès qu'il était un peu long.
 const OPEN_FOLLOW_WINDOW_MS = 2500;
+// Taille de page du serveur (`GET /conversations/:id/messages`). Une page incomplète
+// signale le début de la conversation.
+const MESSAGES_PAGE = 30;
 // De combien la liste déborde SOUS la zone de saisie : c'est ce débordement qui fait
 // passer les messages derrière son verre quand on fait défiler, au lieu de les couper.
 //
@@ -413,6 +416,7 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [convType, setConvType] = useState<'direct' | 'group'>('direct');
   const [groupPhoto, setGroupPhoto] = useState<string | null>(null);
@@ -462,6 +466,10 @@ export default function ChatScreen() {
   const smoothingRef = useRef(false); // un défilement animé est en cours : ne pas le couper
   const distanceRef = useRef(0); // pixels restants sous le bas de l'écran (maj à chaque scroll)
   const followUntilRef = useRef(0); // fin de la fenêtre « collé au bas » armée par un envoi
+  // Pagination vers le haut : le fil ne charge qu'une page à l'ouverture (les plus récents).
+  const messagesRef = useRef<Message[]>([]); // dernière liste connue, sans redéclencher les callbacks
+  const loadingOlderRef = useRef(false); // une page est déjà en vol → ne pas en redemander
+  const hasOlderRef = useRef(true); // faux dès qu'une page revient incomplète : on est au début
 
   // Faut-il ramener le fil en bas ? Soit on y est déjà, soit on vient d'envoyer et la
   // fenêtre de suivi couvre les mesures qui arrivent encore.
@@ -515,6 +523,44 @@ export default function ChatScreen() {
       setTimeout(settle, 120);
     }
   }, [shouldStick]);
+
+  // Le fil garde la liste dans un ref : `loadOlder` la lit sans dépendre de l'état, ce qui
+  // le garderait sinon recréé à chaque message reçu — et la FlatList avec lui.
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  /**
+   * Page suivante vers le passé (`?cursor=<id du plus ancien affiché>`, 30 par page).
+   *
+   * ⚠️ Les anciens messages sont marqués « déjà vus » avant d'être posés : sans cela, toute
+   * la page jouerait l'animation d'entrée réservée aux messages qui arrivent.
+   */
+  const loadOlder = useCallback(async () => {
+    if (loadingOlderRef.current || !hasOlderRef.current) return;
+    const oldest = messagesRef.current[0];
+    if (!oldest) return;
+
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    try {
+      const page = await apiRequest<Message[]>(
+        `/conversations/${id}/messages?cursor=${oldest.id}`,
+      );
+      // Page incomplète = début de la conversation atteint, on ne redemandera plus.
+      if (page.length < MESSAGES_PAGE) hasOlderRef.current = false;
+      if (page.length) {
+        for (const m of page) seenIdsRef.current.add(m.id);
+        // Le serveur renvoie du plus récent au plus ancien : on remet dans l'ordre du fil.
+        setMessages((prev) => [...page.slice().reverse(), ...prev]);
+      }
+    } catch {
+      // Réseau : on laisse `hasOlderRef` à vrai, le prochain passage près du haut réessaiera.
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
+    }
+  }, [id]);
 
   const loadFlags = useCallback(() => {
     apiRequest<Flags>(`/conversations/${id}/flags`).then(setFlags).catch(() => {});
@@ -584,6 +630,9 @@ export default function ChatScreen() {
         const history = await apiRequest<Message[]>(`/conversations/${id}/messages`);
         // Marqué AVANT le rendu : sinon tout l'historique s'animerait à l'ouverture.
         for (const m of history) seenIdsRef.current.add(m.id);
+        // Page pleine = il reste probablement de l'historique ; page incomplète = on tient
+        // déjà toute la conversation, inutile d'interroger le serveur au premier scroll.
+        hasOlderRef.current = history.length >= MESSAGES_PAGE;
         // Le fil s'ouvre en bas, et doit y rester le temps que les bulles soient mesurées.
         followUntilRef.current = Date.now() + OPEN_FOLLOW_WINDOW_MS;
         setMessages(history.reverse());
@@ -1317,8 +1366,21 @@ export default function ChatScreen() {
           // `scrollToEnd`, alors qu'un padding de conteneur ne l'était pas ici.
           // Rend au fil la hauteur occupée par la carte du header (marge d'écran + décalage
           // de 4 + hauteur), moins le paddingTop déjà appliqué au contenu.
-          ListHeaderComponent={<View style={{ height: insets.top + HEADER_H + 6 }} />}
+          ListHeaderComponent={
+            <View style={{ height: insets.top + HEADER_H + 6, justifyContent: 'flex-end' }}>
+              {loadingOlder && (
+                <ActivityIndicator size="small" color={NEXA} style={{ marginBottom: 8 }} />
+              )}
+            </View>
+          }
           ListFooterComponent={<View style={{ height: composerOverlap + 24 }} />}
+          // Chargement de l'historique à l'approche du haut du fil.
+          onStartReached={loadOlder}
+          onStartReachedThreshold={0.4}
+          // ⚠️ Indispensable ici : insérer des messages EN TÊTE pousse tout le contenu vers
+          // le bas, et sans cela le fil sauterait d'une page entière sous le doigt. L'index
+          // de référence est 1 pour ignorer l'espace de tête, qui n'est pas un message.
+          maintainVisibleContentPosition={{ minIndexForVisible: 1 }}
           scrollEventThrottle={16}
           onScroll={(e) => {
             const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;

@@ -475,7 +475,7 @@ Principe transverse : **ce qui est cosmétique et personnel reste local** (Secur
 
 - `GIPHY_API_KEY` est dans `lib/config.ts` ; sans clé (ou avec le placeholder), `GiphyPicker` affiche un écran « clé absente » au lieu de planter. ⚠️ **clé en dur à sortir avant la prod** (voir Sécurité).
 - Les réglages locaux sont en **SecureStore** : ils ne survivent pas à une désinstallation et ne se synchronisent pas entre appareils. Assumé pour de la cosmétique.
-- Le chat charge **une seule page** de messages (`GET /:id/messages`) — pas encore de scroll infini vers le haut.
+- **Historique paginé vers le haut** ✅ (2 août 2026) : `onStartReached` → `GET /:id/messages?cursor=<id du plus ancien affiché>` (30/page), page incomplète = début de la conversation (`hasOlderRef`). ⚠️ `maintainVisibleContentPosition={{ minIndexForVisible: 1 }}` est indispensable : insérer en tête pousse tout le contenu vers le bas, et le fil sauterait d'une page entière sous le doigt. Les messages rapatriés sont marqués « déjà vus » (`seenIdsRef`) avant d'être posés, sinon toute la page jouerait l'animation d'entrée. ⏳ Reste à faire pour la recherche (item B2 du `todo`) : charger l'historique **autour d'un message** précis, pas seulement page par page depuis le bas.
 
 ---
 

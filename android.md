@@ -52,6 +52,7 @@ Le rendu iOS est validé sur iPhone. **Rien n'a été testé sur Android.**
 - [?] **Icône adaptative et splash** : `adaptiveIcon` pointe sur `icon.png` sur fond `#1E40AF` — vérifier le masquage circulaire, qui rogne les bords. L'icône iOS 26 (`Nexa-icon-comp.icon`) ne concerne pas Android.
 - [?] **Mode sombre** : piloté par NativeWind, censé être identique. À parcourir écran par écran.
 - [?] **Clavier** : `react-native-keyboard-controller` se comporte différemment selon `windowSoftInputMode`. Vérifier la barre de saisie du chat et les modales de saisie.
+- [?] **`maintainVisibleContentPosition`** (chargement de l'historique vers le haut, `app/chat/[id].tsx`) : supporté sur Android depuis RN 0.72 — le projet est en 0.81 — mais son comportement y a longtemps été plus irrégulier que sur iOS. Vérifier en remontant un long fil : la position ne doit pas sauter quand une page s'insère en tête. Surveiller aussi l'interaction avec la fenêtre de suivi du bas (`FOLLOW_WINDOW_MS` / `OPEN_FOLLOW_WINDOW_MS`), les deux agissant sur l'offset de la même liste. En cas de saut, replier sur une compensation manuelle (mesurer la hauteur du contenu avant/après insertion, puis `scrollToOffset`).
 
 ---
 
