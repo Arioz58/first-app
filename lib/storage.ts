@@ -9,6 +9,7 @@ const RECENT_SEARCHES_KEY = 'recentSearches';
 const CHAT_WALLPAPERS_KEY = 'chatWallpapers';
 const CONV_CUSTOM_KEY = 'conversationCustomizations';
 const CONV_CLEARED_KEY = 'conversationClearedAt';
+const LIVE_SHARES_KEY = 'liveShares';
 
 export type RecentSearch = {
   id: string;
@@ -151,6 +152,30 @@ export const setConversationClearedAt = async (
   }
   map[conversationId] = timestamp;
   await SecureStore.setItemAsync(CONV_CLEARED_KEY, JSON.stringify(map));
+};
+
+/**
+ * Partages de position en cours : `conversationId` → échéance (ms epoch).
+ *
+ * ⚠️ Persistés, et pas seulement gardés en mémoire : la tâche de localisation est réveillée
+ * par le système dans un contexte JS qui peut être neuf, où les variables de l'app n'existent
+ * plus. Sans cette trace sur disque, elle ne saurait pas à quelles conversations envoyer.
+ */
+export const getLiveShares = async (): Promise<Record<string, number>> => {
+  try {
+    const raw = await SecureStore.getItemAsync(LIVE_SHARES_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+};
+
+export const setLiveShares = async (shares: Record<string, number>) => {
+  try {
+    await SecureStore.setItemAsync(LIVE_SHARES_KEY, JSON.stringify(shares));
+  } catch {
+    // Écriture impossible : le suivi de premier plan continue de fonctionner en mémoire.
+  }
 };
 
 export const clearTokens = async () => {

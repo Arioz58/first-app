@@ -489,6 +489,30 @@
     "send_action": "Send this location",
     "pin_hint": "Move the map to choose a spot",
     "shared": "Shared location",
-    "open_maps": "Open in Maps"
+    "open_maps": "View on map",
+    "open_with": "Open in a navigation app"
+  },
+  "live": {
+    "action": "Live location",
+    "title": "Live location",
+    "duration_question": "For how long do you want to share your location?",
+    "duration_900": "15 minutes",
+    "duration_3600": "1 hour",
+    "duration_28800": "8 hours",
+    "sharing_for": "You are sharing your location ({{time}})",
+    "others_sharing": "{{count}} person is sharing their location",
+    "others_sharing_plural": "{{count}} people are sharing their location",
+    "stop": "Stop",
+    "empty": "Nobody is sharing their location right now.",
+    "just_now": "just now",
+    "minutes_ago": "{{count}} min ago",
+    "hours_ago": "{{count}} h ago",
+    "stale": "Frozen · {{time}}",
+    "people_count": "{{count}} shared location",
+    "people_count_plural": "{{count}} shared locations",
+    "empty_short": "No shared location",
+    "you": "You",
+    "foreground_only_title": "Limited sharing",
+    "foreground_only": "Without the \"Always\" permission, your location stops being shared as soon as you leave the app. You can grant it in Settings."
   }
 }

@@ -21,6 +21,10 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSUserActivityTypes": [
           "INSendMessageIntent"
+        ],
+        "LSApplicationQueriesSchemes": [
+          "comgooglemaps",
+          "waze"
         ]
       },
       "appleTeamId": "9JH8GHKDVY",
@@ -87,7 +91,10 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Nexa utilise votre position pour indiquer votre ville sur votre profil et partager votre position dans une conversation.",
           "locationAlwaysPermission": "Nexa utilise votre position pour partager votre position en direct dans une conversation, même lorsque l'application est en arrière-plan.",
-          "locationWhenInUsePermission": "Nexa utilise votre position pour indiquer votre ville sur votre profil et partager votre position dans une conversation."
+          "locationWhenInUsePermission": "Nexa utilise votre position pour indiquer votre ville sur votre profil et partager votre position dans une conversation.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       [

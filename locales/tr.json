@@ -489,6 +489,30 @@
     "send_action": "Bu konumu gönder",
     "pin_hint": "Bir nokta seçmek için haritayı hareket ettirin",
     "shared": "Paylaşılan konum",
-    "open_maps": "Haritalar’da aç"
+    "open_maps": "Haritada gör",
+    "open_with": "Navigasyon uygulamasında aç"
+  },
+  "live": {
+    "action": "Canlı konum",
+    "title": "Canlı konum",
+    "duration_question": "Konumunuzu ne kadar süre paylaşmak istiyorsunuz?",
+    "duration_900": "15 dakika",
+    "duration_3600": "1 saat",
+    "duration_28800": "8 saat",
+    "sharing_for": "Konumunuzu paylaşıyorsunuz ({{time}})",
+    "others_sharing": "{{count}} kişi konumunu paylaşıyor",
+    "others_sharing_plural": "{{count}} kişi konumunu paylaşıyor",
+    "stop": "Durdur",
+    "empty": "Şu anda kimse konumunu paylaşmıyor.",
+    "just_now": "az önce",
+    "minutes_ago": "{{count}} dk önce",
+    "hours_ago": "{{count}} sa önce",
+    "stale": "Donmuş konum · {{time}}",
+    "people_count": "{{count}} paylaşılan konum",
+    "people_count_plural": "{{count}} paylaşılan konum",
+    "empty_short": "Paylaşılan konum yok",
+    "you": "Siz",
+    "foreground_only_title": "Sınırlı paylaşım",
+    "foreground_only": "“Her zaman” izni olmadan, uygulamadan çıktığınız anda konumunuz paylaşılmayı durdurur. Bu izni Ayarlar’dan verebilirsiniz."
   }
 }

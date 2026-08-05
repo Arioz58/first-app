@@ -77,6 +77,7 @@ Le rendu iOS est validé sur iPhone. **Rien n'a été testé sur Android.**
 - [ ] **Clé API Google Maps obligatoire** : `react-native-maps` utilise Apple Maps sur iOS (aucune clé), mais **Google Maps sur Android**. Sans clé, la carte s'affiche **grise et vide** — l'app ne plante pas, ce qui rend le symptôme facile à mal interpréter. La clé se crée sur un compte Google Cloud (côté client), avec l'API « Maps SDK for Android » activée, puis se déclare dans `app.json` sous `android.config.googleMaps.apiKey`. ⚠️ Ne pas l'écrire en dur dans le dépôt : passer par une variable d'environnement EAS, la règle du projet valant aussi ici (cf. `GIPHY_API_KEY`, déjà commitée par erreur).
 - [ ] Restreindre la clé côté Google Cloud (empreinte SHA-1 du certificat de release + nom de paquet), sinon elle est utilisable par n'importe qui une fois l'APK distribué.
 - [?] Vérifier le rendu de l'aperçu de position dans une bulle : sur Android, une `MapView` non interactive dans une liste peut être coûteuse — `liteMode` existe précisément pour ce cas et n'a pas d'équivalent iOS.
+- [?] **Flou dégradé posé SUR la carte** (bande d'infos de l'aperçu de position) : `expo-blur` y utilise `dimezisBlurView`, dont le rendu au-dessus d'une **vue native** comme une carte n'est pas garanti — il peut ne rien flouter, voire afficher un rectangle opaque. Si c'est le cas, replier sur un dégradé translucide (`LinearGradient` du transparent vers la couleur de fond), visuellement proche et sans coût.
 
 ## 5. Build et distribution
 

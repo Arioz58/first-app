@@ -9,6 +9,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
+  FadeInDown,
+  FadeOutUp,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -35,7 +37,14 @@ import {
   LocationPicker,
   type PickedLocation,
 } from '../../components/LocationPicker';
-import { openInMaps } from '../../lib/location';
+import { LocationViewer } from '../../components/LocationViewer';
+import {
+  LIVE_DURATIONS,
+  remainingLabel,
+  startLiveShare,
+  stopLiveShare,
+  useMyLiveShare,
+} from '../../lib/liveLocation';
 import {
   getChatWallpaper,
   setChatWallpaper,
@@ -99,6 +108,8 @@ const MESSAGES_PAGE = 30;
 const COMPOSER_OVERLAP = 240;
 // Hauteurs des dégradés de flou qui adoucissent les deux bords du fil.
 const HEADER_H = 62;
+// Bandeau « position en direct », glissé sous le header quand un partage est en cours.
+const LIVE_BANNER_H = 46;
 // La carte du header se détache du fond : ombre plus large que celle des boutons.
 const HEADER_SHADOW = {
   shadowColor: '#000',
@@ -459,6 +470,16 @@ export default function ChatScreen() {
   );
   const [giphyOpen, setGiphyOpen] = useState(false);
   const [locationPicker, setLocationPicker] = useState(false);
+  const [viewLocation, setViewLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    address?: string | null;
+  } | null>(null);
+  // Participants (moi exclu) qui diffusent leur position ici. Une liste d'identifiants et
+  // non un compteur : les relevés arrivent en rafale, un compteur dériverait.
+  const [liveShares, setLiveShares] = useState<string[]>([]);
+  const myLiveExpiry = useMyLiveShare(id);
+  const liveBannerVisible = !!myLiveExpiry || liveShares.length > 0;
   const [uploading, setUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -714,6 +735,26 @@ export default function ChatScreen() {
           },
         );
 
+        // Partages de position des autres : on ne garde que le compte, la carte étant sur
+        // son propre écran. Le mien est suivi par `useMyLiveShare`, pas par le serveur.
+        apiRequest<{ userId: string }[]>(`/conversations/${id}/live-locations`)
+          .then((list) =>
+            setLiveShares(list.filter((l) => l.userId !== me.id).map((l) => l.userId)),
+          )
+          .catch(() => {});
+
+        socket.on('live_location', (e: { conversationId: string; userId: string }) => {
+          if (e.conversationId !== id || e.userId === me.id) return;
+          setLiveShares((prev) => (prev.includes(e.userId) ? prev : [...prev, e.userId]));
+        });
+        socket.on(
+          'live_location_ended',
+          (e: { conversationId: string; userId: string }) => {
+            if (e.conversationId !== id) return;
+            setLiveShares((prev) => prev.filter((u) => u !== e.userId));
+          },
+        );
+
         // Photo du groupe changée (par moi depuis les détails, ou par un autre admin) :
         // le header suit sans qu'on ait à rouvrir la conversation.
         socket.on('group_updated', (d: { conversationId: string; photoUrl?: string | null }) => {
@@ -753,6 +794,8 @@ export default function ChatScreen() {
       socket?.off('peer_typing');
       socket?.off('presence_update');
       socket?.off('group_updated');
+      socket?.off('live_location');
+      socket?.off('live_location_ended');
       socket?.off('connect');
       // On arrête proprement notre propre indicateur de frappe.
       if (typingStopRef.current) clearTimeout(typingStopRef.current);
@@ -943,6 +986,43 @@ export default function ChatScreen() {
   };
 
   /**
+   * Choix de la durée, puis démarrage du partage en direct.
+   *
+   * Une durée est demandée à chaque fois, sans valeur par défaut : diffuser sa position
+   * n'est pas anodin, autant que ce soit un choix conscient.
+   */
+  const askLiveDuration = () => {
+    Alert.alert(t('live.action'), t('live.duration_question'), [
+      ...LIVE_DURATIONS.map((seconds) => ({
+        text: t(`live.duration_${seconds}`),
+        onPress: async () => {
+          const result = await startLiveShare(id, seconds);
+          // Permission « Toujours » refusée : le partage marche, mais s'interrompt dès que
+          // l'app quitte l'écran. Le dire tout de suite, plutôt que de laisser croire à un
+          // suivi continu qui figerait la position sans prévenir.
+          if (result.ok) {
+            if (!result.background) {
+              Alert.alert(t('live.foreground_only_title'), t('live.foreground_only'));
+            }
+            return;
+          }
+          Alert.alert(
+            t('location.error_title'),
+            t('location.denied'),
+            result.canAskAgain
+              ? undefined
+              : [
+                  { text: t('cancel'), style: 'cancel' as const },
+                  { text: t('location.open_settings'), onPress: () => Linking.openSettings() },
+                ],
+          );
+        },
+      })),
+      { text: t('cancel'), style: 'cancel' as const },
+    ]);
+  };
+
+  /**
    * Envoie un point de la carte. Rien à téléverser : les coordonnées voyagent avec le
    * message, et `content` porte l'adresse lisible — c'est elle qu'on affiche sous
    * l'aperçu et dans la liste des conversations.
@@ -999,6 +1079,13 @@ export default function ChatScreen() {
       color: '#10B981',
       label: t('media.location'),
       onPress: () => setLocationPicker(true),
+    },
+    {
+      key: 'live',
+      icon: 'navigate',
+      color: '#0EA5E9',
+      label: t('live.action'),
+      onPress: askLiveDuration,
     },
   ];
 
@@ -1367,6 +1454,56 @@ export default function ChatScreen() {
       </View>
       </View>
 
+      {/* Bandeau de partage en direct. Flottant comme le header et AU-DESSUS de lui en
+          empilement (`zIndex`) : posé dans le flux, il se retrouvait derrière le dégradé de
+          flou du haut du fil. Une position qui se diffuse doit rester visible en
+          permanence, et coupable d'un seul geste. */}
+      {liveBannerVisible && (
+        <Animated.View
+          // Glisse depuis le header plutôt que d'apparaître d'un bloc, et s'efface en
+          // remontant. Durées seules, sans ressort : l'élément se pose sous une carte déjà
+          // en place, un dépassement le ferait cogner contre elle.
+          entering={FadeInDown.duration(220)}
+          exiting={FadeOutUp.duration(160)}
+          className="absolute"
+          style={{
+            top: insets.top + 4 + HEADER_H + 6,
+            left: 10,
+            right: 10,
+            zIndex: 11,
+          }}
+        >
+        <TouchableOpacity
+          className="flex-row items-center px-4 rounded-2xl bg-blue-50 dark:bg-blue-950"
+          style={{
+            height: LIVE_BANNER_H,
+            ...HEADER_SHADOW,
+          }}
+          onPress={() =>
+            router.push({ pathname: '/chat/live' as any, params: { id, name: displayName } })
+          }
+          activeOpacity={0.85}
+        >
+          <Ionicons name="navigate" size={18} color={NEXA} />
+          <Text className="flex-1 ml-2.5 text-nexa dark:text-blue-300" numberOfLines={1}>
+            {myLiveExpiry
+              ? t('live.sharing_for', { time: remainingLabel(myLiveExpiry) })
+              : t('live.others_sharing', { count: liveShares.length })}
+          </Text>
+          {myLiveExpiry ? (
+            <TouchableOpacity
+              className="bg-red-500 rounded-full px-3 py-1.5 ml-2"
+              onPress={() => stopLiveShare(id)}
+            >
+              <Text className="text-white text-xs font-semibold">{t('live.stop')}</Text>
+            </TouchableOpacity>
+          ) : (
+            <Ionicons name="chevron-forward" size={16} color={NEXA} />
+          )}
+        </TouchableOpacity>
+        </Animated.View>
+      )}
+
       {/* Messages */}
       <KeyboardAvoidingView className="flex-1" behavior="padding">
         <View style={{ flex: 1, marginBottom: -composerOverlap }}>
@@ -1387,7 +1524,15 @@ export default function ChatScreen() {
           // Rend au fil la hauteur occupée par la carte du header (marge d'écran + décalage
           // de 4 + hauteur), moins le paddingTop déjà appliqué au contenu.
           ListHeaderComponent={
-            <View style={{ height: insets.top + HEADER_H + 6, justifyContent: 'flex-end' }}>
+            <View
+              style={{
+                // Rend au fil la hauteur des éléments flottants — header, et bandeau de
+                // partage quand il est là — pour que le premier message ne passe pas dessous.
+                height:
+                  insets.top + HEADER_H + 6 + (liveBannerVisible ? LIVE_BANNER_H + 6 : 0),
+                justifyContent: 'flex-end',
+              }}
+            >
               {loadingOlder && (
                 <ActivityIndicator size="small" color={NEXA} style={{ marginBottom: 8 }} />
               )}
@@ -1553,7 +1698,13 @@ export default function ChatScreen() {
                         latitude={item.latitude}
                         longitude={item.longitude}
                         address={item.content}
-                        onPress={() => openInMaps(item.latitude!, item.longitude!, item.content)}
+                        onPress={() =>
+                          setViewLocation({
+                            latitude: item.latitude!,
+                            longitude: item.longitude!,
+                            address: item.content,
+                          })
+                        }
                       />
                     </View>
                     <BubbleTime iso={item.createdAt} isMe={isMe} />
@@ -1815,6 +1966,16 @@ export default function ChatScreen() {
         onClose={() => setLocationPicker(false)}
         onPick={sendLocation}
       />
+
+      {viewLocation && (
+        <LocationViewer
+          visible
+          latitude={viewLocation.latitude}
+          longitude={viewLocation.longitude}
+          address={viewLocation.address}
+          onClose={() => setViewLocation(null)}
+        />
+      )}
 
       <AttachmentSheet
         visible={attachOpen}

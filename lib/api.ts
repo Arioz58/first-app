@@ -71,6 +71,13 @@ export const apiRequest = async <T>(
   }
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message || "Erreur serveur");
+  if (!res.ok) {
+    // Le code HTTP est attaché à l'erreur : certains appelants doivent distinguer un refus
+    // métier d'une panne réseau (410 = partage de position terminé, par exemple), ce que
+    // le seul message ne permet pas de faire sans se fier à son texte.
+    const error = new Error(data.message || "Erreur serveur") as Error & { status?: number };
+    error.status = res.status;
+    throw error;
+  }
   return data;
 };

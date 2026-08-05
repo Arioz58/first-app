@@ -81,6 +81,71 @@ export const openInMaps = (latitude: number, longitude: number, label?: string |
   return Linking.openURL(url).catch(() => {});
 };
 
+export type MapApp = { key: string; label: string; url: string };
+
+/**
+ * Applications de navigation utilisables pour ce point.
+ *
+ * ⚠️ Sur iOS, `canOpenURL` ne répond `true` que pour les schémas déclarés dans
+ * `LSApplicationQueriesSchemes` (app.json) : sans cette déclaration, une application
+ * pourtant installée serait tenue pour absente.
+ *
+ * Le repli web est toujours proposé en dernier — il ouvre le navigateur, donc il marche
+ * même quand aucune application de cartes n'est installée.
+ */
+export const availableMapApps = async (
+  latitude: number,
+  longitude: number,
+  label?: string | null,
+): Promise<MapApp[]> => {
+  const name = encodeURIComponent(label || 'Position');
+  const candidates: (MapApp & { probe?: string })[] = [
+    Platform.OS === 'ios'
+      ? {
+          key: 'apple',
+          label: 'Plans',
+          url: `http://maps.apple.com/?ll=${latitude},${longitude}&q=${name}`,
+        }
+      : {
+          // Android : `geo:` laisse le système présenter les applications de cartes.
+          key: 'system',
+          label: 'Cartes',
+          url: `geo:${latitude},${longitude}?q=${latitude},${longitude}(${name})`,
+        },
+    {
+      key: 'google',
+      label: 'Google Maps',
+      probe: 'comgooglemaps://',
+      url: `comgooglemaps://?q=${latitude},${longitude}&center=${latitude},${longitude}`,
+    },
+    {
+      key: 'waze',
+      label: 'Waze',
+      probe: 'waze://',
+      url: `waze://?ll=${latitude},${longitude}&navigate=yes`,
+    },
+  ];
+
+  const apps: MapApp[] = [];
+  for (const { probe, ...app } of candidates) {
+    if (!probe) {
+      apps.push(app);
+      continue;
+    }
+    const installed = await Linking.canOpenURL(probe).catch(() => false);
+    if (installed) apps.push(app);
+  }
+
+  apps.push({
+    key: 'web',
+    label: 'Google Maps (web)',
+    url: `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`,
+  });
+  return apps;
+};
+
+export const openMapApp = (app: MapApp) => Linking.openURL(app.url).catch(() => {});
+
 /** « Istanbul, Turquie » — ou la seule ville si le pays manque. */
 export const formatLocation = (loc?: ProfileLocation | null) =>
   loc?.city ? [loc.city, loc.country].filter(Boolean).join(', ') : '';

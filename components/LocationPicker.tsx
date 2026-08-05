@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ProgressiveBlur } from './ProgressiveBlur';
 
 const NEXA = '#1E40AF';
 // Fenêtre d'environ 500 m de côté : assez serré pour situer une rue, assez large pour se
@@ -180,6 +181,12 @@ export function LocationPicker({
   );
 }
 
+const BUBBLE_W = 244;
+const BUBBLE_H = 186;
+// Bande d'information en bas de l'aperçu. Le flou y monte progressivement : la carte reste
+// nette au-dessus et se dissout sous le texte, plutôt que d'être coupée par un bandeau.
+const INFO_H = 78;
+
 /** Aperçu figé d'une position, tel qu'il apparaît dans une bulle. */
 export function LocationBubble({
   latitude,
@@ -195,28 +202,47 @@ export function LocationBubble({
   const { t } = useTranslation();
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.9} className="rounded-2xl overflow-hidden">
-      <MapView
-        style={{ width: 244, height: 140 }}
-        initialRegion={{
-          latitude,
-          longitude,
-          latitudeDelta: ZOOM,
-          longitudeDelta: ZOOM,
-        }}
-        // Carte d'illustration : tout geste appartient à la bulle, pas à la carte.
-        scrollEnabled={false}
-        zoomEnabled={false}
-        rotateEnabled={false}
-        pitchEnabled={false}
-        pointerEvents="none"
-      >
-        <Marker coordinate={{ latitude, longitude }} pinColor={NEXA} />
-      </MapView>
-      <View className="bg-white dark:bg-zinc-800 px-3 py-2" style={{ width: 244 }}>
-        <Text className="text-gray-900 dark:text-zinc-100 font-medium" numberOfLines={1}>
-          {address || t('location.shared')}
-        </Text>
-        <Text className="text-nexa text-sm mt-0.5">{t('location.open_maps')}</Text>
+      <View style={{ width: BUBBLE_W, height: BUBBLE_H }}>
+        <MapView
+          style={StyleSheet.absoluteFill}
+          initialRegion={{
+            latitude,
+            longitude,
+            latitudeDelta: ZOOM,
+            longitudeDelta: ZOOM,
+          }}
+          // Carte d'illustration : tout geste appartient à la bulle, pas à la carte.
+          scrollEnabled={false}
+          zoomEnabled={false}
+          rotateEnabled={false}
+          pitchEnabled={false}
+          pointerEvents="none"
+        >
+          <Marker coordinate={{ latitude, longitude }} pinColor={NEXA} />
+        </MapView>
+
+        {/* Même dégradé que le haut du fil de discussion, retourné : net en haut, flou en
+            bas. Le texte se pose dessus sans qu'aucune bande opaque ne rogne la carte. */}
+        <ProgressiveBlur
+          edge="bottom"
+          height={INFO_H}
+          intensity={70}
+          style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
+        />
+
+        <View
+          className="absolute left-0 right-0 bottom-0 px-3 pb-2.5 justify-end"
+          style={{ height: INFO_H }}
+          pointerEvents="none"
+        >
+          <Text className="text-gray-900 dark:text-zinc-100 font-semibold" numberOfLines={2}>
+            {address || t('location.shared')}
+          </Text>
+          <View className="flex-row items-center mt-0.5">
+            <Ionicons name="open-outline" size={13} color={NEXA} />
+            <Text className="text-nexa text-sm ml-1">{t('location.open_maps')}</Text>
+          </View>
+        </View>
       </View>
     </TouchableOpacity>
   );

@@ -37,6 +37,7 @@ import {
   formatLocation,
   type ProfileLocation,
 } from '../../lib/location';
+import { stopAllLiveShares } from '../../lib/liveLocation';
 import { getThemePref, setThemePref, useThemeColors, type ThemePref } from '../../lib/theme';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
@@ -208,6 +209,10 @@ export default function ProfileScreen() {
           // Avant d'effacer la session : la requête a besoin du jeton d'accès, et
           // l'appareil ne doit plus recevoir les notifications de ce compte.
           await unregisterPushToken();
+          // Aucun partage de position ne doit survivre au changement de compte. Attendu :
+          // l'arrêt prévient le serveur et coupe le suivi, deux choses qui ont besoin de la
+          // session encore valide.
+          await stopAllLiveShares();
           // Les non-lus du compte quitté ne doivent pas rester sur l'icône de l'app.
           setUnreadCounts({});
           disconnectSocket();

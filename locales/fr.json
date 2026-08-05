@@ -489,6 +489,30 @@
     "send_action": "Envoyer cette position",
     "pin_hint": "Déplacez la carte pour choisir un point",
     "shared": "Position partagée",
-    "open_maps": "Ouvrir dans Plans"
+    "open_maps": "Voir sur la carte",
+    "open_with": "Ouvrir dans une app de navigation"
+  },
+  "live": {
+    "action": "Position en direct",
+    "title": "Position en direct",
+    "duration_question": "Pendant combien de temps partager votre position ?",
+    "duration_900": "15 minutes",
+    "duration_3600": "1 heure",
+    "duration_28800": "8 heures",
+    "sharing_for": "Vous partagez votre position ({{time}})",
+    "others_sharing": "{{count}} personne partage sa position",
+    "others_sharing_plural": "{{count}} personnes partagent leur position",
+    "stop": "Arrêter",
+    "empty": "Personne ne partage sa position pour le moment.",
+    "just_now": "à l'instant",
+    "minutes_ago": "il y a {{count}} min",
+    "hours_ago": "il y a {{count}} h",
+    "stale": "Position figée · {{time}}",
+    "people_count": "{{count}} position partagée",
+    "people_count_plural": "{{count}} positions partagées",
+    "empty_short": "Aucune position partagée",
+    "you": "Vous",
+    "foreground_only_title": "Partage limité",
+    "foreground_only": "Sans l'autorisation « Toujours », votre position cesse d'être transmise dès que vous quittez l'application. Vous pouvez l'accorder dans les réglages."
   }
 }

@@ -14,6 +14,7 @@ import {
 import i18n from "../lib/i18n";
 import { registerForPushNotifications } from "../lib/notifications";
 import { connectSocket, pauseSocket, resumeSocket } from "../lib/socket";
+import { hydrateLiveShares } from "../lib/liveLocation";
 import { clearTokens, getAccessToken, getRefreshToken } from "../lib/storage";
 import { initTheme } from "../lib/theme";
 import "./globals.css";
@@ -78,6 +79,9 @@ export default function RootLayout() {
   useEffect(() => {
     setSessionExpiredHandler(() => router.replace("/(auth)/welcome"));
     initTheme(); // restaure le thème choisi (Système/Clair/Sombre) avant le rendu
+    // Un partage de position peut avoir survécu à la fermeture de l'app : on reprend le
+    // suivi là où il en était, plutôt que de le laisser figé jusqu'à son échéance.
+    hydrateLiveShares().catch(() => {});
 
     const init = async () => {
       const token = await getAccessToken();
@@ -130,6 +134,10 @@ export default function RootLayout() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="chat/new" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="chat/live"
+        options={{ headerShown: false, animation: "slide_from_right" }}
+      />
       <Stack.Screen
         name="chat/details"
         options={{ headerShown: false, animation: "slide_from_right" }}
