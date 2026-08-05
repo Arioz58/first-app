@@ -72,7 +72,13 @@ Le rendu iOS est validé sur iPhone. **Rien n'a été testé sur Android.**
 
 ---
 
-## 4. Build et distribution
+## 4. Cartes (localisation, Mois 3)
+
+- [ ] **Clé API Google Maps obligatoire** : `react-native-maps` utilise Apple Maps sur iOS (aucune clé), mais **Google Maps sur Android**. Sans clé, la carte s'affiche **grise et vide** — l'app ne plante pas, ce qui rend le symptôme facile à mal interpréter. La clé se crée sur un compte Google Cloud (côté client), avec l'API « Maps SDK for Android » activée, puis se déclare dans `app.json` sous `android.config.googleMaps.apiKey`. ⚠️ Ne pas l'écrire en dur dans le dépôt : passer par une variable d'environnement EAS, la règle du projet valant aussi ici (cf. `GIPHY_API_KEY`, déjà commitée par erreur).
+- [ ] Restreindre la clé côté Google Cloud (empreinte SHA-1 du certificat de release + nom de paquet), sinon elle est utilisable par n'importe qui une fois l'APK distribué.
+- [?] Vérifier le rendu de l'aperçu de position dans une bulle : sur Android, une `MapView` non interactive dans une liste peut être coûteuse — `liteMode` existe précisément pour ce cas et n'a pas d'équivalent iOS.
+
+## 5. Build et distribution
 
 - [ ] Premier build EAS Android (`preview` produit un APK, pratique pour tester sans le Play Store).
 - [ ] Keystore de release (généré et conservé par EAS).
@@ -83,7 +89,7 @@ Le rendu iOS est validé sur iPhone. **Rien n'a été testé sur Android.**
 
 ---
 
-## 5. Rappels
+## 6. Rappels
 
 - Ne jamais livrer un chemin de code dégradé sur Android en se justifiant par « le développement se fait sur iOS ». Si une différence de plateforme est inévitable, la traiter explicitement **dans les deux branches** et le dire.
 - Toute fonctionnalité livrée doit s'accompagner de son résultat **iOS et Android** — ou de la mention explicite qu'il n'y a aucune différence.

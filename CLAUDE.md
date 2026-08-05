@@ -76,6 +76,8 @@ first-app-web/       → Next.js — à créer au Mois 3
 - **expo-audio** — enregistrement et lecture des messages vocaux (plugin `expo-audio` dans `app.json`) ⚠️ **module natif** (rebuild requis)
 - **expo-document-picker** — pièces jointes documents du chat ⚠️ **module natif** (rebuild requis)
 - **expo-file-system** — copie du fond de conversation en stockage permanent + téléchargement groupé des médias (import `expo-file-system/legacy`)
+- **expo-location** — position et géocodage inverse (ville du profil, envoi de position) ⚠️ **module natif** (rebuild requis)
+- **react-native-maps** (1.20.1, épinglée par le SDK 54) — cartes ⚠️ **module natif** ; Apple Maps sur iOS sans clé, **clé Google obligatoire sur Android**
 - **expo-blur** — overlay de chargement du viewer stories + surfaces en verre du chat (`GlassSurface`, `ProgressiveBlur`) ⚠️ **module natif** (rebuild requis)
 - **react-native-keyboard-controller** — position du clavier mesurée **nativement image par image** (`KeyboardProvider` monté dans `app/_layout.tsx`, `KeyboardAvoidingView` dans le chat) ⚠️ **module natif** (rebuild requis) — ne pas confondre avec le `KeyboardAvoidingView` de React Native, qui décale d'un bloc avec un temps de retard
 - **@react-native-masked-view/masked-view** — masques en dégradé du flou progressif (`ProgressiveBlur`)
@@ -269,6 +271,7 @@ POST /reports                                     → signaler `{ userId, catego
 GET  /users/me                                    → profil complet
 PATCH /users/me                                   → mise à jour (name, photoUrl, language sur User ; bio/privacyPresence/privacyPhoto routés sur Profile — `bio` effaçable via chaîne vide)
 POST /users/me/privacy-consent                    → consentement politique de confidentialité (body `{ version }` → privacyConsent + privacyConsentAt + privacyPolicyVersion)
+PATCH /users/me/location                          → ville affichée au profil `{ city, country }` (`city: null` efface). ⚠️ Donnée **déclarative** : le géocodage est fait par l'app, le serveur ne vérifie rien — n'en faire dépendre aucune règle
 PATCH /users/me/privacy                            → met à jour la matrice de confidentialité (valeurs validées serveur : triple everyone/friends/nobody, friend_requests everyone/friends_of_friends/nobody, locationEnabled bool)
 POST /users/me/fcm-token                          → enregistrer le jeton push (colonne `User.fcmToken`, contient désormais un **jeton Expo**) ; ⚠️ **transaction** qui le retire de tous les autres comptes — un jeton identifie un APPAREIL, pas un utilisateur
 DELETE /users/me/fcm-token                        → libérer le jeton (appelé à la déconnexion, **avant** d'effacer la session)
@@ -508,6 +511,33 @@ Migration `conversation_list` : `ConversationMember.lastReadAt` / `pinnedAt` / `
   - **Pastille de l'icône de l'app** : synchronisée depuis ce même store (`setBadgeCountAsync` à chaque recalcul, y compris quand le total n'a pas bougé — elle a pu être posée par une notification reçue app fermée alors que la conversation a été lue ailleurs). App fermée, c'est le **serveur** qui la met à jour : `countUnreadMessages` (`src/lib/unread.ts`, une seule requête SQL) alimente le champ `badge` du push, **par destinataire**. ⚠️ `lib/unread.ts` et non `messages.service` : ce dernier importe `lib/socket`, qui devrait alors l'importer en retour (cycle). Un Context ne conviendrait pas : le badge est rendu par `(tabs)/_layout`, qui serait aussi le fournisseur — un composant ne peut pas consommer le Context qu'il fournit. Alimenté par (1) `refreshPendingFriendRequests()` au démarrage dans `app/_layout.tsx`, (2) `incrementPendingFriendRequests()` sur socket `friend_request_received` (optimiste, sans aller-retour), (3) `setPendingFriendRequests(r.length)` dans le `load()` de `FriendsPanel` — ce `load()` étant rejoué au focus **et** après chaque accept/refuse, c'est le point unique de resynchronisation.
 - **FAB « + »** en bas à droite de la page Discussion → `BottomSheet` (hauteur auto) à 3 actions : nouvelle conversation (`chat/new`), nouveau groupe (`group/new`), ajouter un contact (→ onglet Contacts, **segment Répertoire** via `requestContactsSegment('directory')`). Il **remplace** l'ancienne icône « nouveau groupe » du header, devenue redondante.
 
+## Localisation (Mois 3) 🔄
+
+Chantier en 3 phases, périmètre validé le 5 août 2026 (le client veut les trois).
+
+### Phase 1 — La ville au profil ✅
+
+- Migration `profile_location` : `Profile.city` / `country` / `locationUpdatedAt`.
+- ⚠️ On stocke la **ville, pas les coordonnées** : c'est tout ce que l'affichage demande, et une fuite ne désigne alors pas un domicile.
+- **Géocodage inverse sur l'appareil** (`expo-location`, services natifs iOS/Android) → **aucune clé Google** pour cette phase, et les coordonnées ne quittent jamais le téléphone.
+- Relevé **manuel** (ligne « Ma ville » dans le profil), jamais en tâche de fond — c'est aussi ce qui rend la permission facile à justifier.
+- `GET /users/:id/profile` renvoie `location` sous **double condition** : `locationEnabled` **et** `privacyLocation` satisfait. Désactiver le partage masque la ville quel que soit le réglage de visibilité.
+- `lib/location.ts` : `detectAndSaveCity` (distingue `denied` / `canAskAgain` → renvoi vers les réglages), `clearCity`, `formatLocation`, `openInMaps`.
+
+### Phase 2 — Envoyer une position dans une conversation ✅
+
+- Migration `message_location` : `Message.latitude` / `longitude`, en **colonnes** et non dans `content` (qui porte l'adresse lisible) — elles restent exploitables telles quelles pour la phase 3.
+- Socket : `type: 'location'` ; les coordonnées sont **ignorées** sur tout autre type de message.
+- `components/LocationPicker.tsx` : `LocationPicker` (choix d'un point) + `LocationBubble` (aperçu figé). Le repère est **fixe au centre et c'est la carte qui bouge dessous** — viser un marqueur au doigt est pénible.
+  - ⚠️ Le repère doit se superposer à la **carte seule** : posé sur le conteneur entier (carte + panneau), il se retrouvait centré ~60 px trop bas et désignait un autre point que celui envoyé. `PIN_LIFT` remonte l'icône pour que sa **pointe** tombe sur le centre.
+- Tap sur l'aperçu → application de cartes du téléphone (`openInMaps`, schéma d'URL par plateforme).
+
+### Phase 3 — Position en direct 🔜
+
+Le modèle `LocationShared` existe dans le schéma depuis l'origine mais **n'est utilisé nulle part** (aucun module, aucune route) ; il lui manque notamment une date d'expiration. Prévoir : durée limitée, mises à jour par socket, arrêt automatique, permission « Toujours », et l'impact batterie.
+
+⚠️ **Cartes et Android** : `react-native-maps` (1.20.1, épinglée par le SDK 54) utilise **Apple Maps sur iOS — sans clé** — mais **Google Maps sur Android, qui exige une clé API**. Sans elle la carte est **grise et vide**, sans planter. Voir `android.md`.
+
 ## Répertoire & ajout de contacts (façon WhatsApp) ✅
 
 Livré le 30 juil. 2026 — la saisie manuelle d'un numéro était jugée trop longue par le client (frein à l'adoption).
@@ -546,6 +576,7 @@ Livré le 30 juil. 2026 — la saisie manuelle d'un numéro était jugée trop l
   - **Android** : la photo part en `richContent.image` → `expo-notifications` la pose en **grande icône** (`setLargeIcon`) ; elle est à gauche jusqu'à Android 11, **à droite depuis Android 12** (changement de gabarit système). Un rendu « conversation » façon WhatsApp y demanderait `MessagingStyle` + shortcuts, **non exposé par `expo-notifications`** → module natif à écrire, non fait.
   - **Petite icône Android** : `assets/images/notification-icon.png` (96×96, silhouette blanche + alpha, dérivée du logo) déclarée via le plugin `expo-notifications` avec `color: "#1E40AF"`. ⚠️ Sans elle, Android affiche l'icône de l'app pleine → **carré blanc** dans la barre d'état.
 - `app.json` : `appleTeamId`, `NSUserActivityTypes: ["INSendMessageIntent"]`, `ios.entitlements`, plugins `@bacons/apple-targets` et `expo-notifications`. **Rebuild natif requis** (`npx expo prebuild -p ios` puis build — `ios/` et `android/` sont gitignorés, donc régénérables).
+- ⚠️ **`expo prebuild -p ios` échoue tant que la cible d'extension existe déjà** : `Target "NexaNotificationService" already exists, updating instead of creating a new one` puis `TypeError […] Cannot read properties of undefined (reading 'removeFromProject')`. `@bacons/apple-targets` sait créer la cible, pas la mettre à jour. **Toujours passer `--clean`** dès qu'un prebuild iOS est nécessaire (rencontré les 1ᵉʳ et 5 août) — c'est sans risque, `ios/` étant gitignoré.
 - ⏳ À vérifier avant de considérer le chantier clos : réception réelle sur les 2 iPhones (dont le rendu avatar, qui dépend de la signature) et sur **Android**.
 
 ## Social : amis, confidentialité, blocage (épopée multi-phases) 🔄

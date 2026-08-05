@@ -83,6 +83,14 @@
         }
       ],
       [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Nexa utilise votre position pour indiquer votre ville sur votre profil et partager votre position dans une conversation.",
+          "locationAlwaysPermission": "Nexa utilise votre position pour partager votre position en direct dans une conversation, même lorsque l'application est en arrière-plan.",
+          "locationWhenInUsePermission": "Nexa utilise votre position pour indiquer votre ville sur votre profil et partager votre position dans une conversation."
+        }
+      ],
+      [
         "expo-contacts",
         {
           "contactsPermission": "Nexa utilise vos contacts pour retrouver qui utilise déjà l'application et inviter les autres. Vos contacts ne sont jamais stockés."

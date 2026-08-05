@@ -379,7 +379,8 @@
     "video": "🎥 Video",
     "audio": "🎤 Sesli mesaj",
     "document": "📄 Belge",
-    "gif": "GIF"
+    "gif": "GIF",
+    "location": "📍 Konum"
   },
   "time": {
     "yesterday": "Dün"
@@ -473,5 +474,21 @@
   "archived": {
     "title": "Arşivlenenler",
     "empty": "Arşivlediğiniz sohbetler burada saklanır. Yeni mesaj gelse bile arşivde kalırlar."
+  },
+  "location": {
+    "row": "Şehrim",
+    "none": "Belirtilmedi",
+    "detecting": "Konum alınıyor…",
+    "refresh": "Yenile",
+    "remove": "Şehrimi kaldır",
+    "error_title": "Konum kullanılamıyor",
+    "denied": "Nexa konumunuza erişemiyor. Cihaz ayarlarından izin verin.",
+    "unavailable": "Şehriniz şu anda belirlenemedi. Lütfen daha sonra tekrar deneyin.",
+    "open_settings": "Ayarları aç",
+    "send_title": "Konumumu gönder",
+    "send_action": "Bu konumu gönder",
+    "pin_hint": "Bir nokta seçmek için haritayı hareket ettirin",
+    "shared": "Paylaşılan konum",
+    "open_maps": "Haritalar’da aç"
   }
 }

@@ -29,6 +29,12 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
   Plan : Ph1 cles (identity + signed prekey + one-time prekeys, cle privee en Keychain/expo-secure-store, endpoints POST/GET /users/.../keys). Ph2 direct X3DH + chiffrement session. Ph3 Double Ratchet. Ph4 groupes (sender keys). Ph5 medias (chiffrer avant upload S3). Ph6 bandeau systeme "chiffre de bout en bout".
   ⚠️ Impacts a assumer : casse la recherche serveur des messages (-> recherche locale), l'apercu dans les notifications push (-> generique), la moderation centralisee (-> via signalement), risque legal KVKK (pas d'acces autorites). Reinstall sans backup de cle = historique illisible.
 
+[EN COURS 05/08 - Localisation, Mois 3] Perimetre valide : les 3 phases.
+  [FAIT] Phase 1 — ville au profil. On stocke la VILLE, pas les coordonnees (une fuite ne designe alors pas un domicile) ; geocodage inverse fait SUR L'APPAREIL donc aucune cle Google ; releve manuel, jamais en tache de fond. Gated par locationEnabled ET privacyLocation. Migration `profile_location`, PATCH /users/me/location.
+  [FAIT] Phase 2 — envoyer une position dans une conversation. Migration `message_location` (latitude/longitude en colonnes, `content` = adresse lisible) ; type de message `location` ; LocationPicker (repere fixe au centre, la carte bouge dessous) + LocationBubble ; tap -> app de cartes du telephone.
+  [A FAIRE] Phase 3 — position EN DIRECT. Le modele `LocationShared` existe dans le schema depuis l'origine mais n'est utilise NULLE PART, et il lui manque une date d'expiration. Prevoir : duree limitee, maj par socket, arret auto, permission « Toujours » a justifier chez Apple, impact batterie.
+  ⚠️ Android : cle API Google Maps a demander au client (compte Google Cloud). Sans elle la carte est grise et vide, sans planter — symptome trompeur. Voir android.md.
+
 [A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
   → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.
 

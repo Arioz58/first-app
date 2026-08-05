@@ -379,7 +379,8 @@
     "video": "🎥 Vidéo",
     "audio": "🎤 Message vocal",
     "document": "📄 Document",
-    "gif": "GIF"
+    "gif": "GIF",
+    "location": "📍 Position"
   },
   "time": {
     "yesterday": "Hier"
@@ -473,5 +474,21 @@
   "archived": {
     "title": "Archivées",
     "empty": "Les conversations que vous archivez sont rangées ici. Elles y restent même quand un nouveau message arrive."
+  },
+  "location": {
+    "row": "Ma ville",
+    "none": "Non renseignée",
+    "detecting": "Localisation…",
+    "refresh": "Actualiser",
+    "remove": "Retirer ma ville",
+    "error_title": "Localisation indisponible",
+    "denied": "Nexa n'a pas accès à votre position. Autorisez-la dans les réglages de l'appareil.",
+    "unavailable": "Impossible de déterminer votre ville pour le moment. Réessayez plus tard.",
+    "open_settings": "Ouvrir les réglages",
+    "send_title": "Envoyer ma position",
+    "send_action": "Envoyer cette position",
+    "pin_hint": "Déplacez la carte pour choisir un point",
+    "shared": "Position partagée",
+    "open_maps": "Ouvrir dans Plans"
   }
 }

@@ -31,6 +31,12 @@ import { MediaGrid } from '../../components/MediaGrid';
 import { AlbumViewer, type AlbumItem } from '../../components/AlbumViewer';
 import GiphyPicker from '../../components/GiphyPicker';
 import {
+  LocationBubble,
+  LocationPicker,
+  type PickedLocation,
+} from '../../components/LocationPicker';
+import { openInMaps } from '../../lib/location';
+import {
   getChatWallpaper,
   setChatWallpaper,
   getConversationCustomization,
@@ -163,6 +169,8 @@ type Message = {
   fileSize?: number | null;
   durationMs?: number | null;
   batchId?: string | null; // médias d'un même envoi → un seul album à l'affichage
+  latitude?: number | null; // `type: 'location'` — `content` porte l'adresse lisible
+  longitude?: number | null;
 };
 
 // Une réponse à une story porte déjà son propre en-tête (« X a répondu à votre story »)
@@ -450,6 +458,7 @@ export default function ChatScreen() {
     null,
   );
   const [giphyOpen, setGiphyOpen] = useState(false);
+  const [locationPicker, setLocationPicker] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -933,6 +942,21 @@ export default function ChatScreen() {
     sendMedia({ mediaUrl: url, mediaType: 'gif' });
   };
 
+  /**
+   * Envoie un point de la carte. Rien à téléverser : les coordonnées voyagent avec le
+   * message, et `content` porte l'adresse lisible — c'est elle qu'on affiche sous
+   * l'aperçu et dans la liste des conversations.
+   */
+  const sendLocation = ({ latitude, longitude, address }: PickedLocation) => {
+    getSocket()?.emit('send_message', {
+      conversationId: id,
+      type: 'location',
+      content: address,
+      latitude,
+      longitude,
+    });
+  };
+
   // Le « + » pivote en croix tant que le panneau est ouvert (ressort, pas un timing
   // linéaire : le retour doit avoir le même caractère que le reste des interactions).
   const setAttach = (open: boolean) => {
@@ -970,15 +994,11 @@ export default function ChatScreen() {
       onPress: () => setGiphyOpen(true),
     },
     {
-      // Le module de localisation est prévu au Mois 3 : l'entrée existe pour ne pas
-      // avoir à redessiner la grille plus tard, mais elle annonce son indisponibilité
-      // au lieu de faire croire à une action possible.
       key: 'location',
       icon: 'location',
       color: '#10B981',
       label: t('media.location'),
-      coming: true,
-      onPress: () => Alert.alert('', t('media.location_coming')),
+      onPress: () => setLocationPicker(true),
     },
   ];
 
@@ -1518,6 +1538,26 @@ export default function ChatScreen() {
                       {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
                     </View>
                   </>
+                ) : item.type === 'location' &&
+                  item.latitude != null &&
+                  item.longitude != null ? (
+                  <>
+                    {!isMe && firstOfGroup && (
+                      <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">
+                        {item.sender?.name}
+                      </Text>
+                    )}
+                    {/* Aperçu hors bulle, comme les médias : la carte se suffit à elle-même. */}
+                    <View style={BUBBLE_SHADOW} className="rounded-2xl overflow-hidden">
+                      <LocationBubble
+                        latitude={item.latitude}
+                        longitude={item.longitude}
+                        address={item.content}
+                        onPress={() => openInMaps(item.latitude!, item.longitude!, item.content)}
+                      />
+                    </View>
+                    <BubbleTime iso={item.createdAt} isMe={isMe} />
+                  </>
                 ) : isStoryReply ? (
                   <>
                     {/* Libellé contextuel : répondu / réagi */}
@@ -1769,6 +1809,12 @@ export default function ChatScreen() {
         />
       )}
       <GiphyPicker visible={giphyOpen} onClose={() => setGiphyOpen(false)} onSelect={onGifSelect} />
+
+      <LocationPicker
+        visible={locationPicker}
+        onClose={() => setLocationPicker(false)}
+        onPick={sendLocation}
+      />
 
       <AttachmentSheet
         visible={attachOpen}

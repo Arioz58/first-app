@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
+import { formatLocation } from '../../lib/location';
 
 type RelationStatus =
   | 'self'
@@ -28,6 +29,7 @@ type ProfileData = {
   bio: string | null;
   phone: string | null;
   lastSeenAt: string | null;
+  location: { city: string; country: string | null } | null; // gated (locationEnabled + privacyLocation)
   mutualFriendsCount: number;
   relationStatus: RelationStatus;
   requestId: string | null;
@@ -270,6 +272,11 @@ export default function UserProfileScreen() {
           <View className="mt-6 px-5 gap-3">
             {data.phone ? (
               <InfoRow icon="call-outline" value={data.phone} />
+            ) : null}
+            {/* Absente si la personne n'a pas activé le partage, ou si sa règle de
+                visibilité m'exclut : le serveur ne renvoie alors rien du tout. */}
+            {data.location?.city ? (
+              <InfoRow icon="location-outline" value={formatLocation(data.location)} />
             ) : null}
             {data.lastSeenAt ? (
               <InfoRow

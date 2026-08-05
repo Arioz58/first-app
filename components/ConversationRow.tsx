@@ -76,6 +76,9 @@ export function useConversationLabels(currentUserId: string | null) {
     const msg = conv.messages[0];
     if (!msg) return t('chat.no_messages');
     if (msg.type === 'system') return systemText(msg.content);
+    // Une position n'a pas de `mediaType` : son `content` est l'adresse, qu'on n'étale pas
+    // dans la liste — le pictogramme dit l'essentiel.
+    if (msg.type === 'location') return t('preview.location');
     if (msg.mediaType) return t(`preview.${msg.mediaType}`, { defaultValue: t('chat.media') });
     return msg.content ?? t('chat.media');
   };

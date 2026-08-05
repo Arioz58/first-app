@@ -11,6 +11,7 @@ import {
   Alert,
   Image,
   Keyboard,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -30,6 +31,12 @@ import { unregisterPushToken } from '../../lib/notifications';
 import { disconnectSocket } from '../../lib/socket';
 import { requestContactsSegment } from '../../lib/tabsNav';
 import { setUnreadCounts } from '../../lib/unreadMessages';
+import {
+  clearCity,
+  detectAndSaveCity,
+  formatLocation,
+  type ProfileLocation,
+} from '../../lib/location';
 import { getThemePref, setThemePref, useThemeColors, type ThemePref } from '../../lib/theme';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
@@ -48,7 +55,12 @@ type User = {
   photoUrl: string | null;
   privacyConsent: boolean;
   language: string;
-  profile: { bio: string | null } | null;
+  profile: {
+    bio: string | null;
+    city?: string | null;
+    country?: string | null;
+    locationEnabled?: boolean;
+  } | null;
 };
 type Stats = { friends: number; groups: number; stories: number };
 
@@ -122,6 +134,9 @@ export default function ProfileScreen() {
   const [nameError, setNameError] = useState('');
   const [savingName, setSavingName] = useState(false);
 
+  const [myLocation, setMyLocation] = useState<ProfileLocation | null>(null);
+  const [locating, setLocating] = useState(false);
+
   const [langVisible, setLangVisible] = useState(false);
   const [themeVisible, setThemeVisible] = useState(false);
   const [qrVisible, setQrVisible] = useState(false);
@@ -129,12 +144,59 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     apiRequest<User>('/users/me')
-      .then(setUser)
+      .then((me) => {
+        setUser(me);
+        if (me.profile?.city) {
+          setMyLocation({ city: me.profile.city, country: me.profile.country ?? null });
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
     apiRequest<Stats>('/users/me/stats').then(setStats).catch(() => {});
     getThemePref().then(setThemePrefState);
   }, []);
+
+  /**
+   * Relève la ville, ou propose de la retirer si elle est déjà renseignée.
+   *
+   * Volontairement manuel : la position n'est lue qu'au moment où l'utilisateur le demande,
+   * jamais en tâche de fond.
+   */
+  const handleLocation = () => {
+    const detect = async () => {
+      setLocating(true);
+      const result = await detectAndSaveCity();
+      setLocating(false);
+      if (result.ok) return setMyLocation(result.location);
+
+      // Refus définitif : le dialogue système ne reviendra plus, seul un détour par les
+      // réglages débloque la situation — autant y emmener l'utilisateur.
+      if (result.reason === 'denied' && !result.canAskAgain) {
+        return Alert.alert(t('location.error_title'), t('location.denied'), [
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('location.open_settings'), onPress: () => Linking.openSettings() },
+        ]);
+      }
+      Alert.alert(
+        t('location.error_title'),
+        t(result.reason === 'denied' ? 'location.denied' : 'location.unavailable'),
+      );
+    };
+
+    if (!myLocation) return detect();
+    Alert.alert(formatLocation(myLocation), '', [
+      { text: t('location.refresh'), onPress: detect },
+      {
+        text: t('location.remove'),
+        style: 'destructive',
+        onPress: () => {
+          setMyLocation(null);
+          clearCity().catch(() => {});
+        },
+      },
+      { text: t('cancel'), style: 'cancel' },
+    ]);
+  };
 
   const handleLogout = () => {
     Alert.alert(t('logout_confirm_title'), t('logout_confirm_message'), [
@@ -372,6 +434,14 @@ export default function ProfileScreen() {
 
         {/* Confidentialité */}
         <Section title={t('sections.privacy')}>
+          {/* La ville ne s'affiche sur le profil que si le partage est activé dans les
+              réglages de confidentialité — d'où sa place ici, juste à côté d'eux. */}
+          <SettingRow
+            icon="location-outline"
+            label={t('location.row')}
+            value={locating ? t('location.detecting') : formatLocation(myLocation) || t('location.none')}
+            onPress={handleLocation}
+          />
           <SettingRow icon="lock-closed-outline" label={t('privacy_settings.title')} onPress={() => router.push('/privacy' as any)} />
           <SettingRow icon="ban-outline" label={t('blocked_title')} onPress={() => router.push('/blocked' as any)} />
           <SettingRow

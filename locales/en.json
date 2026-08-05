@@ -379,7 +379,8 @@
     "video": "🎥 Video",
     "audio": "🎤 Voice message",
     "document": "📄 Document",
-    "gif": "GIF"
+    "gif": "GIF",
+    "location": "📍 Location"
   },
   "time": {
     "yesterday": "Yesterday"
@@ -473,5 +474,21 @@
   "archived": {
     "title": "Archived",
     "empty": "Conversations you archive are kept here. They stay archived even when a new message arrives."
+  },
+  "location": {
+    "row": "My city",
+    "none": "Not set",
+    "detecting": "Locating…",
+    "refresh": "Refresh",
+    "remove": "Remove my city",
+    "error_title": "Location unavailable",
+    "denied": "Nexa cannot access your location. Allow it in your device settings.",
+    "unavailable": "Your city could not be determined right now. Please try again later.",
+    "open_settings": "Open settings",
+    "send_title": "Send my location",
+    "send_action": "Send this location",
+    "pin_hint": "Move the map to choose a spot",
+    "shared": "Shared location",
+    "open_maps": "Open in Maps"
   }
 }
