@@ -15,6 +15,10 @@ import {
 } from "../lib/friendRequests";
 import i18n from "../lib/i18n";
 import { registerForPushNotifications } from "../lib/notifications";
+// ⚠️ Importé au niveau module, pas dans un effet : la tâche doit être DÉFINIE avant que le
+// système ne réveille l'app pour une notification — à ce moment-là aucun composant n'a été
+// rendu, et une tâche non définie est simplement perdue.
+import { registerDeliveryReceiptTask } from "../lib/deliveryReceipt";
 import { connectSocket, pauseSocket, resumeSocket } from "../lib/socket";
 import { hydrateLiveShares } from "../lib/liveLocation";
 import { clearTokens, getAccessToken, getRefreshToken } from "../lib/storage";
@@ -130,6 +134,7 @@ export default function RootLayout() {
         localNotify(p.by.name, i18n.t("notifications.friend_accepted"));
       });
       await registerForPushNotifications();
+      registerDeliveryReceiptTask();
       refreshPendingFriendRequests();
       setChecked(true);
     };

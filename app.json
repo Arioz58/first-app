@@ -25,6 +25,11 @@
         "LSApplicationQueriesSchemes": [
           "comgooglemaps",
           "waze"
+        ],
+        "UIBackgroundModes": [
+          "fetch",
+          "location",
+          "remote-notification"
         ]
       },
       "appleTeamId": "9JH8GHKDVY",

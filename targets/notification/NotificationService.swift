@@ -52,6 +52,11 @@ class NotificationService: UNNotificationServiceExtension {
     let conversationId = payload["conversationId"] as? String
     let senderName = payload["senderName"] as? String
 
+    // Accusé de réception : la notification vient d'arriver, donc le message aussi. C'est
+    // le SEUL endroit d'où on peut le dire quand l'app est en arrière-plan ou fermée —
+    // elle ferme son socket précisément pour que cette notification existe.
+    reportDelivery(payload: payload, conversationId: conversationId)
+
     // Groupe : le nom du groupe reste le titre, l'expéditeur passe en sous-titre et le
     // corps ne garde que le message — sans quoi le nom apparaîtrait deux fois.
     if let senderName, let messageBody = payload["messageBody"] as? String {
@@ -99,6 +104,38 @@ class NotificationService: UNNotificationServiceExtension {
         )
       )
     }.resume()
+  }
+
+  // MARK: - Accusé de réception
+
+  /// Prévient le serveur que le message est parvenu sur l'appareil.
+  ///
+  /// L'autorisation vient d'un jeton signé glissé dans la notification par le serveur :
+  /// l'extension n'a PAS accès au JWT, qui vit dans le trousseau de l'app (le partager
+  /// demanderait un app group). Le jeton n'autorise que cet accusé, rien d'autre.
+  ///
+  /// ⚠️ Volontairement « tire et oublie » : on n'attend pas la réponse et on ne retarde
+  /// surtout pas l'affichage de la notification. Si l'appel échoue, la réception sera
+  /// constatée au retour de l'app au premier plan, comme avant — l'accusé est un
+  /// raffinement, jamais une condition d'affichage.
+  private func reportDelivery(payload: [String: Any], conversationId: String?) {
+    guard
+      let conversationId,
+      let token = payload["receiptToken"] as? String,
+      let endpoint = payload["receiptUrl"] as? String,
+      let url = URL(string: endpoint)
+    else { return }
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    // Court : l'extension dispose d'environ 30 s en tout, et le téléchargement de l'avatar
+    // — lui, visible — passe avant.
+    request.timeoutInterval = 5
+    request.httpBody = try? JSONSerialization.data(
+      withJSONObject: ["conversationId": conversationId, "token": token]
+    )
+    URLSession.shared.dataTask(with: request).resume()
   }
 
   /// Livre la notification, une seule fois (le système ignore les appels suivants, mais

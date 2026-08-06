@@ -14,5 +14,23 @@
       <key>NSExtensionPointIdentifier</key>
       <string>com.apple.usernotifications.service</string>
     </dict>
+    <!--
+      ⚠️ L'extension est un binaire SÉPARÉ, avec son propre Info.plist : elle n'hérite PAS
+      des exceptions App Transport Security que le build de développement Expo injecte dans
+      celui de l'app. Sans cette clé, l'accusé de réception envoyé vers un backend local en
+      `http://192.168.x.x` est rejeté par ATS, silencieusement — alors que le
+      téléchargement de l'avatar, lui, passe : il va vers CloudFront, en HTTPS.
+
+      `NSAllowsLocalNetworking` et NON `NSAllowsArbitraryLoads` : il n'autorise le clair que
+      vers les adresses locales (plages privées, .local, domaines non qualifiés), ce qui
+      couvre exactement le besoin en développement. Apple ne demande pas de justification
+      pour celui-ci, contrairement à `NSAllowsArbitraryLoads`, scruté à la revue.
+      En production, `PUBLIC_URL` est en HTTPS : cette clé n'y sert à rien.
+    -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+      <key>NSAllowsLocalNetworking</key>
+      <true/>
+    </dict>
   </dict>
 </plist>
