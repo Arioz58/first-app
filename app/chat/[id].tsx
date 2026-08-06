@@ -131,7 +131,14 @@ const INPUT_MAX_LINES = 5;
 const INPUT_MAX_H = INPUT_LINE_H * INPUT_MAX_LINES + 20; // + padding vertical (py-2.5)
 
 
-type ConvMember = { userId: string; role: string; user: { id: string; name: string; photoUrl: string | null } };
+type ConvMember = {
+  userId: string;
+  role: string;
+  // Accusés de ce membre. Servent d'état initial : les events les entretiennent ensuite.
+  lastDeliveredAt?: string | null;
+  lastReadAt?: string | null;
+  user: { id: string; name: string; photoUrl: string | null };
+};
 type ConvMeta = {
   id: string;
   type: 'direct' | 'group';
@@ -408,11 +415,31 @@ const formatTime = (iso: string) =>
  * seul cas de perte réelle — app tuée hors ligne, le tampon vivant en mémoire — demande une
  * file d'attente persistée, pas un indicateur.
  */
-type SendStatus = 'sending' | 'sent';
+type SendStatus = 'sending' | 'sent' | 'delivered' | 'read';
+
+// Bleu des accusés de LECTURE. Volontairement plus clair que le bleu nexa : posé sur une
+// bulle déjà bleue, l'accent de marque s'y noierait.
+const READ_BLUE = '#38BDF8';
+
+// ⚠️ Emplacement de largeur FIXE. Les trois icônes ne font pas la même largeur
+// (`time-outline` 12, `checkmark` 13, `checkmark-done` 15) : sans lui, la ligne de l'heure
+// s'élargissait au passage à la double coche et la bulle entière grandissait avec elle.
+// Calé sur la plus large.
+const STATUS_SLOT = 15;
 
 function StatusIcon({ status, tone }: { status: SendStatus; tone: string }) {
-  if (status === 'sending') return <Ionicons name="time-outline" size={12} color={tone} />;
-  return <Ionicons name="checkmark" size={13} color={tone} />;
+  return (
+    <View style={{ width: STATUS_SLOT }} className="items-center">
+      {status === 'sending' ? (
+        <Ionicons name="time-outline" size={12} color={tone} />
+      ) : status === 'sent' ? (
+        <Ionicons name="checkmark" size={13} color={tone} />
+      ) : (
+        // Reçu et vu partagent la double coche : seule la couleur les distingue.
+        <Ionicons name="checkmark-done" size={15} color={status === 'read' ? READ_BLUE : tone} />
+      )}
+    </View>
+  );
 }
 
 function BubbleTime({
@@ -563,6 +590,45 @@ export default function ChatScreen() {
   const [peerTyping, setPeerTyping] = useState(false);
   // Mute / éphémère / épinglés / favoris (Phase C)
   const [ephemeralDuration, setEphemeralDuration] = useState<number | null>(null);
+  /**
+   * Accusés des AUTRES membres, par utilisateur.
+   *
+   * ⚠️ Une carte par membre et non deux dates globales : en groupe, un message n'est
+   * « reçu » que lorsque TOUS l'ont reçu. Se contenter du dernier événement afficherait la
+   * double coche dès le premier destinataire servi. On garde donc le détail et on prend le
+   * PLUS ANCIEN au moment d'afficher.
+   *
+   * Ce n'est pas un état par message : la comparaison se fait sur la date du message, donc
+   * une seule mise à jour repeint toutes les bulles sans les parcourir.
+   */
+  const [receipts, setReceipts] = useState<Record<string, { delivered?: string; read?: string }>>(
+    {},
+  );
+
+  /**
+   * Bornes d'acheminement : le PLUS ANCIEN accusé parmi les autres membres, et `null` dès
+   * qu'un seul n'a rien — sans quoi un groupe passerait « reçu » au premier destinataire
+   * servi. En conversation directe il n'y a qu'un membre, donc c'est simplement sa date.
+   */
+  const { deliveredBound, readBound } = useMemo(() => {
+    const rows = Object.values(receipts);
+    const earliest = (pick: (r: { delivered?: string; read?: string }) => string | undefined) => {
+      if (!rows.length || rows.some((r) => !pick(r))) return null;
+      return Math.min(...rows.map((r) => new Date(pick(r) as string).getTime()));
+    };
+    return { deliveredBound: earliest((r) => r.delivered), readBound: earliest((r) => r.read) };
+  }, [receipts]);
+
+  /** Cran atteint par un message, d'après sa date d'envoi. */
+  const statusAt = useCallback(
+    (iso: string): SendStatus => {
+      const at = new Date(iso).getTime();
+      if (readBound !== null && at <= readBound) return 'read';
+      if (deliveredBound !== null && at <= deliveredBound) return 'delivered';
+      return 'sent';
+    },
+    [deliveredBound, readBound],
+  );
   const [mutedUntil, setMutedUntil] = useState<string | null>(null);
   const [flags, setFlags] = useState<Flags>({ pinned: [], starred: [] });
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -860,6 +926,17 @@ export default function ChatScreen() {
         setMutedUntil(meta.myMutedUntil);
         setWhoCanSend(meta.whoCanSend ?? 'all');
         setMyRole(meta.myRole ?? 'member');
+        // État initial des accusés, à partir des autres membres.
+        setReceipts(
+          Object.fromEntries(
+            meta.members
+              .filter((m) => m.userId !== me.id)
+              .map((m) => [
+                m.userId,
+                { delivered: m.lastDeliveredAt ?? undefined, read: m.lastReadAt ?? undefined },
+              ]),
+          ),
+        );
         if (meta.type === 'direct') {
           const other = meta.members.find((m) => m.userId !== me.id);
           if (other) {
@@ -968,6 +1045,26 @@ export default function ChatScreen() {
           }
         });
 
+        // Accusés de réception et de lecture (voir `receipts`). Deux events distincts, mais
+        // « lu » implique « reçu » : le serveur pose les deux dates, on fait de même ici
+        // pour qu'une lecture ne laisse jamais une bulle en simple coche.
+        const applyReceipt = (
+          e: { conversationId: string; userId: string; at: string },
+          kind: 'delivered' | 'read',
+        ) => {
+          if (e.conversationId !== id || e.userId === me.id) return;
+          setReceipts((prev) => ({
+            ...prev,
+            [e.userId]: {
+              ...prev[e.userId],
+              delivered: e.at,
+              ...(kind === 'read' ? { read: e.at } : {}),
+            },
+          }));
+        };
+        socket.on('conversation_delivered', (e: any) => applyReceipt(e, 'delivered'));
+        socket.on('conversation_read', (e: any) => applyReceipt(e, 'read'));
+
         socket.on('removed_from_group', ({ conversationId }: { conversationId: string }) => {
           if (conversationId === id) router.replace('/(tabs)');
         });
@@ -1059,6 +1156,8 @@ export default function ChatScreen() {
     return () => {
       const socket = getSocket();
       socket?.off('new_message');
+      socket?.off('conversation_delivered');
+      socket?.off('conversation_read');
       socket?.off('removed_from_group');
       socket?.off('message_deleted');
       socket?.off('peer_typing');
@@ -1951,12 +2050,12 @@ export default function ChatScreen() {
             const lastOfGroup = !sameGroup(row.messages[row.messages.length - 1], nextRow?.messages[0]);
             const radius = bubbleRadius(isMe, firstOfGroup, lastOfGroup);
             // On n'accuse que ses propres envois — d'où l'absence de statut sur les
-            // messages reçus. Les crans « reçu » et « vu » viendront s'ajouter ici.
+            // messages reçus.
             const sendStatus: SendStatus | undefined = !isMe
               ? undefined
               : sending
                 ? 'sending'
-                : 'sent';
+                : statusAt(item.createdAt);
             // Sur un album, ces marqueurs valent pour la ligne entière : un seul média
             // épinglé suffit à la signaler.
             const isPinned = row.messages.some((m) => flags.pinned.includes(m.id));
