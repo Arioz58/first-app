@@ -18,7 +18,7 @@ import { registerForPushNotifications } from "../lib/notifications";
 import { connectSocket, pauseSocket, resumeSocket } from "../lib/socket";
 import { hydrateLiveShares } from "../lib/liveLocation";
 import { clearTokens, getAccessToken, getRefreshToken } from "../lib/storage";
-import { initTheme } from "../lib/theme";
+import { initTheme, useThemeColors } from "../lib/theme";
 import "./globals.css";
 
 // Notif in-app locale (utilisateur en ligne → reçoit l'event socket plutôt qu'un push).
@@ -137,6 +137,12 @@ export default function RootLayout() {
     init();
   }, []);
 
+  // ⚠️ Le fond d'écran du navigateur est BLANC par défaut, quel que soit le thème : celui
+  // de React Navigation est interne et ignore complètement le `dark:` de NativeWind. Tant
+  // qu'un écran n'a pas fini de se peindre, c'est ce blanc qu'on voit — un flash à chaque
+  // transition en mode sombre. On le cale donc sur la palette de l'app.
+  const themeColors = useThemeColors();
+
   // Piloté sur le thread UI par la feuille ouverte : aucun aller-retour en JS, le recul
   // suit donc le doigt pendant le glissement de fermeture.
   const recedeStyle = useAnimatedStyle(() => {
@@ -160,7 +166,7 @@ export default function RootLayout() {
         cette vue et hors de sa transformation — c'est justement ce qui permet de reculer
         l'écran sans reculer la feuille avec. */}
     <Animated.View style={[{ flex: 1, overflow: "hidden" }, recedeStyle]}>
-    <Stack>
+    <Stack screenOptions={{ contentStyle: { backgroundColor: themeColors.canvas } }}>
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />

@@ -71,6 +71,28 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
   → plafond dur a 700 ms + devoilement immediat si la conversation est vide : un ecran reste vide serait pire que le saut corrige.
   ⚠️ Ca MASQUE le saut, ca ne le supprime pas — le fil defile toujours, on ne le voit plus. La vraie correction serait une liste `inverted`, mais elle retournerait aussi la pagination (`onStartReached`), `maintainVisibleContentPosition` et les animations d'entree. A garder en tete si d'autres symptomes de position apparaissent.
 
+[FAIT 06/08] Envoi de medias : l'album se pose ENTIER tout de suite (bulles optimistes).
+  Avant : chaque media n'apparaissait qu'une fois televerse — les images tombaient une par une et la legende arrivait en dernier, la mise en page sautant a chaque etape.
+  → un brouillon local par media (`pendingLocal`), avec le fichier du TELEPHONE comme source et le meme `batchId` que les messages a venir : l'album a d'emblee sa forme finale, et les deux cohabitent proprement pendant le remplacement.
+  → voile d'envoi par-dessus (assombrissement + indicateur) et NON une opacite sur la bulle, qui delaverait aussi le degrade, l'ombre et l'indicateur lui-meme. Un album reste « en envoi » tant qu'un seul de ses medias l'est, sinon il s'eclaircirait par morceaux.
+  → l'echo serveur est reconnu par l'URL S3 obtenue au televersement (`pendingUploadUrl`), l'identifiant etant attribue par le serveur. Remplacement SUR PLACE et non « retirer puis ajouter a la fin » : la vraie bulle arrive pendant que les suivantes televersent encore, et l'ajouter en queue reordonnerait l'album sous les yeux.
+  ⚠️ Au remplacement on GARDE le fichier local comme source affichee : basculer sur l'URL S3 ferait recharger l'image depuis le reseau, donc clignoter — precisement ce qu'on supprime. Tout le reste vient du serveur (id reel, donc epinglage/favoris OK) et la prochaine ouverture sert l'URL distante.
+  → pas de menu contextuel sur un brouillon (son id est local) ; brouillon retire si le televersement echoue, sinon il resterait « en envoi » pour toujours.
+  [FAIT 06/08] Cote RECEPTION aussi : l'album s'affiche d'un coup au lieu d'arriver image par image.
+    ⚠️ L'expediteur envoie N messages DISTINCTS (un message = une piece jointe), espaces par la duree de chaque televersement : aucun delai fixe ne peut deviner la fin de l'album.
+    → le NOMBRE ATTENDU voyage dans le `batchId` (`<userId>-<horodatage>#<n>`). C'est une chaine opaque deja relayee par le socket et deja stockee en base : ni migration, ni champ socket a ajouter.
+    → separateur `#` et non `-` : les identifiants d'utilisateur en contiennent, et l'ancien format finissait par un horodatage qu'on lirait comme un compte gigantesque. Sans `#` on retombe sur 1, donc sur l'ancien comportement — ce que font les albums deja en base.
+    → plafond d'attente 6 s : un media peut ne jamais arriver (televersement en echec chez l'expediteur), les autres ne doivent pas rester retenus pour toujours.
+    → nos PROPRES envois sont exclus de la retenue (ils ont deja leur brouillon a l'ecran) ; le message reste marque LU des l'arrivee, meme pas encore affiche ; minuteries purgees au demontage.
+  [A FAIRE] Meme traitement ailleurs : documents et vocaux (envoyes par un autre chemin, sans brouillon), et le message TEXTE seul (aujourd'hui il n'apparait qu'a l'echo serveur).
+
+[FAIT 06/08] Ouverture d'une conversation : plus de flash blanc en mode sombre.
+  Cause : l'ecran de chargement du chat (indicateur centre) n'avait AUCUN fond. On voyait donc au travers le fond d'ecran du NAVIGATEUR, blanc par defaut quel que soit le theme — celui de React Navigation est interne et ignore le `dark:` de NativeWind.
+  1. Ecran de chargement SUPPRIME (pas colore). Il n'avait plus lieu d'etre : tous les etats ont une valeur par defaut sure (messages vide, header/wallpaper nuls), le nom vient des parametres de route, et la liste ne se devoile de toute facon qu'une fois calee en bas. L'ecran rend sa mise en page finale tout de suite et se remplit. En cas d'echec, `init` renvoie deja a l'accueil.
+  2. Parametres de route `photo` et `type` ajoutes (liste, archives, demandes, profil, ami) : l'en-tete est juste des la premiere image, au lieu de montrer l'initiale puis de basculer sur la photo — et un groupe ne s'affiche plus d'abord comme une conversation directe.
+     ⚠️ `||` et non `??` pour ces parametres : absents, ils arrivent en chaine VIDE, que `??` laisserait passer (UserAvatar recevrait une URL vide au lieu de retomber sur l'initiale).
+  3. Fond du navigateur cale sur la palette du theme (`contentStyle` dans app/_layout.tsx). Correction SYSTEMIQUE : le defaut touchait toutes les transitions d'ecran, il etait juste moins visible ailleurs parce que l'ecran d'arrivee se peint plus vite.
+
 [A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
   → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.
 

@@ -104,7 +104,16 @@ export default function ArchivedScreen() {
                 onPress={() =>
                   router.push({
                     pathname: '/chat/[id]' as any,
-                    params: { id: item.id, name: getConvName(item) },
+                    params: {
+                      id: item.id,
+                      name: getConvName(item),
+                      photo:
+                        (item.type === 'group'
+                          ? item.photoUrl
+                          : item.members.find((m) => m.userId !== currentUserId)?.user
+                              .photoUrl) ?? '',
+                      type: item.type,
+                    },
                   })
                 }
               />

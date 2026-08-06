@@ -92,6 +92,10 @@ const FOLLOW_WINDOW_MS = 1500;
 // qu'ici tout un historique est monté par lots et mesuré au fil de l'eau — sans quoi le
 // dernier message se retrouvait sous la zone de saisie dès qu'il était un peu long.
 const OPEN_FOLLOW_WINDOW_MS = 2500;
+// Attente maximale avant d'afficher un album reçu incomplet. Un média peut ne jamais
+// arriver (téléversement en échec chez l'expéditeur) : sans ce plafond, les autres
+// resteraient retenus pour toujours.
+const ALBUM_WAIT_MS = 6000;
 // Taille de page du serveur (`GET /conversations/:id/messages`). Une page incomplète
 // signale le début de la conversation.
 const MESSAGES_PAGE = 30;
@@ -188,9 +192,36 @@ type Message = {
   fileName?: string | null;
   fileSize?: number | null;
   durationMs?: number | null;
+  mimeType?: string | null;
   batchId?: string | null; // médias d'un même envoi → un seul album à l'affichage
   latitude?: number | null; // `type: 'location'` — `content` porte l'adresse lisible
   longitude?: number | null;
+  // Message posé localement le temps de l'envoi (voir OPTIMISTIC dans `sendMessage`).
+  // `mediaUrl` pointe alors sur le fichier du téléphone, pas encore sur S3.
+  pendingLocal?: boolean;
+  // URL S3 obtenue une fois le téléversement fini : sert à reconnaître l'écho du serveur
+  // et à remplacer le brouillon EXACTEMENT à sa place.
+  pendingUploadUrl?: string | null;
+};
+
+/**
+ * Nombre de médias attendus dans un album, lu DANS le `batchId`.
+ *
+ * ⚠️ Le compte voyage dans l'identifiant (`<userId>-<horodatage>#<n>`) plutôt que dans un
+ * champ à part : `batchId` est une chaîne opaque, déjà relayée par le socket et déjà
+ * stockée en base — donc ni migration, ni nouveau champ à faire accepter par le serveur.
+ *
+ * Le séparateur est `#` et non `-` : les identifiants d'utilisateur en contiennent, et
+ * l'ancien format se terminait par un horodatage, qu'on lirait comme un compte gigantesque.
+ * Sans `#`, on retombe sur 1 — donc sur le comportement d'avant, ce que font les albums
+ * déjà en base.
+ */
+const batchExpected = (batchId?: string | null) => {
+  if (!batchId) return 1;
+  const hash = batchId.lastIndexOf('#');
+  if (hash === -1) return 1;
+  const n = Number(batchId.slice(hash + 1));
+  return Number.isInteger(n) && n > 1 ? n : 1;
 };
 
 // Une réponse à une story porte déjà son propre en-tête (« X a répondu à votre story »)
@@ -240,7 +271,8 @@ type MessageEnterProps = {
   isMe: boolean;
   className: string;
   style: StyleProp<ViewStyle>;
-  onLongPress: () => void;
+  /** Absent tant que le message n'existe pas côté serveur (brouillon d'envoi). */
+  onLongPress?: () => void;
   children: React.ReactNode;
 };
 
@@ -290,6 +322,30 @@ function MessageEnter({
     >
       {children}
     </AnimatedPressable>
+  );
+}
+
+/**
+ * Voile d'envoi posé sur un média en cours de téléversement.
+ *
+ * Le média occupe déjà sa place définitive : il ne reste qu'à dire que sa mise à
+ * disposition est en cours. D'où un simple voile par-dessus, sans rien déplacer — c'est le
+ * déplacement, pas l'attente, qui rendait l'envoi désagréable à regarder.
+ *
+ * ⚠️ Un assombrissement posé PAR-DESSUS, et non une opacité sur la bulle : baisser
+ * l'opacité du conteneur délaverait aussi le dégradé, l'ombre et l'indicateur lui-même.
+ */
+function SendingVeil() {
+  return (
+    <View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, ROUND.bubble]}
+      className="items-center justify-center bg-black/25"
+    >
+      <View className="w-9 h-9 rounded-full bg-black/55 items-center justify-center">
+        <ActivityIndicator size="small" color="white" />
+      </View>
+    </View>
   );
 }
 
@@ -427,7 +483,15 @@ export default function ChatScreen() {
   // n'entraîne donc aucun recalcul répété de la mise en page.
   const insets = useSafeAreaInsets();
   const composerOverlap = COMPOSER_OVERLAP + insets.bottom;
-  const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
+  // `photo` et `type` viennent de l'écran appelant, qui les connaît déjà : l'en-tête est
+  // donc juste dès la première image, au lieu de montrer l'initiale puis de basculer sur
+  // la photo une fois le profil chargé. Facultatifs — tous les appelants ne les ont pas.
+  const { id, name, photo, type: typeParam } = useLocalSearchParams<{
+    id: string;
+    name: string;
+    photo?: string;
+    type?: string;
+  }>();
 
   // Traduit un message système (content JSON { k, by, ... }) selon la langue du lecteur.
   const systemText = (raw?: string | null): string => {
@@ -443,11 +507,19 @@ export default function ChatScreen() {
   };
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
-  const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [convType, setConvType] = useState<'direct' | 'group'>('direct');
-  const [groupPhoto, setGroupPhoto] = useState<string | null>(null);
+  // Amorcés par les paramètres de route : sans ça, un groupe s'affichait d'abord comme une
+  // conversation directe (initiale sur pastille) avant de basculer sur son avatar.
+  const [convType, setConvType] = useState<'direct' | 'group'>(
+    typeParam === 'group' ? 'group' : 'direct',
+  );
+  // ⚠️ `|| null` et non `?? null` : un paramètre de route absent arrive en chaîne VIDE, que
+  // `??` laisserait passer — `UserAvatar` recevrait alors une URL vide au lieu de retomber
+  // sur l'initiale.
+  const [groupPhoto, setGroupPhoto] = useState<string | null>(
+    typeParam === 'group' ? photo || null : null,
+  );
   const [whoCanSend, setWhoCanSend] = useState<'all' | 'admins'>('all');
   const [myRole, setMyRole] = useState<'admin' | 'moderator' | 'member'>('member');
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
@@ -552,6 +624,37 @@ export default function ChatScreen() {
       if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
     };
   }, [revealList]);
+
+  // Réception d'un album : on retient les médias jusqu'à ce qu'il soit complet.
+  //
+  // ⚠️ L'expéditeur envoie N messages DISTINCTS (un message ne porte qu'une pièce jointe),
+  // espacés par la durée de chaque téléversement. Les afficher à l'arrivée faisait tomber
+  // les images une par une, avec un saut de mise en page à chacune. Aucun délai fixe ne
+  // peut deviner la fin de l'album — d'où le compte transmis dans le `batchId`.
+  const albumBufRef = useRef(new Map<string, Message[]>());
+  const albumTimerRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  const flushAlbum = useCallback((batchId: string) => {
+    const timer = albumTimerRef.current.get(batchId);
+    if (timer) clearTimeout(timer);
+    albumTimerRef.current.delete(batchId);
+    const items = albumBufRef.current.get(batchId);
+    albumBufRef.current.delete(batchId);
+    if (!items?.length) return;
+    // L'album entier apparaît d'un coup : le rattrapage doit glisser, pas sauter.
+    smoothNextRef.current = true;
+    setMessages((prev) => [...prev, ...items]);
+  }, []);
+
+  // Les minuteries survivraient à la sortie de l'écran et écriraient dans un état démonté.
+  useEffect(
+    () => () => {
+      for (const t of albumTimerRef.current.values()) clearTimeout(t);
+      albumTimerRef.current.clear();
+      albumBufRef.current.clear();
+    },
+    [],
+  );
 
   // Faut-il ramener le fil en bas ? Soit on y est déjà, soit on vient d'envoyer et la
   // fenêtre de suivi couvre les mesures qui arrivent encore.
@@ -729,7 +832,46 @@ export default function ChatScreen() {
 
         socket.on('new_message', (msg: Message) => {
           if (msg.conversationId === id || !msg.conversationId) {
-            setMessages((prev) => [...prev, msg]);
+            const mine = msg.sender?.id === me.id;
+            const expected = batchExpected(msg.batchId);
+            // Album reçu d'un autre : on le met de côté jusqu'à l'avoir en entier. Nos
+            // propres envois sont exclus — ils ont déjà leur brouillon à l'écran, les
+            // retenir le laisserait en « envoi » alors que le serveur a répondu.
+            if (!mine && expected > 1 && msg.batchId) {
+              const key = msg.batchId;
+              const buf = albumBufRef.current.get(key) ?? [];
+              buf.push(msg);
+              albumBufRef.current.set(key, buf);
+              if (buf.length >= expected) {
+                flushAlbum(key);
+              } else if (!albumTimerRef.current.has(key)) {
+                albumTimerRef.current.set(key, setTimeout(() => flushAlbum(key), ALBUM_WAIT_MS));
+              }
+              // La conversation est ouverte : le message est lu, même pas encore affiché.
+              apiRequest(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
+              return;
+            }
+            setMessages((prev) => {
+              // Écho d'un média qu'on vient d'envoyer : le brouillon cède sa place EXACTE.
+              // ⚠️ Remplacer sur place et non « retirer puis ajouter à la fin » : la vraie
+              // bulle arrive pendant que les suivantes sont encore en téléversement, et
+              // l'ajouter en queue réordonnerait l'album sous les yeux de l'utilisateur.
+              const draft = msg.mediaUrl
+                ? prev.findIndex((m) => m.pendingLocal && m.pendingUploadUrl === msg.mediaUrl)
+                : -1;
+              if (draft !== -1) {
+                seenIdsRef.current.add(msg.id); // le brouillon a déjà joué l'entrée
+                const next = [...prev];
+                // ⚠️ On garde le fichier LOCAL comme source affichée. Basculer sur l'URL S3
+                // ferait recharger l'image depuis le réseau, donc clignoter — soit
+                // précisément ce qu'on cherche à supprimer. Tout le reste vient du serveur
+                // (identifiant réel, donc épinglage et favoris fonctionnels), et la
+                // prochaine ouverture de la conversation servira l'URL distante.
+                next[draft] = { ...msg, mediaUrl: prev[draft].mediaUrl };
+                return next;
+              }
+              return [...prev, msg];
+            });
             // Message reçu alors qu'on lit la conversation → lu immédiatement,
             // sinon il ressortirait comme non lu au retour sur la liste.
             if (msg.sender?.id !== me.id) {
@@ -833,8 +975,6 @@ export default function ChatScreen() {
         });
       } catch {
         router.replace('/(tabs)');
-      } finally {
-        setLoading(false);
       }
     };
 
@@ -909,15 +1049,56 @@ export default function ChatScreen() {
     // l'ordre choisi, et le texte accompagne le dernier — comme WhatsApp. Tous partagent
     // un `batchId` : c'est lui qui les réunit en un seul album à l'affichage (et non un
     // intervalle de temps, qui grouperait aussi des envois distincts rapprochés).
-    const batchId = queue.length > 1 ? `${currentUserId}-${Date.now()}` : undefined;
+    // Le compte est suffixé pour que le destinataire sache combien de médias attendre avant
+    // d'afficher l'album (cf. `batchExpected`).
+    const batchId =
+      queue.length > 1 ? `${currentUserId}-${Date.now()}#${queue.length}` : undefined;
+
+    // OPTIMISTIC — l'album est posé ENTIER, tout de suite, avec les fichiers du téléphone.
+    //
+    // ⚠️ Sans ça, chaque média n'apparaissait qu'une fois téléversé : les images tombaient
+    // une par une et la légende arrivait en dernier, en faisant sauter la mise en page à
+    // chaque étape. Le brouillon montre d'emblée la forme finale ; les vraies bulles
+    // prendront sa place sans que rien ne bouge.
+    //
+    // Les brouillons portent le MÊME `batchId` que les messages à venir : c'est ce qui les
+    // réunit en un seul album, y compris pendant le remplacement où les deux cohabitent.
+    const stamp = Date.now();
+    const drafts: Message[] = queue.map((item, i) => ({
+      id: `local-${stamp}-${i}`,
+      content: i === queue.length - 1 ? content : '',
+      createdAt: new Date().toISOString(),
+      // Le nom ne sert pas : un brouillon est toujours de nous, donc jamais titré.
+      sender: { id: currentUserId ?? '', name: '' },
+      conversationId: id,
+      mediaUrl: item.uri,
+      mediaType: item.mediaType,
+      mimeType: item.contentType,
+      durationMs: item.durationMs,
+      batchId,
+      pendingLocal: true,
+    }));
+    // Marqués vus AVANT le rendu : le brouillon joue l'animation d'entrée, pas la vraie
+    // bulle qui viendra le remplacer — sinon l'album clignoterait à chaque échange.
+    for (const d of drafts) seenIdsRef.current.add(d.id);
+    setMessages((prev) => [...prev, ...drafts]);
+    atBottomRef.current = true;
+    followUntilRef.current = Date.now() + FOLLOW_WINDOW_MS;
+
     setUploading(true);
     let failed = 0;
     let captionSent = false;
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const isLast = i === queue.length - 1;
+      const draftId = drafts[i].id;
       try {
         const url = await uploadFile(item.uri, item.contentType, 'chat');
+        // L'écho du serveur est reconnu par cette URL : elle est notre seul lien avec la
+        // vraie bulle, l'identifiant du message étant attribué côté serveur.
+        setMessages((prev) =>
+          prev.map((m) => (m.id === draftId ? { ...m, pendingUploadUrl: url } : m)),
+        );
         sendMedia(
           {
             mediaUrl: url,
@@ -931,6 +1112,9 @@ export default function ChatScreen() {
         if (isLast) captionSent = true;
       } catch {
         failed++;
+        // Le brouillon n'aura jamais d'écho : le retirer, sinon il resterait en « envoi »
+        // pour toujours.
+        setMessages((prev) => prev.filter((m) => m.id !== draftId));
       }
     }
     setUploading(false);
@@ -1391,14 +1575,15 @@ export default function ChatScreen() {
     ]);
   };
 
-  if (loading) {
-    return (
-      <View className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color="#1E40AF" />
-      </View>
-    );
-  }
-
+  // ⚠️ Pas d'écran de chargement ici, volontairement. Il en existait un (indicateur centré)
+  // qui n'avait AUCUN fond : on voyait donc au travers le fond du navigateur, blanc quel
+  // que soit le thème — l'écran clignotait en blanc à chaque ouverture en mode sombre.
+  //
+  // Il n'a plus lieu d'être : tous les états ont une valeur par défaut sûre (`messages`
+  // vide, `header`/`wallpaper` nuls, `convType` direct), le nom vient des paramètres de
+  // route, et la liste ne se dévoile de toute façon qu'une fois calée en bas. L'écran rend
+  // donc sa mise en page finale tout de suite — fond, en-tête, zone de saisie — et se
+  // remplit. En cas d'échec de chargement, `init` renvoie à l'accueil.
   return (
     <View className="flex-1 bg-white dark:bg-zinc-900">
       {/* Couche de fond unique, derrière la page entière : sans elle, la bande de safe
@@ -1434,7 +1619,12 @@ export default function ChatScreen() {
             <UserAvatar photoUrl={groupPhoto} size={48} group />
           ) : (
             <View>
-              <UserAvatar photoUrl={header?.photoUrl ?? null} name={displayName} size={48} />
+              <UserAvatar
+                // `||` et non `??` : un paramètre de route absent arrive en chaîne VIDE.
+                photoUrl={header?.photoUrl || photo || null}
+                name={displayName}
+                size={48}
+              />
               {/* vert = en ligne / gris = hors ligne */}
               <View
                 className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${online ? 'bg-green-500' : 'bg-gray-400'}`}
@@ -1645,6 +1835,9 @@ export default function ChatScreen() {
           onLayout={() => scrollToBottom()}
           renderItem={({ item: row, index }: { item: Row; index: number }) => {
             const album = row.messages.length > 1 ? row.messages : null;
+            // Un album reste « en envoi » tant qu'un seul de ses médias l'est : il ne doit
+            // pas s'éclaircir par morceaux au fil des téléversements.
+            const sending = row.messages.some((m) => m.pendingLocal);
             const item = row.messages[0];
 
             // Bandeau système centré (rejoint le groupe, éphémères, etc.)
@@ -1682,7 +1875,9 @@ export default function ChatScreen() {
                 messageId={item.id}
                 seenIds={seenIdsRef}
                 isMe={isMe}
-                onLongPress={() => openMessageMenu(item.id)}
+                // Pas de menu sur un brouillon : son identifiant est local, épingler ou
+                // mettre en favori s'adresserait à un message que le serveur ne connaît pas.
+                onLongPress={sending ? undefined : () => openMessageMenu(item.id)}
                 className={`max-w-[80%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
                 style={[
                   { marginTop: index === 0 ? 0 : firstOfGroup ? GROUP_GAP : GROUP_GAP_TIGHT },
@@ -1733,7 +1928,7 @@ export default function ChatScreen() {
                             index: i,
                           })
                         }
-                        onLongPressItem={openMessageMenu}
+                        onLongPressItem={sending ? () => {} : openMessageMenu}
                       />
                       {albumCaption ? (
                         <View className="px-2 pt-1.5 pb-0.5">
@@ -1748,6 +1943,7 @@ export default function ChatScreen() {
                         <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} overlay />
                       )}
                       {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
+                      {sending && <SendingVeil />}
                     </View>
                   </>
                 ) : item.type === 'location' &&
@@ -1855,6 +2051,7 @@ export default function ChatScreen() {
                           <BubbleTime iso={item.createdAt} isMe={isMe} overlay />
                         )}
                         {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
+                        {sending && <SendingVeil />}
                       </View>
                     ) : (
                       // Audio/document : bulle aux couleurs de l'expéditeur, avec la carte

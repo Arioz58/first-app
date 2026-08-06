@@ -322,7 +322,7 @@ DELETE /stories/:storyId                          → supprimer (propriétaire u
 // Client → Serveur (vérification membership sur chaque event)
 join_conversation(conversationId)
 send_message({ conversationId, content, type, mediaUrl?, mediaType?, fileName?, fileSize?, mimeType?, durationMs?, batchId? })
-                                                  → `batchId` = médias envoyés d'un même geste (migration `message_batch`) : regroupés en UN album à l'affichage. Généré côté app (`<userId>-<timestamp>`) et non côté serveur, chaque média partant dans son propre `send_message`
+                                                  → `batchId` = médias envoyés d'un même geste (migration `message_batch`) : regroupés en UN album à l'affichage. Généré côté app (**`<userId>-<timestamp>#<nombre de médias>`**) et non côté serveur, chaque média partant dans son propre `send_message`. ⚠️ Le suffixe `#<n>` porte le **nombre attendu**, ce qui permet au destinataire de retenir l'album jusqu'à l'avoir en entier au lieu de voir les images tomber une par une (`batchExpected` dans `chat/[id].tsx`). Il voyage dans l'identifiant — chaîne opaque déjà relayée et stockée — précisément pour éviter une migration et un champ socket de plus. Séparateur `#` et non `-` : les identifiants d'utilisateur en contiennent, et l'ancien format finissait par un horodatage qu'on lirait comme un compte gigantesque ; sans `#` on retombe sur 1, donc sur l'ancien comportement (ce que font les albums déjà en base)
 typing({ conversationId, typing })                → relayé aux autres membres en `peer_typing`
 leave_conversation(conversationId)
 

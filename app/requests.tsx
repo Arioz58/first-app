@@ -90,7 +90,7 @@ export default function RequestsScreen() {
                   onPress={() =>
                     router.push({
                       pathname: '/chat/[id]' as any,
-                      params: { id: item.id, name: u?.name ?? '' },
+                      params: { id: item.id, name: u?.name ?? '', photo: u?.photoUrl ?? '' },
                     })
                   }
                 >

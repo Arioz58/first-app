@@ -323,7 +323,10 @@ export default function ConversationsScreen() {
         body: { targetUserId: friend.id },
       });
       setQuery('');
-      router.push({ pathname: '/chat/[id]' as any, params: { id: conv.id, name: friend.name } });
+      router.push({
+        pathname: '/chat/[id]' as any,
+        params: { id: conv.id, name: friend.name, photo: friend.photoUrl ?? '' },
+      });
     } catch {
       // silencieux
     }
@@ -413,7 +416,14 @@ export default function ConversationsScreen() {
     }
     router.push({
       pathname: '/chat/[id]' as any,
-      params: { id: conv.id, name: getConvName(conv) },
+      params: {
+        id: conv.id,
+        name: getConvName(conv),
+        // Déjà connus ici : les passer évite à l'en-tête du chat d'afficher l'initiale
+        // avant de basculer sur la photo une fois le profil chargé.
+        photo: (conv.type === 'group' ? conv.photoUrl : getOtherMember(conv)?.user.photoUrl) ?? '',
+        type: conv.type,
+      },
     });
   };
 

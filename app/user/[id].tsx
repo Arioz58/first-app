@@ -147,7 +147,7 @@ export default function UserProfileScreen() {
       });
       router.push({
         pathname: '/chat/[id]' as any,
-        params: { id: conv.id, name: data?.name ?? '' },
+        params: { id: conv.id, name: data?.name ?? '', photo: data?.photoUrl ?? '' },
       });
     } catch {
       // silencieux
