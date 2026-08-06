@@ -6,6 +6,7 @@ import MapView, { Marker } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomSheet from './BottomSheet';
 import { availableMapApps, openMapApp, type MapApp } from '../lib/location';
+import { ROUND } from '../lib/radius';
 
 const NEXA = '#1E40AF';
 const ZOOM = 0.004;
@@ -80,7 +81,8 @@ export function LocationViewer({
             {address || t('location.shared')}
           </Text>
           <TouchableOpacity
-            className="bg-nexa rounded-2xl py-4 items-center flex-row justify-center mt-3"
+            style={ROUND.bubble}
+            className="bg-nexa py-4 items-center flex-row justify-center mt-3"
             onPress={() => setChooser(true)}
             activeOpacity={0.85}
           >

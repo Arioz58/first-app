@@ -12,6 +12,12 @@ import { Platform, StyleSheet, View, useColorScheme, type StyleProp, type ViewSt
  * là où les couches se superposent, les flous s'additionnent. D'où une montée progressive
  * plutôt qu'une bordure franche.
  *
+ * ⚠️ Ces couches ne s'additionnent PAS linéairement : empiler n flous de rayon r revient à
+ * un rayon r·√n. Répartir les couches à intervalles réguliers donne donc un flou qui bondit
+ * au premier tiers puis stagne — l'œil y lit une bande floue à bord adouci, pas un dégradé.
+ * On place donc la i-ième couche sur une courbe en racine (voir plus bas), ce qui rend la
+ * montée du flou PERÇU quasi linéaire.
+ *
  * Technique reprise de `beautiful-expo` (David Mokos, MIT), réécrite pour nos versions :
  * le paquet d'origine réclame Reanimated 4.5 / Worklets 0.10, soit Expo SDK 57, alors que
  * le projet est en SDK 54 — l'installer aurait forcé une montée de Reanimated, dont
@@ -25,6 +31,11 @@ const IOS_LAYERS = 4;
 // Le flou d'Android passe par une implémentation nettement plus coûteuse : on allège.
 const ANDROID_LAYERS = 3;
 
+// Rampe d'une couche, échantillonnée sur une courbe en S (3t² − 2t³). Sa pente est nulle
+// aux deux bouts : ni le début ni la fin d'une couche ne laissent d'arête visible, là où
+// une rampe droite marque un pli à chaque extrémité.
+const RAMP = [0, 0.156, 0.5, 0.844, 1];
+
 export function ProgressiveBlur({
   edge,
   height,
@@ -32,7 +43,7 @@ export function ProgressiveBlur({
   layers: layersProp,
   style,
 }: {
-  /** Bord net : `top` = flou en haut qui s'efface vers le bas, et inversement. */
+  /** Côté FLOU : `top` = flou en haut qui s'efface vers le bas, et inversement. */
   edge: 'top' | 'bottom';
   height: number;
   intensity?: number;
@@ -48,17 +59,25 @@ export function ProgressiveBlur({
   return (
     <View pointerEvents="none" style={[{ height }, style]}>
       {Array.from({ length: layers }, (_, i) => {
-        // Chaque couche commence plus loin que la précédente : la première couvre tout,
-        // la dernière n'habille que le bord. Leur cumul dessine la montée.
-        const start = i / layers;
-        const mid = start + (1 - start) * 0.6;
+        // `u` = distance au bord NET, en fraction de la hauteur (0 = net, 1 = flou maximal).
+        // La couche i n'atteint son opacité pleine qu'à u = √((i+1)/n) : c'est ce placement
+        // en racine qui compense l'empilement décrit en en-tête. Sa rampe couvre deux crans
+        // au lieu d'un, si bien que les couches se chevauchent et qu'aucun palier ne sort.
+        const from = Math.sqrt(i / layers);
+        const to = Math.min(1, Math.sqrt((i + 2) / layers));
 
-        const locations =
-          edge === 'top' ? [0, start, mid, 1] : [0, 1 - mid, 1 - start, 1];
-        const colors =
-          edge === 'top'
-            ? ['#000', '#000', 'rgba(0,0,0,0.25)', 'transparent']
-            : ['transparent', 'rgba(0,0,0,0.25)', '#000', '#000'];
+        const stops = RAMP.map((alpha, k) => ({
+          u: from + (to - from) * (k / (RAMP.length - 1)),
+          alpha,
+        }));
+        if (to < 1) stops.push({ u: 1, alpha: 1 });
+        if (from > 0) stops.unshift({ u: 0, alpha: 0 });
+
+        // Le bord net est en bas quand le flou est en haut : `u` s'y compte à rebours, et
+        // les arrêts doivent être remis dans l'ordre croissant qu'attend le dégradé.
+        const ordered = edge === 'top' ? [...stops].reverse() : stops;
+        const locations = ordered.map((s) => (edge === 'top' ? 1 - s.u : s.u));
+        const colors = ordered.map((s) => `rgba(0,0,0,${s.alpha})`);
 
         return (
           <MaskedView

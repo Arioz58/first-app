@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Pressable, Text, View } from 'react-native';
+import { ROUND } from '../lib/radius';
 
 export type GridItem = {
   id: string;
@@ -58,7 +59,7 @@ export function MediaGrid({
           >
             <Image
               source={{ uri: item.mediaUrl }}
-              style={{ width, height, borderRadius: 12 }}
+              style={{ width, height, ...ROUND.inner }}
               contentFit="cover"
             />
 
@@ -74,7 +75,7 @@ export function MediaGrid({
             {showExtra ? (
               <View
                 className="absolute inset-0 items-center justify-center bg-black/55"
-                style={{ borderRadius: 12 }}
+                style={ROUND.inner}
               >
                 <Text className="text-white text-2xl font-semibold">+{extra}</Text>
               </View>

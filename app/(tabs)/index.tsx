@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../../lib/api';
+import { ROUND } from '../../lib/radius';
 import { getSocket } from '../../lib/socket';
 import {
   bumpUnread,
@@ -432,7 +433,7 @@ export default function ConversationsScreen() {
 
       {/* Barre de recherche — toujours visible. */}
       <View className="px-4 pb-3">
-        <View className="flex-row items-center bg-gray-100 dark:bg-zinc-800 rounded-xl px-3">
+        <View style={ROUND.inner} className="flex-row items-center bg-gray-100 dark:bg-zinc-800 px-3">
           <Ionicons name="search" size={18} color="#6B7280" />
           <TextInput
             className="flex-1 py-2.5 px-2 text-lg text-gray-900 dark:text-zinc-100"

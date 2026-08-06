@@ -21,6 +21,7 @@ import BottomSheet from '../../components/BottomSheet';
 import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
+import { ROUND } from '../../lib/radius';
 import { requestScrollToMessage } from '../../lib/chatNav';
 import {
   BUBBLE_COLORS,
@@ -421,7 +422,7 @@ export default function ConversationDetailsScreen() {
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
           {/* 2.1 Bloc profil — bannière dégradée + avatar en débord */}
-          <View className="bg-white dark:bg-zinc-900 rounded-2xl mx-4 mt-3 overflow-hidden" style={CARD_SHADOW}>
+          <View className="bg-white dark:bg-zinc-900 mx-4 mt-3 overflow-hidden" style={[CARD_SHADOW, ROUND.bubble]}>
             <LinearGradient
               colors={['#3B82F6', '#1E3A8A']}
               start={{ x: 0, y: 0 }}
@@ -504,8 +505,8 @@ export default function ConversationDetailsScreen() {
           {/* 2.2 Actions rapides — tuiles */}
           {data && !data.isSelf ? (
             <View
-              className="flex-row justify-around bg-white dark:bg-zinc-900 rounded-2xl mx-4 mt-3 py-4"
-              style={CARD_SHADOW}
+              className="flex-row justify-around bg-white dark:bg-zinc-900 mx-4 mt-3 py-4"
+              style={[CARD_SHADOW, ROUND.bubble]}
             >
               <QuickAction
                 icon="call"
@@ -600,12 +601,12 @@ export default function ConversationDetailsScreen() {
               ).map(([icon, key, category, count]) => (
                 <TouchableOpacity
                   key={category}
-                  className="items-center py-3 rounded-xl"
-                  style={{ width: '33.33%' }}
+                  className="items-center py-3"
+                  style={{ ...ROUND.inner, width: '33.33%' }}
                   onPress={() => openMedia(category, t(`details.${key}`))}
                   activeOpacity={0.7}
                 >
-                  <View className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950 items-center justify-center">
+                  <View style={ROUND.bubble} className="w-12 h-12 bg-blue-50 dark:bg-blue-950 items-center justify-center">
                     <Ionicons name={icon} size={22} color={NEXA} />
                   </View>
                   <Text className="text-gray-900 dark:text-zinc-100 font-semibold mt-1.5">{count}</Text>
@@ -715,7 +716,7 @@ export default function ConversationDetailsScreen() {
       {/* Surnom */}
       <Modal visible={nicknameOpen} transparent animationType="fade" onRequestClose={() => setNicknameOpen(false)}>
         <Pressable className="flex-1 bg-black/40 justify-center px-8" onPress={() => setNicknameOpen(false)}>
-          <Pressable className="bg-white dark:bg-zinc-900 rounded-2xl p-5" onPress={() => Keyboard.dismiss()}>
+          <Pressable style={ROUND.bubble} className="bg-white dark:bg-zinc-900 p-5" onPress={() => Keyboard.dismiss()}>
             <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">{t('details.nickname')}</Text>
             <Text className="text-base text-gray-500 dark:text-zinc-400 mt-1 mb-3">{t('details.nickname_hint')}</Text>
             <TextInput
@@ -724,7 +725,8 @@ export default function ConversationDetailsScreen() {
               placeholder={t('details.nickname_placeholder')}
               autoFocus
               maxLength={40}
-              className="border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-lg"
+              style={ROUND.inner}
+              className="border border-gray-200 dark:border-zinc-800 px-4 py-3 text-lg"
             />
             <View className="flex-row justify-end gap-3 mt-4">
               <TouchableOpacity onPress={() => setNicknameOpen(false)} className="px-4 py-2">
@@ -862,7 +864,8 @@ function QuickAction({
   return (
     <TouchableOpacity className="items-center" onPress={onPress} style={{ opacity: disabled ? 0.4 : 1 }}>
       <View
-        className={`w-12 h-12 rounded-2xl items-center justify-center ${active ? 'bg-nexa' : 'bg-blue-50 dark:bg-blue-950'}`}
+        style={ROUND.bubble}
+        className={`w-12 h-12 items-center justify-center ${active ? 'bg-nexa' : 'bg-blue-50 dark:bg-blue-950'}`}
       >
         <Ionicons name={icon} size={22} color={active ? 'white' : NEXA} />
       </View>
@@ -875,7 +878,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <View className="mt-5">
       <Text className="text-sm font-semibold text-gray-400 dark:text-zinc-500 uppercase px-6 pb-2">{title}</Text>
-      <View className="bg-white dark:bg-zinc-900 rounded-2xl mx-4 overflow-hidden" style={CARD_SHADOW}>
+      <View className="bg-white dark:bg-zinc-900 mx-4 overflow-hidden" style={[CARD_SHADOW, ROUND.bubble]}>
         {children}
       </View>
     </View>
@@ -950,13 +953,13 @@ function MessageRow({
 function DetailsSkeleton() {
   return (
     <View>
-      <View className="items-center bg-white dark:bg-zinc-900 rounded-2xl mx-4 mt-3 pt-8 pb-6" style={CARD_SHADOW}>
+      <View className="items-center bg-white dark:bg-zinc-900 mx-4 mt-3 pt-8 pb-6" style={[CARD_SHADOW, ROUND.bubble]}>
         <View style={{ width: 96, height: 96 }} className="rounded-full bg-gray-200 dark:bg-zinc-700" />
         <View className="w-40 h-5 bg-gray-200 dark:bg-zinc-700 rounded mt-4" />
         <View className="w-24 h-3 bg-gray-100 dark:bg-zinc-800 rounded mt-3" />
       </View>
       {[0, 1, 2].map((i) => (
-        <View key={i} className="mt-5 bg-white dark:bg-zinc-900 rounded-2xl mx-4 px-4 py-4" style={CARD_SHADOW}>
+        <View key={i} className="mt-5 bg-white dark:bg-zinc-900 mx-4 px-4 py-4" style={[CARD_SHADOW, ROUND.bubble]}>
           <View className="w-32 h-3 bg-gray-100 dark:bg-zinc-800 rounded mb-4" />
           <View className="w-full h-4 bg-gray-100 dark:bg-zinc-800 rounded mb-3" />
           <View className="w-3/4 h-4 bg-gray-100 dark:bg-zinc-800 rounded" />

@@ -72,8 +72,15 @@ function AttachTile({
     <Animated.View className="w-1/3 items-center mt-5" style={anim}>
       <TouchableOpacity className="items-center" activeOpacity={0.75} onPress={() => onRun(action)}>
         <View
+          // Rayon laissé à 24 : sur un carré de 64, l'agrandir tirerait la tuile vers le
+          // cercle. Seule la courbe continue change, et c'est ce qui la rapproche d'une
+          // icône d'app iOS.
           className="w-16 h-16 rounded-3xl items-center justify-center"
-          style={{ backgroundColor: action.color, opacity: action.coming ? 0.4 : 1 }}
+          style={{
+            backgroundColor: action.color,
+            opacity: action.coming ? 0.4 : 1,
+            borderCurve: 'continuous',
+          }}
         >
           <Ionicons name={action.icon} size={29} color="white" />
         </View>

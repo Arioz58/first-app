@@ -11,6 +11,7 @@ import {
   DEFAULT_WALLPAPER_ASSET,
   type ChatWallpaper,
 } from '../lib/chatWallpapers';
+import { ROUND } from '../lib/radius';
 import BottomSheet from './BottomSheet';
 
 type Props = {
@@ -20,7 +21,7 @@ type Props = {
   onSelect: (wallpaper: ChatWallpaper | null) => void;
 };
 
-const SWATCH = 'w-[68px] h-[68px] rounded-2xl overflow-hidden items-center justify-center';
+const SWATCH = 'w-[68px] h-[68px] overflow-hidden items-center justify-center';
 
 // Pastille de sélection (coche verte en surimpression).
 function Check() {
@@ -77,7 +78,7 @@ export default function ChatWallpaperPicker({ visible, current, onClose, onSelec
         <View className="flex-row flex-wrap gap-3">
           {/* Défaut (asset nexa selon le thème) */}
           <TouchableOpacity onPress={() => onSelect(null)} className="items-center" activeOpacity={0.8}>
-            <View className={`${SWATCH} border border-gray-200 dark:border-zinc-800`}>
+            <View style={ROUND.bubble} className={`${SWATCH} border border-gray-200 dark:border-zinc-800`}>
               <Image
                 source={DEFAULT_WALLPAPER_ASSET[scheme === 'dark' ? 'dark' : 'light']}
                 style={{ width: 68, height: 68 }}
@@ -96,12 +97,12 @@ export default function ChatWallpaperPicker({ visible, current, onClose, onSelec
               activeOpacity={0.8}
             >
               {w.asset ? (
-                <View className={`${SWATCH} border border-gray-200 dark:border-zinc-800`}>
+                <View style={ROUND.bubble} className={`${SWATCH} border border-gray-200 dark:border-zinc-800`}>
                   <Image source={w.asset} style={{ width: 68, height: 68 }} contentFit="cover" />
                   {isPreset(w.id) && <Check />}
                 </View>
               ) : w.colors!.length === 1 ? (
-                <View className={SWATCH} style={{ backgroundColor: w.colors![0] }}>
+                <View className={SWATCH} style={{ ...ROUND.bubble, backgroundColor: w.colors![0] }}>
                   {isPreset(w.id) && <Check />}
                 </View>
               ) : (
@@ -109,7 +110,7 @@ export default function ChatWallpaperPicker({ visible, current, onClose, onSelec
                   colors={w.colors as [string, string, ...string[]]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={{ borderRadius: 16, width: 68, height: 68 }}
+                  style={{ ...ROUND.bubble, width: 68, height: 68 }}
                 >
                   {isPreset(w.id) && <Check />}
                 </LinearGradient>
@@ -120,12 +121,15 @@ export default function ChatWallpaperPicker({ visible, current, onClose, onSelec
           {/* Photo depuis la galerie */}
           <TouchableOpacity onPress={pickPhoto} className="items-center" activeOpacity={0.8}>
             {isPhoto ? (
-              <View className={SWATCH}>
+              <View style={ROUND.bubble} className={SWATCH}>
                 <Image source={{ uri: current.uri }} style={{ width: 68, height: 68 }} contentFit="cover" />
                 <Check />
               </View>
             ) : (
-              <View className={`${SWATCH} bg-gray-100 dark:bg-zinc-800 border border-dashed border-gray-300 dark:border-zinc-700`}>
+              <View
+                style={ROUND.bubble}
+                className={`${SWATCH} bg-gray-100 dark:bg-zinc-800 border border-dashed border-gray-300 dark:border-zinc-700`}
+              >
                 <Ionicons name="image-outline" size={26} color="#1E40AF" />
               </View>
             )}

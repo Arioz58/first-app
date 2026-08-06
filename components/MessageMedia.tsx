@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { isViewableDocument } from '../lib/documents';
+import { ROUND } from '../lib/radius';
 import { formatFileSize } from '../lib/upload';
 import { AudioMessage } from './AudioMessage';
 import { DocumentViewer } from './DocumentViewer';
@@ -34,7 +35,7 @@ export function MessageMedia({
       <TouchableOpacity onPress={() => onOpenImage(mediaUrl)} activeOpacity={0.9}>
         <Image
           source={{ uri: mediaUrl }}
-          style={{ width: 244, height: 244, borderRadius: 14 }}
+          style={{ width: 244, height: 244, ...ROUND.media }}
           contentFit="cover"
         />
       </TouchableOpacity>
@@ -49,7 +50,7 @@ export function MessageMedia({
         style={{
           width: 244,
           height: 288,
-          borderRadius: 14,
+          ...ROUND.media,
           backgroundColor: '#111827',
           alignItems: 'center',
           justifyContent: 'center',

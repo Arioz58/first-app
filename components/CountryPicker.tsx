@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BottomSheet from "./BottomSheet";
 import { COUNTRIES, Country } from "../lib/countries";
+import { ROUND } from "../lib/radius";
 
 type Props = {
   selected: Country;
@@ -45,7 +46,8 @@ export default function CountryPicker({ selected, onSelect }: Props) {
   return (
     <>
       <TouchableOpacity
-        className="flex-row items-center border border-gray-300 dark:border-zinc-700 rounded-xl px-3 py-3 mr-2"
+        style={ROUND.inner}
+        className="flex-row items-center border border-gray-300 dark:border-zinc-700 px-3 py-3 mr-2"
         onPress={() => setVisible(true)}
       >
         <Text className="text-xl mr-1">{selected.flag}</Text>
@@ -65,7 +67,8 @@ export default function CountryPicker({ selected, onSelect }: Props) {
 
         <View className="px-4 py-3">
           <TextInput
-            className="bg-gray-100 dark:bg-zinc-800 rounded-xl px-4 py-3 text-base text-gray-900 dark:text-zinc-100"
+            style={ROUND.inner}
+            className="bg-gray-100 dark:bg-zinc-800 px-4 py-3 text-base text-gray-900 dark:text-zinc-100"
             placeholder={t("country_picker.search")}
             placeholderTextColor="#6B7280"
             value={search}

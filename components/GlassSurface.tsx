@@ -47,6 +47,9 @@ export function GlassSurface({
         style={[
           {
             borderRadius: radius,
+            // Sans effet quand la surface est une gélule (rayon = moitié de la hauteur),
+            // mais indispensable dès qu'un appelant passe un rayon plus court.
+            borderCurve: 'continuous',
             overflow: 'hidden',
             // Voile posé sur le flou. Le flou seul prend la couleur de ce qu'il y a
             // derrière : sur un fond de conversation chargé, la surface se confond avec
@@ -72,6 +75,7 @@ export function GlassSurface({
       style={[
         {
           borderRadius: radius,
+          borderCurve: 'continuous',
           borderWidth: bordered ? 1 : 0,
           backgroundColor: isDark ? 'rgba(24,24,27,0.90)' : 'rgba(255,255,255,0.90)',
           borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',

@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ROUND } from '../lib/radius';
+import { useThemeColors } from '../lib/theme';
 import { ProgressiveBlur } from './ProgressiveBlur';
 
 const NEXA = '#1E40AF';
@@ -165,7 +167,8 @@ export function LocationPicker({
                 {address || t('location.pin_hint')}
               </Text>
               <TouchableOpacity
-                className="bg-nexa rounded-2xl py-4 items-center"
+                style={ROUND.bubble}
+                className="bg-nexa py-4 items-center"
                 onPress={send}
                 activeOpacity={0.85}
               >
@@ -185,7 +188,13 @@ const BUBBLE_W = 244;
 const BUBBLE_H = 186;
 // Bande d'information en bas de l'aperçu. Le flou y monte progressivement : la carte reste
 // nette au-dessus et se dissout sous le texte, plutôt que d'être coupée par un bandeau.
-const INFO_H = 78;
+// ⚠️ Une montée progressive a besoin de hauteur. Sur une bande courte, le texte se pose sur
+// une zone encore presque nette et devient illisible dès que la carte est chargée — c'est
+// ce qui poussait à écraser le dégradé en quelques pixels, d'où son allure de bandeau.
+const INFO_H = 116;
+// Le repère se retrouverait sinon dans le bas de la bande, donc flouté : on décale la carte
+// vers le sud pour qu'il remonte dans la partie nette. Exprimé en fraction de la hauteur.
+const PIN_RISE = 0.16;
 
 /** Aperçu figé d'une position, tel qu'il apparaît dans une bulle. */
 export function LocationBubble({
@@ -200,13 +209,14 @@ export function LocationBubble({
   onPress: () => void;
 }) {
   const { t } = useTranslation();
+  const colors = useThemeColors();
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.9} className="rounded-2xl overflow-hidden">
+    <TouchableOpacity onPress={onPress} activeOpacity={0.9} style={ROUND.bubble} className="overflow-hidden">
       <View style={{ width: BUBBLE_W, height: BUBBLE_H }}>
         <MapView
           style={StyleSheet.absoluteFill}
           initialRegion={{
-            latitude,
+            latitude: latitude - PIN_RISE * ZOOM,
             longitude,
             latitudeDelta: ZOOM,
             longitudeDelta: ZOOM,
@@ -226,7 +236,7 @@ export function LocationBubble({
         <ProgressiveBlur
           edge="bottom"
           height={INFO_H}
-          intensity={70}
+          intensity={95}
           style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
         />
 
@@ -238,9 +248,14 @@ export function LocationBubble({
           <Text className="text-gray-900 dark:text-zinc-100 font-semibold" numberOfLines={2}>
             {address || t('location.shared')}
           </Text>
+          {/* ⚠️ Pas de bleu nexa ici : à cette taille, sur une carte floutée dont le fond
+              n'est ni clair ni sombre, il ne se détache pas assez. On reprend la couleur du
+              texte principal, qui suit le thème. */}
           <View className="flex-row items-center mt-0.5">
-            <Ionicons name="open-outline" size={13} color={NEXA} />
-            <Text className="text-nexa text-sm ml-1">{t('location.open_maps')}</Text>
+            <Ionicons name="open-outline" size={13} color={colors.content} />
+            <Text className="text-gray-900 dark:text-zinc-100 text-sm ml-1">
+              {t('location.open_maps')}
+            </Text>
           </View>
         </View>
       </View>

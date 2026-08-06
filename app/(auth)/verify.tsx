@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { apiRequest } from "../../lib/api";
+import { ROUND } from "../../lib/radius";
 import { PRIVACY_POLICY_VERSION } from "../../lib/config";
 import { registerForPushNotifications } from "../../lib/notifications";
 import { connectSocket } from "../../lib/socket";
@@ -283,7 +284,8 @@ export default function VerifyScreen() {
                 ref={(el) => {
                   inputRefs.current[index] = el;
                 }}
-                className={`w-14 h-16 border-2 rounded-2xl text-center text-3xl font-bold ${
+                style={ROUND.bubble}
+                className={`w-14 h-16 border-2 text-center text-3xl font-bold ${
                   expired
                     ? "border-gray-200 dark:border-zinc-700 text-gray-300"
                     : digit

@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DismissKeyboard } from '../../components/DismissKeyboard';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
+import { ROUND } from '../../lib/radius';
 import { SearchUser, useUserSearch } from '../../lib/useUserSearch';
 
 export default function NewGroupScreen() {
@@ -83,7 +84,8 @@ export default function NewGroupScreen() {
 
       <View className="px-4 pt-4">
         <TextInput
-          className="border border-gray-300 dark:border-zinc-700 rounded-xl px-4 py-3 text-lg text-gray-900 dark:text-zinc-100"
+          style={ROUND.inner}
+          className="border border-gray-300 dark:border-zinc-700 px-4 py-3 text-lg text-gray-900 dark:text-zinc-100"
           placeholder={t('group.group_name')}
           placeholderTextColor="#6B7280"
           value={name}
@@ -156,7 +158,8 @@ export default function NewGroupScreen() {
 
       <View className="px-4 pb-4">
         <TouchableOpacity
-          className={`rounded-xl py-4 items-center ${name.trim() && selected.length ? 'bg-nexa' : 'bg-gray-200 dark:bg-zinc-700'}`}
+          style={ROUND.inner}
+          className={`py-4 items-center ${name.trim() && selected.length ? 'bg-nexa' : 'bg-gray-200 dark:bg-zinc-700'}`}
           onPress={handleCreate}
           disabled={loading || !name.trim() || !selected.length}
         >

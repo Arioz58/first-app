@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { Modal, Pressable, View } from "react-native";
+import { ROUND } from "../lib/radius";
 import {
   Gesture,
   GestureDetector,
@@ -160,8 +161,8 @@ export default function BottomSheet({
           />
           <Animated.View
             onLayout={height ? undefined : onLayout}
-            style={[height ? { height } : null, sheetStyle]}
-            className="absolute left-0 right-0 bottom-0 bg-white dark:bg-zinc-900 rounded-t-3xl"
+            style={[ROUND.sheet, height ? { height } : null, sheetStyle]}
+            className="absolute left-0 right-0 bottom-0 bg-white dark:bg-zinc-900"
           >
             <GestureDetector gesture={pan}>
               <View className="pt-3 pb-1">

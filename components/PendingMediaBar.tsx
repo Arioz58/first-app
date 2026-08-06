@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useEffect, useState } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ROUND } from '../lib/radius';
 import Animated, {
   FadeIn,
   runOnJS,
@@ -77,8 +78,8 @@ function Thumb({ item, onRemove }: { item: PendingMedia; onRemove: (id: string) 
     <View className="mr-2">
       <Animated.View style={appearStyle}>
       <View
-        className="rounded-xl overflow-hidden bg-gray-200 dark:bg-zinc-800"
-        style={{ width: THUMB, height: THUMB }}
+        className="overflow-hidden bg-gray-200 dark:bg-zinc-800"
+        style={{ ...ROUND.inner, width: THUMB, height: THUMB }}
       >
         {preview ? (
           <Image source={{ uri: preview }} style={{ width: THUMB, height: THUMB }} contentFit="cover" />

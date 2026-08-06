@@ -23,6 +23,7 @@ import BottomSheet from '../../components/BottomSheet';
 import { UserAvatar } from '../../components/UserAvatar';
 import { useUserSearch, type SearchUser } from '../../lib/useUserSearch';
 import { apiRequest } from '../../lib/api';
+import { ROUND } from '../../lib/radius';
 import { getUserId } from '../../lib/storage';
 
 const NEXA = '#1E40AF';
@@ -335,7 +336,7 @@ export default function GroupDetailsScreen() {
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
         {/* En-tête */}
-        <View className="bg-white dark:bg-zinc-900 rounded-2xl mx-4 mt-3 overflow-hidden" style={CARD_SHADOW}>
+        <View className="bg-white dark:bg-zinc-900 mx-4 mt-3 overflow-hidden" style={[CARD_SHADOW, ROUND.bubble]}>
           <LinearGradient colors={['#3B82F6', '#1E3A8A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ height: 76 }} />
           <View className="items-center -mt-11 pb-5 px-6">
             <TouchableOpacity disabled={!isAdmin || uploading} onPress={changePhoto} activeOpacity={0.85}>
@@ -388,7 +389,7 @@ export default function GroupDetailsScreen() {
         </View>
 
         {/* Actions rapides */}
-        <View className="flex-row justify-around bg-white dark:bg-zinc-900 rounded-2xl mx-4 mt-3 py-4" style={CARD_SHADOW}>
+        <View className="flex-row justify-around bg-white dark:bg-zinc-900 mx-4 mt-3 py-4" style={[CARD_SHADOW, ROUND.bubble]}>
           <QuickAction
             icon={isMuted ? 'notifications-off' : 'notifications-outline'}
             label={t('details.mute')}
@@ -437,7 +438,7 @@ export default function GroupDetailsScreen() {
                 style={{ width: '33.33%' }}
                 onPress={() => openMedia(category, t(`details.${key}`))}
               >
-                <View className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950 items-center justify-center">
+                <View style={ROUND.bubble} className="w-12 h-12 bg-blue-50 dark:bg-blue-950 items-center justify-center">
                   <Ionicons name={icon} size={22} color={NEXA} />
                 </View>
                 <Text className="text-gray-900 dark:text-zinc-100 font-semibold mt-1.5">{count}</Text>
@@ -471,14 +472,15 @@ export default function GroupDetailsScreen() {
       {/* Modale édition nom/description */}
       <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
         <Pressable className="flex-1 bg-black/40 justify-center px-8" onPress={() => setEditOpen(false)}>
-          <Pressable className="bg-white dark:bg-zinc-900 rounded-2xl p-5" onPress={() => Keyboard.dismiss()}>
+          <Pressable style={ROUND.bubble} className="bg-white dark:bg-zinc-900 p-5" onPress={() => Keyboard.dismiss()}>
             <Text className="text-lg font-bold text-gray-900 dark:text-zinc-100 mb-3">{t('group.edit_info')}</Text>
             <TextInput
               value={nameDraft}
               onChangeText={setNameDraft}
               placeholder={t('group.group_name')}
               maxLength={50}
-              className="border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-base mb-3"
+              style={ROUND.inner}
+              className="border border-gray-200 dark:border-zinc-800 px-4 py-3 text-base mb-3"
             />
             <TextInput
               value={descDraft}
@@ -486,8 +488,8 @@ export default function GroupDetailsScreen() {
               placeholder={t('group.description_placeholder')}
               maxLength={200}
               multiline
-              className="border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-base"
-              style={{ minHeight: 70, textAlignVertical: 'top' }}
+              className="border border-gray-200 dark:border-zinc-800 px-4 py-3 text-base"
+              style={{ ...ROUND.inner, minHeight: 70, textAlignVertical: 'top' }}
             />
             <View className="flex-row justify-end gap-3 mt-4">
               <TouchableOpacity onPress={() => setEditOpen(false)} className="px-4 py-2">
@@ -524,7 +526,7 @@ export default function GroupDetailsScreen() {
           </TouchableOpacity>
         </View>
 
-        <View className="flex-row items-center bg-gray-100 dark:bg-zinc-800 rounded-xl px-3 mx-4 my-3">
+        <View style={ROUND.inner} className="flex-row items-center bg-gray-100 dark:bg-zinc-800 px-3 mx-4 my-3">
           <Ionicons name="search" size={18} color="#6B7280" />
           <TextInput
             className="flex-1 py-3 px-2 text-base text-gray-900 dark:text-zinc-100"
@@ -570,7 +572,7 @@ export default function GroupDetailsScreen() {
           </TouchableOpacity>
         </View>
 
-        <View className="flex-row items-center bg-gray-100 dark:bg-zinc-800 rounded-xl px-3 mx-4 my-3">
+        <View style={ROUND.inner} className="flex-row items-center bg-gray-100 dark:bg-zinc-800 px-3 mx-4 my-3">
           <Ionicons name="search" size={18} color="#6B7280" />
           <TextInput
             className="flex-1 py-3 px-2 text-base text-gray-900 dark:text-zinc-100"
@@ -619,7 +621,7 @@ function QuickAction({
 }) {
   return (
     <TouchableOpacity className="items-center" onPress={onPress}>
-      <View className={`w-12 h-12 rounded-2xl items-center justify-center ${active ? 'bg-nexa' : 'bg-blue-50 dark:bg-blue-950'}`}>
+      <View style={ROUND.bubble} className={`w-12 h-12 items-center justify-center ${active ? 'bg-nexa' : 'bg-blue-50 dark:bg-blue-950'}`}>
         <Ionicons name={icon} size={22} color={active ? 'white' : NEXA} />
       </View>
       <Text className="text-[11px] text-gray-600 dark:text-zinc-300 mt-1.5">{label}</Text>
@@ -631,7 +633,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <View className="mt-5">
       <Text className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase px-6 pb-2">{title}</Text>
-      <View className="bg-white dark:bg-zinc-900 rounded-2xl mx-4 overflow-hidden" style={CARD_SHADOW}>
+      <View className="bg-white dark:bg-zinc-900 mx-4 overflow-hidden" style={[CARD_SHADOW, ROUND.bubble]}>
         {children}
       </View>
     </View>

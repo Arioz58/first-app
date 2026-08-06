@@ -65,6 +65,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChatBackground } from '../../components/ChatBackground';
 import { GlassSurface, FLOATING_SHADOW } from '../../components/GlassSurface';
+import { RADIUS, ROUND } from '../../lib/radius';
 import { ProgressiveBlur } from '../../components/ProgressiveBlur';
 import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
 import { UserAvatar } from '../../components/UserAvatar';
@@ -162,7 +163,7 @@ const isImageLike = (mt?: string | null) => mt === 'image' || mt === 'video' || 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 const GROUP_GAP = 10; // entre deux séries
 const GROUP_GAP_TIGHT = 3; // à l'intérieur d'une série
-const GROUP_RADIUS = 7; // coin resserré côté « flux » (vs rounded-2xl = 16)
+const GROUP_RADIUS = 9; // coin resserré côté « flux » (vs RADIUS.bubble = 20)
 
 type Sender = { id: string; name: string };
 type Message = {
@@ -313,7 +314,7 @@ function BubbleFill({ color, radius }: { color: string; radius: object }) {
       // aussi courte qu'une bulle.
       start={{ x: 0, y: 0 }}
       end={{ x: 0.5, y: 1 }}
-      style={[StyleSheet.absoluteFill, { borderRadius: 16 }, radius]}
+      style={[StyleSheet.absoluteFill, ROUND.bubble, radius]}
     />
   );
 }
@@ -1358,8 +1359,9 @@ export default function ChatScreen() {
           et une hauteur variable ferait sauter le contenu de la liste à chaque
           changement. */}
       <View
-        className="absolute rounded-3xl bg-white dark:bg-zinc-900"
+        className="absolute bg-white dark:bg-zinc-900"
         style={{
+          ...ROUND.surface,
           top: insets.top + 4,
           left: 10,
           right: 10,
@@ -1474,8 +1476,9 @@ export default function ChatScreen() {
           }}
         >
         <TouchableOpacity
-          className="flex-row items-center px-4 rounded-2xl bg-blue-50 dark:bg-blue-950"
+          className="flex-row items-center px-4 bg-blue-50 dark:bg-blue-950"
           style={{
+            ...ROUND.bubble,
             height: LIVE_BANNER_H,
             ...HEADER_SHADOW,
           }}
@@ -1626,7 +1629,13 @@ export default function ChatScreen() {
                 style={[
                   { marginTop: index === 0 ? 0 : firstOfGroup ? GROUP_GAP : GROUP_GAP_TIGHT },
                   highlighted
-                    ? { backgroundColor: 'rgba(250,204,21,0.25)', borderRadius: 14, padding: 2 }
+                    ? // Concentrique avec la bulle qu'il entoure : rayon de la bulle + son écart.
+                      {
+                        backgroundColor: 'rgba(250,204,21,0.25)',
+                        borderRadius: RADIUS.bubble + 2,
+                        borderCurve: 'continuous' as const,
+                        padding: 2,
+                      }
                     : null,
                 ]}
               >
@@ -1646,8 +1655,8 @@ export default function ChatScreen() {
                       </Text>
                     )}
                     <View
-                      style={[BUBBLE_SHADOW, radius]}
-                      className={`rounded-2xl p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+                      style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+                      className={`p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
                     >
                       {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
                       <MediaGrid
@@ -1693,7 +1702,7 @@ export default function ChatScreen() {
                       </Text>
                     )}
                     {/* Aperçu hors bulle, comme les médias : la carte se suffit à elle-même. */}
-                    <View style={BUBBLE_SHADOW} className="rounded-2xl overflow-hidden">
+                    <View style={[BUBBLE_SHADOW, ROUND.bubble]} className="overflow-hidden">
                       <LocationBubble
                         latitude={item.latitude}
                         longitude={item.longitude}
@@ -1731,8 +1740,8 @@ export default function ChatScreen() {
                     {item.storyMediaUrl && (
                       <Image
                         source={{ uri: item.storyMediaUrl }}
-                        className="rounded-xl border border-gray-200 dark:border-zinc-800 bg-gray-100 dark:bg-zinc-800 mb-1"
-                        style={{ width: 56, height: 94 }}
+                        className="border border-gray-200 dark:border-zinc-800 bg-gray-100 dark:bg-zinc-800 mb-1"
+                        style={{ ...ROUND.inner, width: 56, height: 94 }}
                       />
                     )}
 
@@ -1743,8 +1752,8 @@ export default function ChatScreen() {
                       </Text>
                     ) : (
                       <View
-                        style={[BUBBLE_SHADOW, radius]}
-                        className={`rounded-2xl px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+                        style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+                        className={`px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
                       >
                         {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
                         <Text
@@ -1765,8 +1774,8 @@ export default function ChatScreen() {
                       // Image/vidéo/GIF en bulle : le média affleure les bords (padding
                       // fin) et la légende vit DANS la bulle, sous le média.
                       <View
-                        style={[BUBBLE_SHADOW, radius]}
-                        className={`rounded-2xl p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+                        style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+                        className={`p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
                       >
                         {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
                         <MessageMedia
@@ -1795,12 +1804,13 @@ export default function ChatScreen() {
                       // et l'icône teintée gardent ainsi un fond clair sur lequel se lire,
                       // sans que la bulle ait à renoncer à sa couleur.
                       <View
-                        style={[BUBBLE_SHADOW, radius]}
-                        className={`rounded-2xl p-1.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+                        style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+                        className={`p-1.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
                       >
                         {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
                         <View
-                          className={`rounded-xl px-3 py-2 ${isMe ? 'bg-white dark:bg-zinc-800' : 'bg-gray-100 dark:bg-zinc-800'}`}
+                          style={ROUND.inner}
+                          className={`px-3 py-2 ${isMe ? 'bg-white dark:bg-zinc-800' : 'bg-gray-100 dark:bg-zinc-800'}`}
                         >
                           <MessageMedia
                             message={item}
@@ -1825,8 +1835,8 @@ export default function ChatScreen() {
                       onPress={
                         firstUrl(item.content) ? () => Linking.openURL(firstUrl(item.content)!) : undefined
                       }
-                      style={[BUBBLE_SHADOW, radius]}
-                      className={`rounded-2xl px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+                      style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+                      className={`px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
                     >
                       {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
                       <Text

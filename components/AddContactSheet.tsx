@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { apiRequest } from '../lib/api';
+import { ROUND } from '../lib/radius';
 import { COUNTRIES, Country } from '../lib/countries';
 import {
   addRecentSearch,
@@ -154,7 +155,7 @@ export default function AddContactSheet({
 
           <View className="flex-row items-center">
             <CountryPicker selected={country} onSelect={setCountry} />
-            <View className="flex-1 flex-row items-center bg-gray-100 dark:bg-zinc-800 rounded-xl px-3">
+            <View style={ROUND.inner} className="flex-1 flex-row items-center bg-gray-100 dark:bg-zinc-800 px-3">
               <TextInput
                 className="flex-1 py-3 px-1 text-lg text-gray-900 dark:text-zinc-100"
                 placeholder={t('search_phone.placeholder')}
@@ -188,8 +189,8 @@ export default function AddContactSheet({
                 <Text className="text-nexa text-base mb-2 ml-1">{t('search_phone.own_number')}</Text>
               ) : null}
               <TouchableOpacity
-                className="flex-row items-center p-3 rounded-2xl border border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900"
-                style={{ elevation: 1 }}
+                className="flex-row items-center p-3 border border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+                style={{ ...ROUND.bubble, elevation: 1 }}
                 onPress={() => open(result.id)}
                 disabled={isSelf}
               >

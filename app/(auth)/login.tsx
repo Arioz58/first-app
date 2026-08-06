@@ -19,6 +19,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import CountryPicker from "../../components/CountryPicker";
 import { apiRequest } from "../../lib/api";
+import { ROUND } from "../../lib/radius";
 import { PRIVACY_URL } from "../../lib/config";
 import { COUNTRIES, Country } from "../../lib/countries";
 
@@ -245,7 +246,8 @@ export default function LoginScreen() {
           {isNewUser && (
             <View className="mb-4 mt-4">
               <TextInput
-                className={`border rounded-xl px-4 py-3 text-xl text-gray-900 dark:text-zinc-100 ${nameError ? "border-red-400" : "border-gray-300 dark:border-zinc-700"}`}
+                style={ROUND.inner}
+                className={`border px-4 py-3 text-xl text-gray-900 dark:text-zinc-100 ${nameError ? "border-red-400" : "border-gray-300 dark:border-zinc-700"}`}
                 placeholder={t("auth.first_name_placeholder")}
                 placeholderTextColor="#6B7280"
                 value={name}
@@ -268,7 +270,8 @@ export default function LoginScreen() {
             <View className="flex-row">
               <CountryPicker selected={country} onSelect={setCountry} />
               <TextInput
-                className={`flex-1 border rounded-xl px-4 py-3 text-xl text-gray-900 dark:text-zinc-100 ${phoneError ? "border-red-400" : "border-gray-300 dark:border-zinc-700"}`}
+                style={ROUND.inner}
+                className={`flex-1 border px-4 py-3 text-xl text-gray-900 dark:text-zinc-100 ${phoneError ? "border-red-400" : "border-gray-300 dark:border-zinc-700"}`}
                 placeholder={country.example ?? t("phone")}
                 placeholderTextColor="#6B7280"
                 keyboardType="phone-pad"

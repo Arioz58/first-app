@@ -25,6 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomSheet from '../../components/BottomSheet';
 import QrCode from '../../components/QrCode';
 import { apiRequest } from '../../lib/api';
+import { ROUND } from '../../lib/radius';
 import { SUPPORTED_LANGUAGES, setAppLanguage } from '../../lib/i18n';
 import { clearTokens } from '../../lib/storage';
 import { unregisterPushToken } from '../../lib/notifications';
@@ -74,7 +75,7 @@ function Section({ title, children }: { title?: string; children: React.ReactNod
           {title}
         </Text>
       ) : null}
-      <View className="bg-white dark:bg-zinc-900 rounded-2xl mx-4 overflow-hidden" style={CARD_SHADOW}>
+      <View className="bg-white dark:bg-zinc-900 mx-4 overflow-hidden" style={[CARD_SHADOW, ROUND.bubble]}>
         {children}
       </View>
     </View>
@@ -344,7 +345,7 @@ export default function ProfileScreen() {
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-zinc-950" edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
         {/* En-tête bannière */}
-        <View className="bg-white dark:bg-zinc-900 rounded-2xl mx-4 mt-3 overflow-hidden" style={CARD_SHADOW}>
+        <View className="bg-white dark:bg-zinc-900 mx-4 mt-3 overflow-hidden" style={[CARD_SHADOW, ROUND.bubble]}>
           <LinearGradient
             colors={['#3B82F6', '#1E3A8A']}
             start={{ x: 0, y: 0 }}
@@ -471,10 +472,11 @@ export default function ProfileScreen() {
       {/* Modal édition (nom + bio) */}
       <Modal visible={editModal} transparent animationType="fade">
         <Pressable className="flex-1 justify-center items-center bg-black/40 px-8" onPress={() => setEditModal(false)}>
-          <Pressable className="w-full bg-white dark:bg-zinc-900 rounded-2xl p-5" onPress={() => Keyboard.dismiss()}>
+          <Pressable style={ROUND.bubble} className="w-full bg-white dark:bg-zinc-900 p-5" onPress={() => Keyboard.dismiss()}>
             <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 mb-3">{t('edit_profile')}</Text>
             <TextInput
-              className={`border rounded-xl px-4 py-3 text-xl text-gray-900 dark:text-zinc-100 ${nameError ? 'border-red-400' : 'border-gray-300 dark:border-zinc-700'}`}
+              style={ROUND.inner}
+              className={`border px-4 py-3 text-xl text-gray-900 dark:text-zinc-100 ${nameError ? 'border-red-400' : 'border-gray-300 dark:border-zinc-700'}`}
               placeholder={t('your_name')}
               placeholderTextColor={c.faint}
               value={nameDraft}
@@ -487,7 +489,8 @@ export default function ProfileScreen() {
             />
             {nameError ? <Text className="text-red-500 text-base mt-1 ml-1">{nameError}</Text> : null}
             <TextInput
-              className="border border-gray-300 dark:border-zinc-700 rounded-xl px-4 py-3 text-lg text-gray-900 dark:text-zinc-100 mt-3 h-24"
+              style={ROUND.inner}
+              className="border border-gray-300 dark:border-zinc-700 px-4 py-3 text-lg text-gray-900 dark:text-zinc-100 mt-3 h-24"
               placeholder={t('bio_placeholder')}
               placeholderTextColor={c.faint}
               value={bioDraft}
@@ -556,7 +559,7 @@ export default function ProfileScreen() {
         <View className="items-center px-6 pt-2 pb-8">
           <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 mb-1">{t('share.qr_title')}</Text>
           <Text className="text-gray-500 dark:text-zinc-400 text-sm mb-5 text-center">{t('share.qr_hint')}</Text>
-          <View className="p-4 bg-white rounded-3xl" style={CARD_SHADOW}>
+          <View className="p-4 bg-white" style={[CARD_SHADOW, ROUND.surface]}>
             <QrCode value={profileValue} size={220} />
           </View>
           <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100 mt-4">{user?.name}</Text>

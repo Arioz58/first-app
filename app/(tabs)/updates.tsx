@@ -251,7 +251,11 @@ function CommunityTab() {
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
       <View className="flex-1 items-center justify-center px-10 mt-16">
-        <View className="w-20 h-20 rounded-3xl bg-blue-50 dark:bg-blue-950 items-center justify-center">
+        {/* Rayon laissé à 24 : sur un carré de 80, l'agrandir tirerait vers le cercle. */}
+        <View
+          style={{ borderCurve: 'continuous' }}
+          className="w-20 h-20 rounded-3xl bg-blue-50 dark:bg-blue-950 items-center justify-center"
+        >
           <Ionicons name="trophy" size={36} color={NEXA} />
         </View>
         <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 mt-4 text-center">

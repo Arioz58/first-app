@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DismissKeyboard } from '../../components/DismissKeyboard';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
+import { ROUND } from '../../lib/radius';
 
 const NEXA = '#1E40AF';
 
@@ -69,7 +70,7 @@ export default function NewChatScreen() {
       {/* `flex: 0` : sinon le Pressable (flex:1 par défaut) mangerait la place de la liste. */}
       <DismissKeyboard style={{ flex: 0 }}>
         <View className="px-4 py-3">
-          <View className="flex-row items-center bg-gray-100 dark:bg-zinc-800 rounded-xl px-3">
+          <View style={ROUND.inner} className="flex-row items-center bg-gray-100 dark:bg-zinc-800 px-3">
             <Ionicons name="search" size={18} color="#6B7280" />
             <TextInput
               className="flex-1 py-2.5 px-2 text-lg text-gray-900 dark:text-zinc-100"
