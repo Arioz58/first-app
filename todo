@@ -64,6 +64,13 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
   Réglages dans `app/_layout.tsx` : RECEDE_SCALE 0.92 / RECEDE_RADIUS 38 / RECEDE_LIFT 10.
   A VERIFIER a l'oeil : la barre d'onglets NATIVE recule-t-elle avec le reste (c'est un vrai UITabBarController, pas du JS) ; le rendu sur Android, ou le Modal est une fenetre Dialog distincte.
 
+[FAIT 06/08] Ouverture d'une conversation : plus de passage par le HAUT du fil avant de redescendre.
+  Cause structurelle : la liste n'est pas inversee. Elle se rend depuis le haut, puis `scrollToEnd` la ramene en bas — le premier rendu a lieu AVANT qu'on sache ou est le bas. Visible des que la mesure des bulles prend une image de plus (bulles hautes, medias, page bien remplie), d'ou le « parfois ».
+  → le fil est garde INVISIBLE (opacite 0 sur une enveloppe autour de la liste, pas sur la liste elle-meme : elle doit etre montee et mesuree normalement) et devoile en fondu de 140 ms une fois cale.
+  → devoilement repousse a CHAQUE `onContentSizeChange`, donc declenche par le DERNIER : les cellules sont montees par lots et le contenu grandit plusieurs fois de suite ; devoiler au premier montrerait une position intermediaire.
+  → plafond dur a 700 ms + devoilement immediat si la conversation est vide : un ecran reste vide serait pire que le saut corrige.
+  ⚠️ Ca MASQUE le saut, ca ne le supprime pas — le fil defile toujours, on ne le voit plus. La vraie correction serait une liste `inverted`, mais elle retournerait aussi la pagination (`onStartReached`), `maintainVisibleContentPosition` et les animations d'entree. A garder en tete si d'autres symptomes de position apparaissent.
+
 [A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
   → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.
 

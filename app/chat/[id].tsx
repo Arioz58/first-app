@@ -14,6 +14,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -163,7 +164,14 @@ const isImageLike = (mt?: string | null) => mt === 'image' || mt === 'video' || 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 const GROUP_GAP = 10; // entre deux séries
 const GROUP_GAP_TIGHT = 3; // à l'intérieur d'une série
-const GROUP_RADIUS = 9; // coin resserré côté « flux » (vs RADIUS.bubble = 20)
+// Coin situé côté « flux », entre deux messages d'une même série. Il était resserré (9), à
+// la manière d'iMessage, pour signaler la continuité — mais depuis le passage des surfaces
+// à 20 il tranchait avec tout le reste et se lisait comme une marche, pas comme un lien.
+// Aligné sur le rayon des bulles : la série reste lisible par l'espacement resserré
+// (GROUP_GAP_TIGHT contre GROUP_GAP), le nom affiché une seule fois en tête, et la queue
+// posée sur la seule dernière bulle. Baisser cette valeur pour retrouver un indice de
+// regroupement dans les coins.
+const GROUP_RADIUS = RADIUS.bubble;
 
 type Sender = { id: string; name: string };
 type Message = {
@@ -502,6 +510,49 @@ export default function ChatScreen() {
   const loadingOlderRef = useRef(false); // une page est déjà en vol → ne pas en redemander
   const hasOlderRef = useRef(true); // faux dès qu'une page revient incomplète : on est au début
 
+  // Ouverture du fil : on le garde INVISIBLE tant qu'il n'est pas calé en bas.
+  //
+  // ⚠️ La liste n'est pas inversée : elle se rend depuis le haut, puis `scrollToEnd` la
+  // ramène en bas — d'où le passage par le début de la conversation, visible dès que la
+  // mesure des bulles prend une image de plus (bulles hautes, médias, page bien remplie).
+  // Aucun réglage de défilement ne peut le supprimer : le premier rendu a lieu avant qu'on
+  // sache où est le bas. On ne le montre donc qu'une fois calé.
+  //
+  // Une liste `inverted` s'en passerait, mais retournerait aussi la pagination
+  // (`onStartReached`), `maintainVisibleContentPosition` et les animations d'entrée : bien
+  // plus de risque que ce que le défaut coûte.
+  const listReveal = useSharedValue(0);
+  const revealedRef = useRef(false);
+  const listRevealStyle = useAnimatedStyle(() => ({ opacity: listReveal.value }));
+  const revealList = useCallback(() => {
+    if (revealedRef.current) return;
+    revealedRef.current = true;
+    // Fondu court : la position est déjà bonne, il ne sert qu'à éviter l'apparition sèche.
+    listReveal.value = withTiming(1, { duration: 140 });
+  }, [listReveal]);
+
+  // Repoussé à CHAQUE changement de taille du contenu, donc déclenché par le DERNIER :
+  // les cellules sont montées par lots et le contenu grandit plusieurs fois de suite.
+  // Dévoiler au premier montrerait une position intermédiaire — le saut qu'on veut cacher.
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleReveal = useCallback(() => {
+    if (revealedRef.current) return;
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    // Couvre le dernier passage de calage de `scrollToBottom` (jusqu'à 120 ms).
+    revealTimerRef.current = setTimeout(revealList, 160);
+  }, [revealList]);
+
+  // Plafond dur : le fil doit apparaître même si les mesures s'enchaînent sans fin, si le
+  // chargement échoue ou si la liste ne grandit jamais. Un écran resté vide serait bien
+  // pire que le saut qu'on corrige.
+  useEffect(() => {
+    const cap = setTimeout(revealList, 700);
+    return () => {
+      clearTimeout(cap);
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    };
+  }, [revealList]);
+
   // Faut-il ramener le fil en bas ? Soit on y est déjà, soit on vient d'envoyer et la
   // fenêtre de suivi couvre les mesures qui arrivent encore.
   const shouldStick = useCallback(
@@ -667,6 +718,8 @@ export default function ChatScreen() {
         // Le fil s'ouvre en bas, et doit y rester le temps que les bulles soient mesurées.
         followUntilRef.current = Date.now() + OPEN_FOLLOW_WINDOW_MS;
         setMessages(history.reverse());
+        // Rien à mesurer ni à caler : inutile de faire attendre l'écran vide.
+        if (!history.length) revealList();
 
         // La conversation est ouverte : tout ce qui précède est lu.
         apiRequest(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
@@ -1510,6 +1563,10 @@ export default function ChatScreen() {
       {/* Messages */}
       <KeyboardAvoidingView className="flex-1" behavior="padding">
         <View style={{ flex: 1, marginBottom: -composerOverlap }}>
+        {/* Enveloppe porteuse du fondu d'ouverture. Posée AUTOUR de la liste et non sur
+            elle : la liste doit être montée et mesurée normalement — c'est ce qui lui
+            permet de se caler en bas — elle ne doit simplement pas être vue avant. */}
+        <Animated.View style={[{ flex: 1 }, listRevealStyle]}>
         <FlatList
           ref={listRef}
           style={{ flex: 1 }}
@@ -1581,6 +1638,7 @@ export default function ChatScreen() {
             const smooth = smoothNextRef.current || followUntilRef.current > Date.now();
             smoothNextRef.current = false;
             scrollToBottom(smooth);
+            scheduleReveal();
           }}
           // Filet de sécurité à l'ouverture : le contentSize peut arriver avant que la liste
           // ait sa hauteur → on force une fois le positionnement en bas au premier layout.
@@ -1854,6 +1912,7 @@ export default function ChatScreen() {
           }}
           onScrollToIndexFailed={() => {}}
         />
+        </Animated.View>
 
         {/* ⚠️ Pas de dégradé de flou en bas, volontairement. Il a été essayé puis retiré :
             vivant dans le conteneur que le clavier décale, il était recomposé à chaque
