@@ -57,6 +57,13 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
   ⚠️ Piège rencontré : sortir un `rounded-*` d'une classe partagée casse le découpage des conteneurs en `overflow-hidden` qui s'en servaient (`SWATCH` de ChatWallpaperPicker). Vérifier chaque `overflow-hidden` après ce genre de déplacement.
   ⚠️ Android ignore `borderCurve` : mêmes rayons, courbe ordinaire. Voir android.md.
 
+[A ESSAYER 06/08 - Recul de l'écran sous les drawers] L'empilement de cartes d'iOS : à l'ouverture d'une feuille, l'écran du dessous rétrécit et ses coins s'arrondissent. Préféré au flou derrière le drawer, écarté (iOS assombrit ses feuilles, il ne les floute pas ; le drawer est opaque donc il n'y aurait rien à voir au travers ; et `expo-blur` coûte cher redessiné à chaque image du glissement, sur 12 écrans).
+  ⚠️ Les feuilles vivent dans un `Modal`, donc hors de l'arbre de l'écran : depuis l'intérieur, impossible de transformer ce qu'il y a derrière. D'où `lib/sheetRecede.ts` — une shared value déclarée AU NIVEAU MODULE, qui n'appartient pas à l'arbre React : les deux côtés lisent le même objet et tout reste sur le thread UI. Un store JS aurait imposé un aller-retour par image et haché le suivi du doigt.
+  → même source que le backdrop, donc le recul suit le GESTE : refermer au doigt fait remonter l'écran progressivement.
+  → seule la feuille la plus basse pilote (le sélecteur de pays dans le drawer d'ajout de contact ne doit pas faire reculer une seconde fois) ; prise/restitution idempotentes, libération aussi au démontage brutal.
+  Réglages dans `app/_layout.tsx` : RECEDE_SCALE 0.92 / RECEDE_RADIUS 38 / RECEDE_LIFT 10.
+  A VERIFIER a l'oeil : la barre d'onglets NATIVE recule-t-elle avec le reste (c'est un vrai UITabBarController, pas du JS) ; le rendu sur Android, ou le Modal est une fenetre Dialog distincte.
+
 [A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
   → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.
 

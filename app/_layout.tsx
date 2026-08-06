@@ -6,7 +6,9 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 // Fournit la position du clavier, mesurée nativement image par image, aux écrans qui
 // s'y adaptent (barre de saisie du chat).
 import { KeyboardProvider } from "react-native-keyboard-controller";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { setSessionExpiredHandler } from "../lib/api";
+import { sheetRecede } from "../lib/sheetRecede";
 import {
   incrementPendingFriendRequests,
   refreshPendingFriendRequests,
@@ -34,6 +36,17 @@ const isTokenExpired = (token: string): boolean => {
     return true;
   }
 };
+
+// Recul de l'écran quand une feuille s'ouvre (voir `lib/sheetRecede.ts`).
+// Échelle : en deçà de 0.90 la barre d'onglets se décolle visiblement du bas et l'écran
+// paraît « lâché » plutôt que rangé derrière.
+const RECEDE_SCALE = 0.92;
+// Coins de l'écran reculé. Calé sur l'arrondi d'un écran d'iPhone récent, pas sur notre
+// échelle de surfaces : c'est l'appareil qu'on imite ici, pas une carte de l'app.
+const RECEDE_RADIUS = 38;
+// Léger enfoncement vers le bas : la feuille arrivant du bas, un recul centré laisserait
+// autant de noir en haut qu'en bas et l'écran semblerait flotter.
+const RECEDE_LIFT = 10;
 
 export default function RootLayout() {
   const router = useRouter();
@@ -124,11 +137,29 @@ export default function RootLayout() {
     init();
   }, []);
 
+  // Piloté sur le thread UI par la feuille ouverte : aucun aller-retour en JS, le recul
+  // suit donc le doigt pendant le glissement de fermeture.
+  const recedeStyle = useAnimatedStyle(() => {
+    const p = sheetRecede.value;
+    return {
+      transform: [
+        { scale: 1 - p * (1 - RECEDE_SCALE) },
+        { translateY: p * RECEDE_LIFT },
+      ],
+      borderRadius: p * RECEDE_RADIUS,
+    };
+  });
+
   if (!checked) return null;
 
+  // Fond noir : c'est ce qu'on découvre autour de l'écran une fois qu'il a reculé.
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#000" }}>
     <KeyboardProvider>
+    {/* ⚠️ La feuille elle-même n'est PAS ici : elle vit dans un `Modal`, donc au-dessus de
+        cette vue et hors de sa transformation — c'est justement ce qui permet de reculer
+        l'écran sans reculer la feuille avec. */}
+    <Animated.View style={[{ flex: 1, overflow: "hidden" }, recedeStyle]}>
     <Stack>
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -166,6 +197,7 @@ export default function RootLayout() {
       />
       <Stack.Screen name="story/create" options={{ headerShown: false }} />
     </Stack>
+    </Animated.View>
     </KeyboardProvider>
     </GestureHandlerRootView>
   );

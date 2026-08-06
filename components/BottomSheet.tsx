@@ -8,10 +8,12 @@ import {
 } from "react-native-gesture-handler";
 import Animated, {
   runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
+import { claimRecede, releaseRecede, sheetRecede } from "../lib/sheetRecede";
 
 // Ressort partagé de tous les drawers de l'app (identique au « Vu par » des stories).
 export const SHEET_SPRING = {
@@ -66,10 +68,32 @@ export default function BottomSheet({
 
   const sheetY = useSharedValue(height ?? HIDDEN);
   const sheetH = useSharedValue(height ?? HIDDEN);
+  // Drapeau en shared value et non en ref : il est lu depuis un worklet, où lire un
+  // `.current` renvoie une valeur figée (cf. la note worklets du CLAUDE.md).
+  const drivesRecede = useSharedValue(false);
+  const droveRecede = useRef(false);
 
   const setRenderedSync = (v: boolean) => {
     renderedRef.current = v;
     setRendered(v);
+  };
+
+  // Prise et restitution du pilotage du recul. Idempotentes : rouvrir pendant une fermeture
+  // ne doit pas réserver deux fois, sans quoi le compteur ne redescendrait jamais à zéro et
+  // toutes les feuilles suivantes se croiraient imbriquées.
+  const claimedRef = useRef(false);
+  const claimRecedeOnce = () => {
+    if (claimedRef.current) return;
+    claimedRef.current = true;
+    droveRecede.current = claimRecede();
+    drivesRecede.value = droveRecede.current;
+  };
+  const releaseRecedeOnce = () => {
+    if (!claimedRef.current) return;
+    claimedRef.current = false;
+    drivesRecede.value = false;
+    releaseRecede(droveRecede.current);
+    droveRecede.current = false;
   };
 
   // Démontage effectif : purge le filet de sécurité et prévient l'appelant. Garde sur
@@ -82,6 +106,7 @@ export default function BottomSheet({
     }
     if (!renderedRef.current) return; // déjà démonté (par le ressort ou par le filet)
     setRenderedSync(false);
+    releaseRecedeOnce();
     onClosedRef.current?.();
   };
 
@@ -90,6 +115,7 @@ export default function BottomSheet({
       opened.current = false;
       sheetY.value = sheetH.value; // caché en attendant la mesure / l'anim
       setRenderedSync(true);
+      claimRecedeOnce();
       if (height) {
         // hauteur connue → on anime tout de suite
         opened.current = true;
@@ -113,7 +139,13 @@ export default function BottomSheet({
   useEffect(
     () => () => {
       if (failsafeRef.current) clearTimeout(failsafeRef.current);
+      // Démontage brutal (navigation pendant l'ouverture) : sans ça, l'écran resterait
+      // reculé pour de bon, et le compteur bloqué.
+      releaseRecedeOnce();
     },
+    // Nettoyage de démontage : il ne doit tourner qu'une fois. `releaseRecedeOnce` ne lit
+    // que des refs et des shared values, le relancer à chaque rendu n'apporterait rien.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -134,6 +166,19 @@ export default function BottomSheet({
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: Math.max(0, 1 - sheetY.value / sheetH.value) * backdropOpacity,
   }));
+
+  // Publie l'avancement de la feuille pour l'écran du dessous. Même source que le backdrop,
+  // donc le recul suit le doigt pendant le glissement de fermeture au lieu de se contenter
+  // d'un aller-retour à l'ouverture.
+  useAnimatedReaction(
+    () =>
+      drivesRecede.value && sheetH.value > 0
+        ? Math.max(0, Math.min(1, 1 - sheetY.value / sheetH.value))
+        : null,
+    (progress) => {
+      if (progress !== null) sheetRecede.value = progress;
+    },
+  );
 
   // Drag sur la poignée : suit le doigt vers le bas, aimantation fermé/ouvert au relâcher.
   const pan = Gesture.Pan()
