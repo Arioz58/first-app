@@ -393,28 +393,57 @@ const formatTime = (iso: string) =>
  * `overlay` la pose en pastille sur le média : sur une image sans légende, une ligne
  * ajoutée sous la photo créerait une bande vide au seul usage de l'horodatage.
  */
+/**
+ * État d'acheminement d'un message, affiché contre l'heure — la place qu'occupent les
+ * coches de WhatsApp.
+ *
+ * Premier cran d'une échelle destinée à s'allonger : `sending` (horloge) → `sent` (une
+ * coche) → à venir `delivered` (deux coches) et `read` (deux coches bleues), quand les
+ * accusés de réception existeront côté serveur. D'où un statut nommé plutôt qu'un booléen
+ * « en cours » : les crans suivants s'ajoutent ici, sans toucher aux bulles.
+ *
+ * ⚠️ Pas d'état d'ÉCHEC. Le socket met les envois en tampon et les rejoue à la reconnexion
+ * (`reconnection: true`, pas de mode `volatile` dans `lib/socket.ts`) : annoncer un échec
+ * pour un message qui va partir serait faux, et proposer un renvoi en enverrait deux. Le
+ * seul cas de perte réelle — app tuée hors ligne, le tampon vivant en mémoire — demande une
+ * file d'attente persistée, pas un indicateur.
+ */
+type SendStatus = 'sending' | 'sent';
+
+function StatusIcon({ status, tone }: { status: SendStatus; tone: string }) {
+  if (status === 'sending') return <Ionicons name="time-outline" size={12} color={tone} />;
+  return <Ionicons name="checkmark" size={13} color={tone} />;
+}
+
 function BubbleTime({
   iso,
   isMe,
   overlay = false,
+  status,
 }: {
   iso: string;
   isMe: boolean;
   overlay?: boolean;
+  /** Absent sur les messages reçus : on n'accuse que ses propres envois. */
+  status?: SendStatus;
 }) {
   if (overlay) {
     return (
-      <View className="absolute bottom-1.5 right-1.5 rounded-full bg-black/45 px-1.5 py-0.5">
+      <View className="absolute bottom-1.5 right-1.5 flex-row items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5">
         <Text className="text-[10px] text-white">{formatTime(iso)}</Text>
+        {status && <StatusIcon status={status} tone="rgba(255,255,255,0.85)" />}
       </View>
     );
   }
   return (
-    <Text
-      className={`text-[11px] self-end mt-0.5 ${isMe ? 'text-white/70' : 'text-gray-400 dark:text-zinc-500'}`}
-    >
-      {formatTime(iso)}
-    </Text>
+    <View className="flex-row items-center gap-1 self-end mt-0.5">
+      <Text
+        className={`text-[11px] ${isMe ? 'text-white/70' : 'text-gray-400 dark:text-zinc-500'}`}
+      >
+        {formatTime(iso)}
+      </Text>
+      {status && <StatusIcon status={status} tone={isMe ? 'rgba(255,255,255,0.7)' : '#9CA3AF'} />}
+    </View>
   );
 }
 
@@ -624,6 +653,46 @@ export default function ChatScreen() {
       if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
     };
   }, [revealList]);
+
+  // Brouillon local : la bulle est posée AVANT que le serveur ne la connaisse, pour que la
+  // mise en page soit définitive dès le premier instant. Voir OPTIMISTIC dans `sendMessage`.
+  const draftSeqRef = useRef(0);
+  const newDraftId = () => `local-${Date.now()}-${draftSeqRef.current++}`;
+
+  const pushDraft = useCallback((draft: Message) => {
+    // Marqué vu AVANT le rendu : le brouillon joue l'animation d'entrée, pas la vraie bulle
+    // qui viendra le remplacer — sinon le message clignoterait à l'écho.
+    seenIdsRef.current.add(draft.id);
+    setMessages((prev) => [...prev, draft]);
+    atBottomRef.current = true;
+    followUntilRef.current = Date.now() + FOLLOW_WINDOW_MS;
+  }, []);
+
+  /** Squelette commun à tous les brouillons ; l'appelant complète selon le type. */
+  const makeDraft = useCallback(
+    (fields: Partial<Message>): Message => ({
+      id: newDraftId(),
+      content: '',
+      createdAt: new Date().toISOString(),
+      // Le nom ne sert pas : un brouillon est toujours de nous, donc jamais titré.
+      sender: { id: currentUserId ?? '', name: '' },
+      conversationId: id,
+      pendingLocal: true,
+      ...fields,
+    }),
+    [currentUserId, id],
+  );
+
+  const dropDraft = useCallback((draftId: string) => {
+    setMessages((prev) => prev.filter((m) => m.id !== draftId));
+  }, []);
+
+  /** Lie le brouillon à l'URL S3 : c'est par elle qu'on reconnaîtra l'écho du serveur. */
+  const linkDraft = useCallback((draftId: string, url: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === draftId ? { ...m, pendingUploadUrl: url } : m)),
+    );
+  }, []);
 
   // Réception d'un album : on retient les médias jusqu'à ce qu'il soit complet.
   //
@@ -858,7 +927,14 @@ export default function ChatScreen() {
               // l'ajouter en queue réordonnerait l'album sous les yeux de l'utilisateur.
               const draft = msg.mediaUrl
                 ? prev.findIndex((m) => m.pendingLocal && m.pendingUploadUrl === msg.mediaUrl)
-                : -1;
+                : // Texte seul : pas de téléversement, donc aucune URL sur laquelle
+                  // raccrocher l'écho — on apparie sur le contenu, et UNIQUEMENT pour nos
+                  // propres envois : le correspondant peut très bien écrire le même mot.
+                  // Deux messages identiques d'affilée peuvent s'apparier dans le désordre,
+                  // sans conséquence visible puisque les bulles sont identiques.
+                  mine
+                  ? prev.findIndex((m) => m.pendingLocal && !m.mediaUrl && m.content === msg.content)
+                  : -1;
               if (draft !== -1) {
                 seenIdsRef.current.add(msg.id); // le brouillon a déjà joué l'entrée
                 const next = [...prev];
@@ -1041,6 +1117,9 @@ export default function ChatScreen() {
     stopTyping(socket);
 
     if (queue.length === 0) {
+      // Texte seul : aucun téléversement, mais le brouillon reste utile — sur un réseau
+      // lent la bulle apparaît quand même tout de suite, avec son horloge.
+      pushDraft(makeDraft({ content }));
       socket.emit('send_message', { conversationId: id, content });
       return;
     }
@@ -1063,27 +1142,17 @@ export default function ChatScreen() {
     //
     // Les brouillons portent le MÊME `batchId` que les messages à venir : c'est ce qui les
     // réunit en un seul album, y compris pendant le remplacement où les deux cohabitent.
-    const stamp = Date.now();
-    const drafts: Message[] = queue.map((item, i) => ({
-      id: `local-${stamp}-${i}`,
-      content: i === queue.length - 1 ? content : '',
-      createdAt: new Date().toISOString(),
-      // Le nom ne sert pas : un brouillon est toujours de nous, donc jamais titré.
-      sender: { id: currentUserId ?? '', name: '' },
-      conversationId: id,
-      mediaUrl: item.uri,
-      mediaType: item.mediaType,
-      mimeType: item.contentType,
-      durationMs: item.durationMs,
-      batchId,
-      pendingLocal: true,
-    }));
-    // Marqués vus AVANT le rendu : le brouillon joue l'animation d'entrée, pas la vraie
-    // bulle qui viendra le remplacer — sinon l'album clignoterait à chaque échange.
-    for (const d of drafts) seenIdsRef.current.add(d.id);
-    setMessages((prev) => [...prev, ...drafts]);
-    atBottomRef.current = true;
-    followUntilRef.current = Date.now() + FOLLOW_WINDOW_MS;
+    const drafts: Message[] = queue.map((item, i) =>
+      makeDraft({
+        content: i === queue.length - 1 ? content : '',
+        mediaUrl: item.uri,
+        mediaType: item.mediaType,
+        mimeType: item.contentType,
+        durationMs: item.durationMs,
+        batchId,
+      }),
+    );
+    for (const d of drafts) pushDraft(d);
 
     setUploading(true);
     let failed = 0;
@@ -1096,9 +1165,7 @@ export default function ChatScreen() {
         const url = await uploadFile(item.uri, item.contentType, 'chat');
         // L'écho du serveur est reconnu par cette URL : elle est notre seul lien avec la
         // vraie bulle, l'identifiant du message étant attribué côté serveur.
-        setMessages((prev) =>
-          prev.map((m) => (m.id === draftId ? { ...m, pendingUploadUrl: url } : m)),
-        );
+        linkDraft(draftId, url);
         sendMedia(
           {
             mediaUrl: url,
@@ -1114,7 +1181,7 @@ export default function ChatScreen() {
         failed++;
         // Le brouillon n'aura jamais d'écho : le retirer, sinon il resterait en « envoi »
         // pour toujours.
-        setMessages((prev) => prev.filter((m) => m.id !== draftId));
+        dropDraft(draftId);
       }
     }
     setUploading(false);
@@ -1201,9 +1268,20 @@ export default function ChatScreen() {
     if (result.canceled) return;
     const asset = result.assets[0];
     const contentType = asset.mimeType ?? 'application/pdf';
+    // Nom, taille et type sont connus localement : la carte de fichier est donc IDENTIQUE
+    // à sa version finale dès maintenant, seule sa mise à disposition manque.
+    const draft = makeDraft({
+      mediaUrl: asset.uri,
+      mediaType: 'document',
+      fileName: asset.name,
+      fileSize: asset.size ?? undefined,
+      mimeType: contentType,
+    });
+    pushDraft(draft);
     setUploading(true);
     try {
       const url = await uploadFile(asset.uri, contentType, 'chat');
+      linkDraft(draft.id, url);
       sendMedia({
         mediaUrl: url,
         mediaType: 'document',
@@ -1212,6 +1290,7 @@ export default function ChatScreen() {
         mimeType: contentType,
       });
     } catch {
+      dropDraft(draft.id);
       Alert.alert(t('error'), t('media.upload_error'));
     } finally {
       setUploading(false);
@@ -1341,11 +1420,22 @@ export default function ChatScreen() {
 
   const sendRecording = async (uri: string, durationMs: number) => {
     setIsRecording(false);
+    // La durée est déjà connue et le fichier est local : le lecteur s'affiche complet, et
+    // le vocal reste écoutable PENDANT son téléversement.
+    const draft = makeDraft({
+      mediaUrl: uri,
+      mediaType: 'audio',
+      mimeType: 'audio/m4a',
+      durationMs,
+    });
+    pushDraft(draft);
     setUploading(true);
     try {
       const url = await uploadFile(uri, 'audio/m4a', 'chat');
+      linkDraft(draft.id, url);
       sendMedia({ mediaUrl: url, mediaType: 'audio', mimeType: 'audio/m4a', durationMs });
     } catch {
+      dropDraft(draft.id);
       Alert.alert(t('error'), t('media.upload_error'));
     } finally {
       setUploading(false);
@@ -1860,6 +1950,13 @@ export default function ChatScreen() {
             const firstOfGroup = !sameGroup(prevRow?.messages[prevRow.messages.length - 1], item);
             const lastOfGroup = !sameGroup(row.messages[row.messages.length - 1], nextRow?.messages[0]);
             const radius = bubbleRadius(isMe, firstOfGroup, lastOfGroup);
+            // On n'accuse que ses propres envois — d'où l'absence de statut sur les
+            // messages reçus. Les crans « reçu » et « vu » viendront s'ajouter ici.
+            const sendStatus: SendStatus | undefined = !isMe
+              ? undefined
+              : sending
+                ? 'sending'
+                : 'sent';
             // Sur un album, ces marqueurs valent pour la ligne entière : un seul média
             // épinglé suffit à la signaler.
             const isPinned = row.messages.some((m) => flags.pinned.includes(m.id));
@@ -1937,10 +2034,10 @@ export default function ChatScreen() {
                           >
                             {albumCaption}
                           </Text>
-                          <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} />
+                          <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} status={sendStatus} />
                         </View>
                       ) : (
-                        <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} overlay />
+                        <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} overlay status={sendStatus} />
                       )}
                       {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
                       {sending && <SendingVeil />}
@@ -1970,7 +2067,7 @@ export default function ChatScreen() {
                         }
                       />
                     </View>
-                    <BubbleTime iso={item.createdAt} isMe={isMe} />
+                    <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
                   </>
                 ) : isStoryReply ? (
                   <>
@@ -2015,7 +2112,7 @@ export default function ChatScreen() {
                         >
                           {item.content}
                         </Text>
-                        <BubbleTime iso={item.createdAt} isMe={isMe} />
+                        <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
                       </View>
                     )}
                   </>
@@ -2045,10 +2142,10 @@ export default function ChatScreen() {
                             >
                               {item.content}
                             </Text>
-                            <BubbleTime iso={item.createdAt} isMe={isMe} />
+                            <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
                           </View>
                         ) : (
-                          <BubbleTime iso={item.createdAt} isMe={isMe} overlay />
+                          <BubbleTime iso={item.createdAt} isMe={isMe} overlay status={sendStatus} />
                         )}
                         {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
                         {sending && <SendingVeil />}
@@ -2074,7 +2171,7 @@ export default function ChatScreen() {
                             onOpenVideo={() => {}}
                           />
                         </View>
-                        <BubbleTime iso={item.createdAt} isMe={isMe} />
+                        <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
                         {lastOfGroup && (
                           <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />
                         )}
@@ -2099,7 +2196,7 @@ export default function ChatScreen() {
                       >
                         {item.content}
                       </Text>
-                      <BubbleTime iso={item.createdAt} isMe={isMe} />
+                      <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
                       {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
                     </Pressable>
                   </>

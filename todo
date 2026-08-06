@@ -84,7 +84,16 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
     → separateur `#` et non `-` : les identifiants d'utilisateur en contiennent, et l'ancien format finissait par un horodatage qu'on lirait comme un compte gigantesque. Sans `#` on retombe sur 1, donc sur l'ancien comportement — ce que font les albums deja en base.
     → plafond d'attente 6 s : un media peut ne jamais arriver (televersement en echec chez l'expediteur), les autres ne doivent pas rester retenus pour toujours.
     → nos PROPRES envois sont exclus de la retenue (ils ont deja leur brouillon a l'ecran) ; le message reste marque LU des l'arrivee, meme pas encore affiche ; minuteries purgees au demontage.
-  [A FAIRE] Meme traitement ailleurs : documents et vocaux (envoyes par un autre chemin, sans brouillon), et le message TEXTE seul (aujourd'hui il n'apparait qu'a l'echo serveur).
+  [FAIT 06/08] Meme traitement pour DOCUMENTS, VOCAUX et TEXTE seul.
+    → brouillon factorise : `makeDraft` / `pushDraft` / `linkDraft` / `dropDraft`. La reconnaissance de l'echo par l'URL S3 marchait deja pour n'importe quel type de media, il ne restait qu'a poser le brouillon avant de televerser.
+    → documents : nom, taille et type sont connus localement, la carte de fichier est donc IDENTIQUE a sa version finale des le depart. Vocaux : duree connue et fichier local, le lecteur s'affiche complet et le vocal est ECOUTABLE pendant son televersement.
+    → pas de voile sombre sur ces deux-la : il est pense pour une image indisponible, alors qu'ici le fichier est deja utilisable. Seul l'indicateur d'etat les distingue.
+    → texte seul : aucune URL sur laquelle raccrocher l'echo, on apparie sur `contenu + expediteur` (uniquement NOS envois : le correspondant peut ecrire le meme mot). Deux messages identiques d'affilee peuvent s'apparier dans le desordre — sans consequence, les bulles etant identiques.
+
+[EN COURS - Etat d'acheminement des messages] Premier cran pose le 06/08.
+  `SendStatus` + `StatusIcon`, affiches contre l'heure dans la bulle (la place des coches WhatsApp) : `sending` (horloge) -> `sent` (une coche). Uniquement sur NOS messages.
+  [A FAIRE] Les crans suivants, quand le serveur saura les fournir : `delivered` (deux coches) et `read` (deux coches BLEUES). Tout s'ajoute dans `StatusIcon` et dans le calcul de `sendStatus`, sans toucher aux bulles — c'est pour ca que le statut est nomme plutot qu'un booleen.
+  ⚠️ PAS d'etat d'ECHEC, volontairement. Le socket met les envois en tampon et les rejoue a la reconnexion (`reconnection: true`, pas de mode `volatile` dans lib/socket.ts) : annoncer un echec pour un message qui va partir serait faux, et proposer un renvoi en enverrait DEUX. Le seul cas de perte reelle — app tuee hors ligne, le tampon vivant en memoire — demande une file d'attente PERSISTEE (SecureStore/base locale, rejouee au demarrage, avec la gestion de l'ordre), pas un bouton. A cadrer avec le reste du hors-ligne, Mois 5/6.
 
 [FAIT 06/08] Ouverture d'une conversation : plus de flash blanc en mode sombre.
   Cause : l'ecran de chargement du chat (indicateur centre) n'avait AUCUN fond. On voyait donc au travers le fond d'ecran du NAVIGATEUR, blanc par defaut quel que soit le theme — celui de React Navigation est interne et ignore le `dark:` de NativeWind.
