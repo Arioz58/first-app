@@ -28,9 +28,10 @@ type Privacy = {
   privacyCalls: string;
   privacyFriendRequests: string;
   locationEnabled: boolean;
+  readReceipts: boolean;
 };
 
-type FieldKey = keyof Omit<Privacy, 'locationEnabled'>;
+type FieldKey = keyof Omit<Privacy, 'locationEnabled' | 'readReceipts'>;
 
 // Champ → clé i18n du libellé
 const LABEL_KEY: Record<FieldKey, string> = {
@@ -126,6 +127,23 @@ export default function PrivacyScreen() {
             />
           </View>
           {privacy.locationEnabled && <Row field="privacyLocation" options={TRIPLE} />}
+
+          {/* Accusés de lecture — réciproque, d'où le libellé d'aide sous le titre. */}
+          <View className="flex-row items-center px-4 py-4">
+            <View className="flex-1 pr-3">
+              <Text className="text-lg text-gray-900 dark:text-zinc-100">
+                {t('privacy_settings.read_receipts')}
+              </Text>
+              <Text className="text-sm text-gray-500 dark:text-zinc-400 mt-0.5">
+                {t('privacy_settings.read_receipts_hint')}
+              </Text>
+            </View>
+            <Switch
+              value={privacy.readReceipts}
+              onValueChange={(v) => patch({ readReceipts: v })}
+              trackColor={{ true: NEXA }}
+            />
+          </View>
         </View>
 
         <Text className="px-4 pt-5 pb-1 text-sm font-semibold uppercase text-gray-400 dark:text-zinc-500">

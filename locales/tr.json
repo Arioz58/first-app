@@ -270,7 +270,9 @@
     "messages": "Mesajlar",
     "calls": "Aramalar",
     "friend_requests": "Arkadaşlık istekleri",
-    "location_enabled": "Konumumu paylaş"
+    "location_enabled": "Konumumu paylaş",
+    "read_receipts": "Okundu bilgisi",
+    "read_receipts_hint": "Kapalıyken okumalarınız bildirilmez — ve başkalarınınkini de göremezsiniz. İletildi bilgisi açık kalır."
   },
   "friends": {
     "title": "Arkadaşlar",

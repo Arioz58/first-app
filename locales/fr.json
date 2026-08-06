@@ -270,7 +270,9 @@
     "messages": "Messages",
     "calls": "Appels",
     "friend_requests": "Demandes d'ami",
-    "location_enabled": "Partager ma localisation"
+    "location_enabled": "Partager ma localisation",
+    "read_receipts": "Accusés de lecture",
+    "read_receipts_hint": "Désactivé, vos lectures ne sont plus signalées — et vous ne voyez plus celles des autres. Les accusés de réception restent actifs."
   },
   "friends": {
     "title": "Amis",

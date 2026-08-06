@@ -270,7 +270,9 @@
     "messages": "Messages",
     "calls": "Calls",
     "friend_requests": "Friend requests",
-    "location_enabled": "Share my location"
+    "location_enabled": "Share my location",
+    "read_receipts": "Read receipts",
+    "read_receipts_hint": "When off, your reads are no longer reported — and you no longer see other people's. Delivery receipts stay on."
   },
   "friends": {
     "title": "Friends",
