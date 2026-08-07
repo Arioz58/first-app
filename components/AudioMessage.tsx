@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { useMemo, useState } from 'react';
-import { Text, TouchableOpacity, View, useColorScheme } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { enterPlaybackMode } from '../lib/audioMode';
 import { VoiceWaveform, waveformFor } from './VoiceWaveform';
 
@@ -11,6 +11,12 @@ const STATUS_MS = 100; // cadence des mesures de progression
 // le mouvement ne marque pas de temps d'arrêt entre deux mesures.
 const SMOOTH_MS = 140;
 const RATES = [1, 1.5, 2] as const;
+// Emplacement du bouton, en dur : l'indicateur d'attente y prend exactement la place de
+// l'icône. Sans ça, la carte du vocal changerait de largeur au moment du chargement.
+const BUTTON = 39;
+// Filet : un chargement qui n'aboutit jamais (fichier introuvable, réseau coupé) laisserait
+// l'indicateur tourner indéfiniment. Au-delà, on rend la main — l'utilisateur peut réessayer.
+const LOADING_TIMEOUT_MS = 15000;
 
 const fmt = (s: number) => {
   const m = Math.floor(s / 60);
@@ -33,11 +39,48 @@ export function AudioMessage({ uri, tint }: { uri: string; tint: string }) {
 
   const levels = useMemo(() => waveformFor(uri, BARS), [uri]);
 
+  /**
+   * Attente entre l'appui et le premier son.
+   *
+   * ⚠️ Piloté par l'INTENTION de l'utilisateur, et non par `status.isLoaded` seul : le
+   * fichier n'est chargé qu'à la première lecture, donc se fier au statut ferait tourner un
+   * indicateur sur tous les vocaux jamais écoutés du fil. On ne montre l'attente qu'à celui
+   * sur lequel on vient d'appuyer.
+   */
+  const [awaiting, setAwaiting] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loading = awaiting && !playing;
+
+  const stopAwaiting = () => {
+    setAwaiting(false);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = null;
+  };
+
+  // Le son sort : l'attente est finie.
+  useEffect(() => {
+    if (playing) stopAwaiting();
+  }, [playing]);
+
+  useEffect(() => () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+  }, []);
+
   const toggle = () => {
+    // Appui pendant le chargement : on annule. C'est la sortie naturelle si le fichier
+    // tarde, et ça évite d'empiler les demandes de lecture.
+    if (loading) {
+      stopAwaiting();
+      player.pause();
+      return;
+    }
     if (playing) {
       player.pause();
       return;
     }
+    setAwaiting(true);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(stopAwaiting, LOADING_TIMEOUT_MS);
     // Filet : garantir la sortie sur le haut-parleur même si la session est restée en
     // capture (enregistrement interrompu, autre écran…). Sans ça le vocal se joue dans
     // l'écouteur téléphonique, à un volume très faible.
@@ -62,8 +105,17 @@ export function AudioMessage({ uri, tint }: { uri: string; tint: string }) {
 
   return (
     <View className="flex-row items-center" style={{ minWidth: 210 }}>
-      <TouchableOpacity onPress={toggle} className="mr-2" hitSlop={6}>
-        <Ionicons name={playing ? 'pause-circle' : 'play-circle'} size={39} color={tint} />
+      <TouchableOpacity
+        onPress={toggle}
+        className="mr-2 items-center justify-center"
+        style={{ width: BUTTON, height: BUTTON }}
+        hitSlop={6}
+      >
+        {loading ? (
+          <ActivityIndicator size="small" color={tint} />
+        ) : (
+          <Ionicons name={playing ? 'pause-circle' : 'play-circle'} size={BUTTON} color={tint} />
+        )}
       </TouchableOpacity>
 
       <View className="flex-1">

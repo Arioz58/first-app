@@ -133,6 +133,12 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
      ⚠️ `||` et non `??` pour ces parametres : absents, ils arrivent en chaine VIDE, que `??` laisserait passer (UserAvatar recevrait une URL vide au lieu de retomber sur l'initiale).
   3. Fond du navigateur cale sur la palette du theme (`contentStyle` dans app/_layout.tsx). Correction SYSTEMIQUE : le defaut touchait toutes les transitions d'ecran, il etait juste moins visible ailleurs parce que l'ecran d'arrivee se peint plus vite.
 
+[AJUSTEMENTS 07/08]
+  [FAIT] Vocal recu : appuyer sur lecture ne montrait rien pendant le chargement du fichier.
+    → indicateur d'attente a la place de l'icone, dans un emplacement de largeur FIXE (39 px) : sans ca la carte du vocal changerait de largeur au chargement, meme piege que les coches d'acheminement.
+    ⚠️ Pilote par l'INTENTION de l'utilisateur (`awaiting`) et non par `status.isLoaded` seul : le fichier n'est charge qu'a la premiere lecture, donc se fier au statut ferait tourner un indicateur sur TOUS les vocaux jamais ecoutes du fil.
+    → appuyer pendant le chargement annule (sortie naturelle si le fichier tarde) ; delai de securite 15 s pour ne pas laisser l'indicateur tourner indefiniment sur un fichier introuvable.
+
 [A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
   → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.
 
