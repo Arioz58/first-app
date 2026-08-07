@@ -20,6 +20,7 @@ import { DocumentViewer } from '../../components/DocumentViewer';
 import * as MediaLibrary from 'expo-media-library';
 import { apiRequest } from '../../lib/api';
 import { firstUrl, formatFileSize } from '../../lib/upload';
+import { MEDIA_FADE_MS, MEDIA_PLACEHOLDER } from '../../lib/mediaAppearance';
 
 const NEXA = '#1E40AF';
 const PAGE = 30;
@@ -54,6 +55,8 @@ export default function MediaScreen() {
   // Document ouvert dans la visionneuse intégrée (audio exclu : il se lit sur place).
   const [doc, setDoc] = useState<Msg | null>(null);
   const [saving, setSaving] = useState(false);
+  // Avancement du téléchargement groupé, affiché à côté de l'indicateur.
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
 
   const isGrid = category === 'media' || category === 'gifs';
 
@@ -114,6 +117,10 @@ export default function MediaScreen() {
       return;
     }
 
+    // ⚠️ Un simple indicateur ne suffit pas ici : les fichiers sont téléchargés UN PAR UN,
+    // et un album de plusieurs dizaines de photos fait patienter très longtemps sans que
+    // rien ne distingue « ça avance » de « c'est bloqué ». D'où un décompte.
+    setProgress({ done: 0, total: withMedia.length });
     setSaving(true);
     let ok = 0;
     for (const m of withMedia) {
@@ -132,6 +139,10 @@ export default function MediaScreen() {
         ok += 1;
       } catch {
         // ignore
+      } finally {
+        // Dans le `finally` : un fichier en échec a quand même été traité, et l'exclure
+        // ferait stagner le décompte sans raison visible.
+        setProgress((p) => ({ ...p, done: p.done + 1 }));
       }
     }
     setSaving(false);
@@ -159,9 +170,14 @@ export default function MediaScreen() {
         </TouchableOpacity>
         <Text className="text-xl font-semibold text-gray-900 dark:text-zinc-100 flex-1">{title}</Text>
         {VISUAL_CATEGORIES.includes(category) && items.some((m) => m.mediaUrl) ? (
-          <TouchableOpacity onPress={saveAll} disabled={saving}>
+          <TouchableOpacity onPress={saveAll} disabled={saving} className="flex-row items-center">
             {saving ? (
-              <ActivityIndicator size="small" color={NEXA} />
+              <>
+                <ActivityIndicator size="small" color={NEXA} />
+                <Text className="text-nexa text-sm font-semibold ml-1.5">
+                  {progress.done}/{progress.total}
+                </Text>
+              </>
             ) : (
               <Ionicons name="download-outline" size={22} color={NEXA} />
             )}
@@ -198,8 +214,14 @@ export default function MediaScreen() {
               >
                 <Image
                   source={{ uri: item.mediaUrl ?? undefined }}
-                  style={{ width: '100%', height: '100%', borderRadius: 6 }}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    borderRadius: 6,
+                    backgroundColor: MEDIA_PLACEHOLDER,
+                  }}
                   contentFit="cover"
+                  transition={MEDIA_FADE_MS}
                 />
                 {item.mediaType === 'video' ? (
                   <View className="absolute inset-0 items-center justify-center">

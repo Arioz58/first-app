@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Pressable, Text, View } from 'react-native';
 import { ROUND } from '../lib/radius';
+import { MEDIA_FADE_MS, MEDIA_PLACEHOLDER } from '../lib/mediaAppearance';
 
 export type GridItem = {
   id: string;
@@ -59,8 +60,9 @@ export function MediaGrid({
           >
             <Image
               source={{ uri: item.mediaUrl }}
-              style={{ width, height, ...ROUND.inner }}
+              style={{ width, height, ...ROUND.inner, backgroundColor: MEDIA_PLACEHOLDER }}
               contentFit="cover"
+              transition={MEDIA_FADE_MS}
             />
 
             {/* Vidéo : pastille de lecture, sauf si la tuile porte déjà le « +N ». */}

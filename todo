@@ -139,6 +139,14 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
     ⚠️ Pilote par l'INTENTION de l'utilisateur (`awaiting`) et non par `status.isLoaded` seul : le fichier n'est charge qu'a la premiere lecture, donc se fier au statut ferait tourner un indicateur sur TOUS les vocaux jamais ecoutes du fil.
     → appuyer pendant le chargement annule (sortie naturelle si le fichier tarde) ; delai de securite 15 s pour ne pas laisser l'indicateur tourner indefiniment sur un fichier introuvable.
 
+  [FAIT 07/08] Meme defaut ailleurs — audit puis correction, dans l'ordre de frequence d'usage.
+    → FriendsPanel : accepter/refuser/annuler/retirer n'avaient AUCUN etat d'occupation. Aller-retour reseau PUIS rechargement complet de la liste, bouton actif pendant tout ce temps — donc double soumission possible (deux acceptations). `app/user/[id].tsx` faisait les memes actions AVEC un garde : les deux ecrans divergeaient sans raison.
+    ⚠️ Cle = ACTION + identifiant, pas l'identifiant seul : accepter et refuser portent sur la meme demande, une cle reduite a l'id ferait tourner les DEUX boutons.
+    → app/user/[id].tsx : `acting` ne servait qu'a poser `disabled`, sans rien montrer — on appuyait, le bouton ne reagissait pas, rien ne disait si c'etait en cours ou si l'appui n'avait pas ete pris. Devenu une cle (plusieurs boutons coexistent, un seul doit s'animer).
+    ⚠️ Dans les deux cas le libelle reste RENDU pendant l'attente, juste invisible, l'indicateur pose par-dessus en couche absolue : le remplacer changerait la largeur du bouton donc la mise en page, et on ne peut pas figer une largeur qui depend du libelle traduit. Meme piege que les coches d'acheminement et le lecteur vocal.
+    → images du chat : aucun `transition` ni fond d'attente, elles surgissaient d'un coup dans un trou vide. `lib/mediaAppearance.ts` (fond gris translucide + fondu 180 ms) applique aux bulles, aux albums et a la galerie. Gris TRANSLUCIDE et non une couleur de theme : ces vues sont posees sur des fonds tres varies (bulle blanche, bulle en degrade, visionneuse noire).
+    → telechargement groupe (chat/media) : l'indicateur existait mais les fichiers partent UN PAR UN — sur des dizaines de photos, rien ne distinguait « ca avance » de « c'est bloque ». Decompte « 12/40 » a cote de l'indicateur, incremente dans un `finally` (un fichier en echec a quand meme ete traite).
+
 [A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
   → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.
 

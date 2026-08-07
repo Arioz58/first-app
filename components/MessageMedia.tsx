@@ -7,6 +7,7 @@ import { ROUND } from '../lib/radius';
 import { formatFileSize } from '../lib/upload';
 import { AudioMessage } from './AudioMessage';
 import { DocumentViewer } from './DocumentViewer';
+import { MEDIA_FADE_MS, MEDIA_PLACEHOLDER } from '../lib/mediaAppearance';
 
 type MediaMessage = {
   mediaUrl?: string | null;
@@ -35,8 +36,9 @@ export function MessageMedia({
       <TouchableOpacity onPress={() => onOpenImage(mediaUrl)} activeOpacity={0.9}>
         <Image
           source={{ uri: mediaUrl }}
-          style={{ width: 244, height: 244, ...ROUND.media }}
+          style={{ width: 244, height: 244, ...ROUND.media, backgroundColor: MEDIA_PLACEHOLDER }}
           contentFit="cover"
+          transition={MEDIA_FADE_MS}
         />
       </TouchableOpacity>
     );

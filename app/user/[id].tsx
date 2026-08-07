@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -49,7 +50,10 @@ export default function UserProfileScreen() {
   const [data, setData] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [acting, setActing] = useState(false);
+  // Clé de l'action en cours, ou `null`. Une clé et non un booléen : plusieurs boutons
+  // coexistent (accepter/refuser, ou ami/message), et un drapeau global les ferait tous
+  // s'animer alors qu'un seul a été touché.
+  const [acting, setActing] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -66,31 +70,31 @@ export default function UserProfileScreen() {
     load();
   }, [load]);
 
-  const act = async (fn: () => Promise<unknown>) => {
+  const act = async (key: string, fn: () => Promise<unknown>) => {
     if (acting) return;
-    setActing(true);
+    setActing(key);
     try {
       await fn();
       await load();
     } catch (e: any) {
       Alert.alert(t('error'), e.message);
     } finally {
-      setActing(false);
+      setActing(null);
     }
   };
 
   const addFriend = () =>
-    act(() =>
+    act('add', () =>
       apiRequest('/friends/requests', { method: 'POST', body: { toUserId: id } }),
     );
   const cancelRequest = () =>
-    act(() => apiRequest(`/friends/requests/${data?.requestId}`, { method: 'DELETE' }));
+    act('cancel', () => apiRequest(`/friends/requests/${data?.requestId}`, { method: 'DELETE' }));
   const acceptRequest = () =>
-    act(() =>
+    act('accept', () =>
       apiRequest(`/friends/requests/${data?.requestId}/accept`, { method: 'POST' }),
     );
   const refuseRequest = () =>
-    act(() =>
+    act('refuse', () =>
       apiRequest(`/friends/requests/${data?.requestId}/refuse`, { method: 'POST' }),
     );
   const removeFriend = () =>
@@ -99,7 +103,7 @@ export default function UserProfileScreen() {
       {
         text: t('relation.remove_friend'),
         style: 'destructive',
-        onPress: () => act(() => apiRequest(`/friends/${id}`, { method: 'DELETE' })),
+        onPress: () => act('remove', () => apiRequest(`/friends/${id}`, { method: 'DELETE' })),
       },
     ]);
 
@@ -205,14 +209,16 @@ export default function UserProfileScreen() {
                   <ActionButton
                     label={t('relation.accept')}
                     onPress={acceptRequest}
-                    disabled={acting}
+                    disabled={!!acting}
+                    busy={acting === 'accept'}
                     primary
                     className="flex-1"
                   />
                   <ActionButton
                     label={t('relation.refuse')}
                     onPress={refuseRequest}
-                    disabled={acting}
+                    disabled={!!acting}
+                    busy={acting === 'refuse'}
                     className="flex-1"
                   />
                 </View>
@@ -221,20 +227,23 @@ export default function UserProfileScreen() {
                   label={t('relation.friends')}
                   icon="checkmark"
                   onPress={removeFriend}
-                  disabled={acting}
+                  disabled={!!acting}
+                  busy={acting === 'remove'}
                 />
               ) : data.relationStatus === 'request_sent' ? (
                 <ActionButton
                   label={t('relation.cancel_request')}
                   onPress={cancelRequest}
-                  disabled={acting}
+                  disabled={!!acting}
+                  busy={acting === 'cancel'}
                 />
               ) : data.canFriendRequest ? (
                 <ActionButton
                   label={t('relation.add_friend')}
                   icon="person-add"
                   onPress={addFriend}
-                  disabled={acting}
+                  disabled={!!acting}
+                  busy={acting === 'add'}
                   primary
                 />
               ) : null}
@@ -297,6 +306,7 @@ function ActionButton({
   icon,
   onPress,
   disabled,
+  busy,
   primary,
   className = '',
 }: {
@@ -304,26 +314,38 @@ function ActionButton({
   icon?: keyof typeof Ionicons.glyphMap;
   onPress: () => void;
   disabled?: boolean;
+  /** Action en cours SUR CE bouton : le seul à s'animer, les autres sont juste inactifs. */
+  busy?: boolean;
   primary?: boolean;
   className?: string;
 }) {
   return (
     <TouchableOpacity
-      className={`flex-row items-center justify-center rounded-full py-3 px-5 ${primary ? 'bg-nexa' : 'border border-gray-300 dark:border-zinc-700'} ${disabled ? 'opacity-50' : ''} ${className}`}
+      className={`flex-row items-center justify-center rounded-full py-3 px-5 ${primary ? 'bg-nexa' : 'border border-gray-300 dark:border-zinc-700'} ${disabled && !busy ? 'opacity-50' : ''} ${className}`}
       onPress={onPress}
       disabled={disabled}
     >
-      {icon && (
-        <Ionicons
-          name={icon}
-          size={18}
-          color={primary ? 'white' : '#374151'}
-          style={{ marginRight: 6 }}
-        />
+      {/* ⚠️ Contenu gardé en place, seulement rendu invisible : le remplacer par
+          l'indicateur changerait la largeur du bouton, et la rangée entière bougerait. On
+          ne peut pas non plus figer une largeur, elle dépend du libellé traduit. */}
+      <View className="flex-row items-center" style={{ opacity: busy ? 0 : 1 }}>
+        {icon && (
+          <Ionicons
+            name={icon}
+            size={18}
+            color={primary ? 'white' : '#374151'}
+            style={{ marginRight: 6 }}
+          />
+        )}
+        <Text className={`font-semibold ${primary ? 'text-white' : 'text-gray-700 dark:text-zinc-300'}`}>
+          {label}
+        </Text>
+      </View>
+      {busy && (
+        <View style={StyleSheet.absoluteFill} className="items-center justify-center">
+          <ActivityIndicator size="small" color={primary ? 'white' : '#6B7280'} />
+        </View>
       )}
-      <Text className={`font-semibold ${primary ? 'text-white' : 'text-gray-700 dark:text-zinc-300'}`}>
-        {label}
-      </Text>
     </TouchableOpacity>
   );
 }
