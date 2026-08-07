@@ -108,7 +108,9 @@
     "typing": "Typing…",
     "online": "Online",
     "delete": "Delete",
-    "delete_confirm": "Delete this message?"
+    "delete_confirm": "Delete this message?",
+    "new_messages_one": "1 new message",
+    "new_messages_other": "{{count}} new messages"
   },
   "details": {
     "title": "Details",

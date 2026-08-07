@@ -96,6 +96,15 @@ const OPEN_FOLLOW_WINDOW_MS = 2500;
 // arriver (téléversement en échec chez l'expéditeur) : sans ce plafond, les autres
 // resteraient retenus pour toujours.
 const ALBUM_WAIT_MS = 6000;
+// Marge au-dessus du repère de reprise quand on ouvre dessus : la carte d'en-tête FLOTTE
+// au-dessus du fil, aligner le repère sur le haut de la zone visible le glisserait dessous.
+const OPEN_TARGET_MARGIN = 16;
+// Attente entre deux tentatives de `scrollToIndex`. Calée au-dessus de la période de
+// regroupement des rendus de VirtualizedList (50 ms), sans quoi on retombe sur le même
+// nombre de cellules mesurées.
+const SCROLL_RETRY_MS = 120;
+// De quoi franchir plusieurs lots de cellules ; au-delà, la cible est hors d'atteinte.
+const SCROLL_MAX_TRIES = 8;
 // Taille de page du serveur (`GET /conversations/:id/messages`). Une page incomplète
 // signale le début de la conversation.
 const MESSAGES_PAGE = 30;
@@ -149,7 +158,19 @@ type ConvMeta = {
   myMutedUntil: string | null;
   whoCanSend?: 'all' | 'admins';
   myRole?: 'admin' | 'moderator' | 'member';
+  /**
+   * Premier message non lu, et combien il en reste — calculés par le SERVEUR.
+   *
+   * ⚠️ L'app les déduisait des messages déjà chargés, donc jamais au-delà de la dernière
+   * page : avec cent messages en attente, le repère était introuvable et l'ouverture dessus
+   * impossible. Seul le serveur peut les trouver sans charger tout l'historique.
+   */
+  firstUnreadId?: string | null;
+  unreadCount?: number;
 };
+
+/** Réponse d'une fenêtre d'historique centrée sur un message. */
+type AroundPage = { messages: Message[]; hasOlder: boolean; hasNewer: boolean };
 type Flags = { pinned: string[]; starred: string[] };
 type HeaderProfile = {
   photoUrl: string | null;
@@ -233,6 +254,23 @@ const batchExpected = (batchId?: string | null) => {
 
 // Une réponse à une story porte déjà son propre en-tête (« X a répondu à votre story »)
 // avec le nom : on la laisse hors des séries, en amont comme en aval.
+/**
+ * Ajoute des messages au fil en écartant ceux qu'il contient déjà.
+ *
+ * ⚠️ Filet volontaire, et non un pansement sur un bug précis. Le fil est alimenté par cinq
+ * chemins — historique, pagination, socket, rattrapage à la reconnexion, albums mis de côté
+ * — qui peuvent se recouvrir : une page à cheval sur la précédente, un message arrivé à la
+ * fois par le socket et par un rechargement. Un doublon ne dégrade pas l'affichage, il le
+ * CASSE (clés dupliquées, cellules omises), donc la garantie doit vivre ici, à l'entrée, et
+ * pas dans chaque appelant.
+ */
+const mergeMessages = (prev: Message[], incoming: Message[], position: 'start' | 'end') => {
+  const known = new Set(prev.map((m) => m.id));
+  const fresh = incoming.filter((m) => !known.has(m.id));
+  if (!fresh.length) return prev;
+  return position === 'start' ? [...fresh, ...prev] : [...prev, ...fresh];
+};
+
 const isStoryReplyMsg = (m?: Message) => !!m && (m.type === 'story_reply' || !!m.storyMediaUrl);
 
 // Une ligne de la liste : un message seul, ou les médias d'un même envoi (album).
@@ -352,6 +390,22 @@ function SendingVeil() {
       <View className="w-9 h-9 rounded-full bg-black/55 items-center justify-center">
         <ActivityIndicator size="small" color="white" />
       </View>
+    </View>
+  );
+}
+
+/**
+ * Repère « reprendre ici » : trait continu portant le nombre de messages restant à lire.
+ *
+ * Posé DANS le fil, à sa place chronologique, et non en bandeau flottant : c'est un point
+ * du fil qu'on doit pouvoir dépasser en défilant, pas une information qui suit l'écran.
+ */
+function UnreadDivider({ label }: { label: string }) {
+  return (
+    <View className="flex-row items-center my-3 px-1">
+      <View className="flex-1 h-px bg-nexa/30" />
+      <Text className="text-nexa text-xs font-semibold mx-2.5">{label}</Text>
+      <View className="flex-1 h-px bg-nexa/30" />
     </View>
   );
 }
@@ -563,7 +617,19 @@ export default function ChatScreen() {
   };
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
-  const [loadingOlder, setLoadingOlder] = useState(false);
+  /**
+   * Indicateur de chargement de la page precedente, piloté par une shared value.
+   *
+   * ⚠️ C'était un état React, et il coûtait DEUX rendus complets de l'écran par page
+   * chargée (vrai puis faux). Or `renderItem` est recréé à chaque rendu du parent : chacun
+   * de ces rendus repassait sur TOUTES les cellules visibles — pile au moment où la liste
+   * insère 30 messages et recalcule sa position. C'était une part du sursaut.
+   *
+   * L'indicateur reste monté en permanence, à hauteur fixe : seule son opacité change, sur
+   * le thread UI. Aucun rendu React, aucune variation de mise en page.
+   */
+  const olderOpacity = useSharedValue(0);
+  const olderStyle = useAnimatedStyle(() => ({ opacity: olderOpacity.value }));
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   // Amorcés par les paramètres de route : sans ça, un groupe s'affichait d'abord comme une
   // conversation directe (initiale sur pastille) avant de basculer sur son avatar.
@@ -581,6 +647,16 @@ export default function ChatScreen() {
    * n'en passe aucun : l'en-tête restait vide et l'avatar affichait « ? », y compris une
    * fois la conversation chargée. L'écran doit pouvoir se nommer lui-même.
    */
+  /**
+   * Repère de reprise, tel que le SERVEUR l'a désigné à l'ouverture : identifiant du premier
+   * message non lu, et combien il en reste.
+   *
+   * ⚠️ Remplace le calcul local qui comparait les dates des messages CHARGÉS à ma dernière
+   * lecture. Il ne pouvait rien voir au-delà de la page en mémoire, et demandait en plus un
+   * plafond pour ne pas compter les messages arrivés pendant qu'on lisait. Une valeur figée
+   * par le serveur résout les deux d'un coup.
+   */
+  const [unreadInfo, setUnreadInfo] = useState<{ id: string; count: number } | null>(null);
   const [fetchedName, setFetchedName] = useState('');
   const [groupPhoto, setGroupPhoto] = useState<string | null>(
     typeParam === 'group' ? photo || null : null,
@@ -685,24 +761,34 @@ export default function ChatScreen() {
   const messagesRef = useRef<Message[]>([]); // dernière liste connue, sans redéclencher les callbacks
   const loadingOlderRef = useRef(false); // une page est déjà en vol → ne pas en redemander
   const hasOlderRef = useRef(true); // faux dès qu'une page revient incomplète : on est au début
+  /**
+   * Reste-t-il des messages PLUS RÉCENTS que ceux chargés ?
+   *
+   * ⚠️ Vrai seulement quand le fil a été ouvert au MILIEU de l'historique — sur un épinglé
+   * ancien, ou sur le premier non lu quand il y en a beaucoup. Il faut alors pouvoir
+   * redescendre jusqu'au présent, sans quoi le bas du fil serait un cul-de-sac.
+   */
+  const hasNewerRef = useRef(false);
+  const loadingNewerRef = useRef(false);
 
-  // Ouverture du fil : on le garde INVISIBLE tant qu'il n'est pas calé en bas.
+  // Ouverture du fil : on le garde INVISIBLE tant qu'il n'est pas calé.
   //
-  // ⚠️ La liste n'est pas inversée : elle se rend depuis le haut, puis `scrollToEnd` la
-  // ramène en bas — d'où le passage par le début de la conversation, visible dès que la
-  // mesure des bulles prend une image de plus (bulles hautes, médias, page bien remplie).
-  // Aucun réglage de défilement ne peut le supprimer : le premier rendu a lieu avant qu'on
-  // sache où est le bas. On ne le montre donc qu'une fois calé.
+  // La liste étant désormais inversée, l'ouverture EN BAS n'a plus besoin de ce voile :
+  // elle s'y rend nativement, à l'offset zéro, sans passer par le début de la conversation.
   //
-  // Une liste `inverted` s'en passerait, mais retournerait aussi la pagination
-  // (`onStartReached`), `maintainVisibleContentPosition` et les animations d'entrée : bien
-  // plus de risque que ce que le défaut coûte.
+  // ⚠️ Il reste néanmoins nécessaire pour l'ouverture SUR LE REPÈRE de reprise, qui exige
+  // un `scrollToIndex` vers une ligne pas encore montée : ce calage-là, lui, se voit. Il
+  // est conservé pour les deux cas plutôt que conditionné — un fil qui apparaît de deux
+  // façons différentes selon qu'on a des messages en attente se remarquerait davantage que
+  // le fondu lui-même.
   const listReveal = useSharedValue(0);
   const revealedRef = useRef(false);
   const listRevealStyle = useAnimatedStyle(() => ({ opacity: listReveal.value }));
   const revealList = useCallback(() => {
     if (revealedRef.current) return;
     revealedRef.current = true;
+    openTargetRef.current = null;
+    pendingScrollRef.current = null;
     // Fondu court : la position est déjà bonne, il ne sert qu'à éviter l'apparition sèche.
     listReveal.value = withTiming(1, { duration: 140 });
   }, [listReveal]);
@@ -710,19 +796,85 @@ export default function ChatScreen() {
   // Repoussé à CHAQUE changement de taille du contenu, donc déclenché par le DERNIER :
   // les cellules sont montées par lots et le contenu grandit plusieurs fois de suite.
   // Dévoiler au premier montrerait une position intermédiaire — le saut qu'on veut cacher.
+  /**
+   * Ligne à viser à l'ouverture, quand des messages n'ont pas été lus.
+   *
+   * ⚠️ Une ref et non un état : elle est lue depuis `onContentSizeChange`, qui se déclenche
+   * plusieurs fois pendant que les cellules se montent. Un état provoquerait un rendu de
+   * la liste à chaque fois, en plein calage.
+   *
+   * Vidée au dévoilement : passé ce point, le fil reprend son comportement normal — suivre
+   * le bas quand on y est.
+   */
+  const openTargetRef = useRef<string | null>(null);
+  const openDecidedRef = useRef(false);
+  /**
+   * Repère effectivement affiché, FIGÉ à l'ouverture.
+   *
+   * ⚠️ Le calcul se rejoue à chaque changement du fil, donc aussi quand une page d'anciens
+   * messages arrive : le repère pouvait apparaître à ce moment-là et insérer sa hauteur au
+   * milieu du fil, décalant d'un coup tout ce qui se trouvait en dessous — le sursaut qu'on
+   * voyait en remontant.
+   *
+   * Contrepartie assumée : si la frontière était au-dessus de la première page, le repère
+   * n'apparaîtra pas en remontant. C'est justement le cas où l'on n'a pas pu ouvrir dessus,
+   * donc où il n'aurait de toute façon pas servi de point de reprise.
+   */
+  const [divider, setDivider] = useState<{ key: string; count: number } | null>(null);
+
+  /**
+   * Défilement ciblé en cours, conservé pour pouvoir le RETENTER.
+   *
+   * ⚠️ Sans `getItemLayout` — impossible, les hauteurs de bulles sont variables —
+   * `scrollToIndex` échoue tant que la cellule visée n'est pas montée. Avant l'inversion ce
+   * cas ne se présentait presque jamais : les messages ANCIENS étaient aux petits indices,
+   * donc toujours rendus (une liste virtualisée rend d'abord son début). Depuis
+   * l'inversion, l'indice 0 est le message le plus RÉCENT — un épinglé ou un repère un peu
+   * ancien se retrouve loin dans la liste, non monté, et l'appel échoue silencieusement.
+   */
+  /**
+   * Message à rejoindre dès que la fenêtre chargée autour de lui aura été rendue.
+   *
+   * ⚠️ En deux temps, obligatoirement : `scrollToRow` cherche son index dans `displayRows`,
+   * qui n'existe qu'après le rendu suivant le remplacement des messages.
+   */
+  const pendingJumpRef = useRef<string | null>(null);
+  // Dernière demande de saut : périme les réponses d'une demande précédente.
+  const jumpRequestRef = useRef<string | null>(null);
+  // ⚠️ Minuterie du surlignage tenue dans une ref : rendue par l'effet, elle était purgée
+  // par son propre nettoyage au rendu suivant, avant d'avoir pu s'exécuter.
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const pendingScrollRef = useRef<{
+    key: string;
+    viewPosition: number;
+    viewOffset: number;
+    animated: boolean;
+    tries: number;
+  } | null>(null);
+
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleReveal = useCallback(() => {
     if (revealedRef.current) return;
     if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
     // Couvre le dernier passage de calage de `scrollToBottom` (jusqu'à 120 ms).
-    revealTimerRef.current = setTimeout(revealList, 160);
+    revealTimerRef.current = setTimeout(() => {
+      // Un calage ciblé est encore en cours de reprise : dévoiler maintenant le montrerait
+      // à l'écran. Le plafond dur reste le garde-fou.
+      if (pendingScrollRef.current) {
+        scheduleReveal();
+        return;
+      }
+      revealList();
+    }, 160);
   }, [revealList]);
 
   // Plafond dur : le fil doit apparaître même si les mesures s'enchaînent sans fin, si le
   // chargement échoue ou si la liste ne grandit jamais. Un écran resté vide serait bien
   // pire que le saut qu'on corrige.
   useEffect(() => {
-    const cap = setTimeout(revealList, 700);
+    // Relevé : les reprises de calage peuvent prendre plusieurs lots de 120 ms.
+    const cap = setTimeout(revealList, 1400);
     return () => {
       clearTimeout(cap);
       if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
@@ -738,7 +890,7 @@ export default function ChatScreen() {
     // Marqué vu AVANT le rendu : le brouillon joue l'animation d'entrée, pas la vraie bulle
     // qui viendra le remplacer — sinon le message clignoterait à l'écho.
     seenIdsRef.current.add(draft.id);
-    setMessages((prev) => [...prev, draft]);
+    setMessages((prev) => mergeMessages(prev, [draft], 'end'));
     atBottomRef.current = true;
     followUntilRef.current = Date.now() + FOLLOW_WINDOW_MS;
   }, []);
@@ -787,12 +939,13 @@ export default function ChatScreen() {
     if (!items?.length) return;
     // L'album entier apparaît d'un coup : le rattrapage doit glisser, pas sauter.
     smoothNextRef.current = true;
-    setMessages((prev) => [...prev, ...items]);
+    setMessages((prev) => mergeMessages(prev, items, 'end'));
   }, []);
 
   // Les minuteries survivraient à la sortie de l'écran et écriraient dans un état démonté.
   useEffect(
     () => () => {
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
       for (const t of albumTimerRef.current.values()) clearTimeout(t);
       albumTimerRef.current.clear();
       albumBufRef.current.clear();
@@ -803,11 +956,21 @@ export default function ChatScreen() {
   // Faut-il ramener le fil en bas ? Soit on y est déjà, soit on vient d'envoyer et la
   // fenêtre de suivi couvre les mesures qui arrivent encore.
   const shouldStick = useCallback(
-    () => atBottomRef.current || followUntilRef.current > Date.now(),
+    // ⚠️ `hasNewerRef` : après un saut au milieu de l'historique, le bas du contenu CHARGÉ
+    // n'est pas le bas de la conversation. S'y coller ramènerait l'utilisateur au bout de
+    // chaque page fraîchement chargée, contre son défilement. Le suivi reprend dès que le
+    // vrai bas est atteint.
+    () => (atBottomRef.current && !hasNewerRef.current) || followUntilRef.current > Date.now(),
     [],
   );
 
-  // Unique point de repositionnement du fil. Deux raisons de repasser plusieurs fois :
+  // Unique point de repositionnement du fil.
+  //
+  // ⚠️ Liste INVERSÉE : le bas du fil — le message le plus récent — est à l'offset ZÉRO, et
+  // non à la fin du contenu. D'où `scrollToOffset({ offset: 0 })` partout ici ; `scrollToEnd`
+  // mènerait au message le plus ANCIEN.
+  //
+  // Deux raisons de repasser plusieurs fois :
   // - la virtualisation monte les cellules par lots, donc le contenu grandit APRÈS le
   //   premier scroll (les hauteurs des bulles sont variables, donc estimées jusqu'à mesure) ;
   // - un média (image, GIF) finit de charger et pousse encore le contenu.
@@ -815,7 +978,7 @@ export default function ChatScreen() {
   const scrollToBottom = useCallback((animated = false) => {
     const settle = () => {
       if (shouldStick() && !draggingRef.current) {
-        listRef.current?.scrollToEnd({ animated: false });
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
       }
     };
     // Un défilement animé est en cours : les changements de taille qui suivent (cellules
@@ -823,11 +986,11 @@ export default function ChatScreen() {
     if (smoothingRef.current) return;
     if (!shouldStick() || draggingRef.current) return;
 
-    listRef.current?.scrollToEnd({ animated });
+    listRef.current?.scrollToOffset({ offset: 0, animated });
 
     if (animated) {
       // On laisse l'animation se dérouler, puis un seul calage à la fin — et en douceur :
-      // un `scrollToEnd` instantané juste après le glissement se voit comme un à-coup.
+      // un saut instantané juste après le glissement se voit comme un à-coup.
       // S'il ne reste rien à rattraper, on ne touche à rien du tout.
       smoothingRef.current = true;
       setTimeout(() => {
@@ -845,7 +1008,7 @@ export default function ChatScreen() {
         // reste sa hauteur à parcourir. S'y fier faisait renoncer au calage, laissant le
         // message envoyé sous la zone de saisie. Ce dernier passage est animé : s'il n'y a
         // rien à rattraper, il ne se voit pas.
-        listRef.current?.scrollToEnd({ animated: true });
+        listRef.current?.scrollToOffset({ offset: 0, animated: true });
       }, SMOOTH_SCROLL_MS);
     } else {
       requestAnimationFrame(settle);
@@ -871,7 +1034,7 @@ export default function ChatScreen() {
     if (!oldest) return;
 
     loadingOlderRef.current = true;
-    setLoadingOlder(true);
+    olderOpacity.value = withTiming(1, { duration: 120 });
     try {
       const page = await apiRequest<Message[]>(
         `/conversations/${id}/messages?cursor=${oldest.id}`,
@@ -881,13 +1044,42 @@ export default function ChatScreen() {
       if (page.length) {
         for (const m of page) seenIdsRef.current.add(m.id);
         // Le serveur renvoie du plus récent au plus ancien : on remet dans l'ordre du fil.
-        setMessages((prev) => [...page.slice().reverse(), ...prev]);
+        setMessages((prev) => mergeMessages(prev, page.slice().reverse(), 'start'));
       }
     } catch {
       // Réseau : on laisse `hasOlderRef` à vrai, le prochain passage près du haut réessaiera.
     } finally {
       loadingOlderRef.current = false;
-      setLoadingOlder(false);
+      olderOpacity.value = withTiming(0, { duration: 120 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  /**
+   * Charge les messages plus RÉCENTS, quand le fil a été ouvert au milieu de l'historique.
+   *
+   * ⚠️ Liste inversée : le présent est au DÉBUT de la liste, d'où `onStartReached`. C'est le
+   * pendant exact de `loadOlder`, et il n'a de sens que si `hasNewerRef` est vrai.
+   */
+  const loadNewer = useCallback(async () => {
+    if (loadingNewerRef.current || !hasNewerRef.current) return;
+    const newest = messagesRef.current[messagesRef.current.length - 1];
+    if (!newest) return;
+
+    loadingNewerRef.current = true;
+    try {
+      const page = await apiRequest<Message[]>(
+        `/conversations/${id}/messages?newerCursor=${newest.id}`,
+      );
+      if (page.length < MESSAGES_PAGE) hasNewerRef.current = false;
+      if (page.length) {
+        for (const m of page) seenIdsRef.current.add(m.id);
+        setMessages((prev) => mergeMessages(prev, page.slice().reverse(), 'end'));
+      }
+    } catch {
+      // Réseau : on garde `hasNewerRef` à vrai, le prochain passage réessaiera.
+    } finally {
+      loadingNewerRef.current = false;
     }
   }, [id]);
 
@@ -935,6 +1127,11 @@ export default function ChatScreen() {
         setMutedUntil(meta.myMutedUntil);
         setWhoCanSend(meta.whoCanSend ?? 'all');
         setMyRole(meta.myRole ?? 'member');
+        // ⚠️ Lu ICI, avant le `POST /read` de l'ouverture : après, le serveur aurait déjà
+        // écrasé la date de lecture et ne saurait plus dire où le repère se pose.
+        setUnreadInfo(
+          meta.firstUnreadId ? { id: meta.firstUnreadId, count: meta.unreadCount ?? 0 } : null,
+        );
         // Groupe : son nom. Direct : celui de l'autre participant.
         setFetchedName(
           meta.type === 'group'
@@ -973,12 +1170,35 @@ export default function ChatScreen() {
           }
         }
 
-        const history = await apiRequest<Message[]>(`/conversations/${id}/messages`);
+        /**
+         * ⚠️ Quand il reste des messages non lus, on ne charge PAS la dernière page mais une
+         * fenêtre centrée sur le premier d'entre eux. C'est la seule façon d'ouvrir dessus :
+         * on ne peut pas défiler vers une ligne absente de la liste, et remonter page par
+         * page jusqu'à elle serait interminable au-delà de quelques dizaines de messages.
+         *
+         * La fenêtre porte largement vers le présent (`after`), pour que tout ce qui a été
+         * manqué soit là et se lise d'une traite en descendant. Au-delà de cette borne,
+         * `hasNewer` prend le relais et la suite se charge en défilant.
+         */
+        const history = meta.firstUnreadId
+          ? await (async () => {
+              const page = await apiRequest<AroundPage>(
+                `/conversations/${id}/messages/around/${meta.firstUnreadId}?before=15&after=150`,
+              );
+              hasOlderRef.current = page.hasOlder;
+              hasNewerRef.current = page.hasNewer;
+              return page.messages;
+            })()
+          : await (async () => {
+              const page = await apiRequest<Message[]>(`/conversations/${id}/messages`);
+              // Page pleine = il reste probablement de l'historique ; page incomplète = on
+              // tient déjà toute la conversation.
+              hasOlderRef.current = page.length >= MESSAGES_PAGE;
+              hasNewerRef.current = false;
+              return page;
+            })();
         // Marqué AVANT le rendu : sinon tout l'historique s'animerait à l'ouverture.
         for (const m of history) seenIdsRef.current.add(m.id);
-        // Page pleine = il reste probablement de l'historique ; page incomplète = on tient
-        // déjà toute la conversation, inutile d'interroger le serveur au premier scroll.
-        hasOlderRef.current = history.length >= MESSAGES_PAGE;
         // Le fil s'ouvre en bas, et doit y rester le temps que les bulles soient mesurées.
         followUntilRef.current = Date.now() + OPEN_FOLLOW_WINDOW_MS;
         setMessages(history.reverse());
@@ -1038,7 +1258,15 @@ export default function ChatScreen() {
                 next[draft] = { ...msg, mediaUrl: prev[draft].mediaUrl };
                 return next;
               }
-              return [...prev, msg];
+              /**
+               * ⚠️ Le fil est ouvert sur une fenêtre du MILIEU de l'historique (saut vers un
+               * épinglé ancien) : ce message est le plus récent de la conversation, mais il
+               * ne suit PAS celui qui ferme la fenêtre. L'ajouter le collerait à un voisin
+               * qui n'est pas le sien et créerait un trou invisible dans le fil.
+               * `loadNewer` le rapportera à sa place quand on redescendra.
+               */
+              if (hasNewerRef.current) return prev;
+              return mergeMessages(prev, [msg], 'end');
             });
             // Message reçu alors qu'on lit la conversation → lu immédiatement,
             // sinon il ressortirait comme non lu au retour sur la liste.
@@ -1155,17 +1383,52 @@ export default function ChatScreen() {
         // Reconnexion — retour au premier plan, ou réseau retrouvé. La conversation a été
         // quittée côté serveur en même temps que la connexion : sans ce rattrapage, l'écran
         // resterait ouvert sans plus rien recevoir, et sans les messages arrivés entre-temps.
+        /**
+         * Rattrapage à la reconnexion — retour au premier plan, ou réseau retrouvé.
+         *
+         * ⚠️ Ce chemin repose le REPÈRE de reprise, comme au montage de l'écran. Sans cela,
+         * quitter l'app en laissant la conversation ouverte puis y revenir rechargeait
+         * l'historique et marquait tout comme lu SANS jamais repasser par la logique
+         * d'ouverture — celle-ci ne tournant qu'au montage. Les messages arrivés entre-temps
+         * étaient donc lus avant d'avoir pu être signalés, et le repère ne pouvait plus
+         * apparaître. C'est pourtant le cas le plus courant : on quitte l'app, on la
+         * rouvre, elle revient là où on l'avait laissée.
+         */
         socket.on('connect', () => {
           socket.emit('join_conversation', id);
-          apiRequest<Message[]>(`/conversations/${id}/messages`)
-            .then((history) => {
-              // Marqués avant le rendu : ce sont des messages rattrapés, pas des arrivées
-              // en direct — les animer ferait défiler tout l'historique.
-              for (const m of history) seenIdsRef.current.add(m.id);
-              setMessages(history.reverse());
-              apiRequest(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
-            })
-            .catch(() => {});
+          (async () => {
+            const fresh = await apiRequest<ConvMeta>(`/conversations/${id}`);
+            setUnreadInfo(
+              fresh.firstUnreadId
+                ? { id: fresh.firstUnreadId, count: fresh.unreadCount ?? 0 }
+                : null,
+            );
+
+            const history = fresh.firstUnreadId
+              ? await (async () => {
+                  const page = await apiRequest<AroundPage>(
+                    `/conversations/${id}/messages/around/${fresh.firstUnreadId}?before=15&after=150`,
+                  );
+                  hasOlderRef.current = page.hasOlder;
+                  hasNewerRef.current = page.hasNewer;
+                  return page.messages;
+                })()
+              : await (async () => {
+                  const page = await apiRequest<Message[]>(`/conversations/${id}/messages`);
+                  hasOlderRef.current = page.length >= MESSAGES_PAGE;
+                  hasNewerRef.current = false;
+                  return page;
+                })();
+
+            // Marqués avant le rendu : ce sont des messages rattrapés, pas des arrivées en
+            // direct — les animer ferait défiler tout l'historique.
+            for (const m of history) seenIdsRef.current.add(m.id);
+            // Rouvre la décision de calage : le fil vient d'être remplacé, et le repère
+            // peut désigner une autre ligne qu'à la dernière ouverture.
+            openDecidedRef.current = false;
+            setMessages(history.reverse());
+            apiRequest(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
+          })().catch(() => {});
         });
       } catch {
         router.replace('/(tabs)');
@@ -1662,12 +1925,40 @@ export default function ChatScreen() {
   // elle s'accroche, sans quoi la jonction se voit.
   const myTailColor = bubbleGradient(bubbleColor)[1];
   // « Effacer » local : on masque les messages antérieurs à l'horodatage stocké.
-  const visibleMessages = clearedAt
-    ? messages.filter((m) => new Date(m.createdAt).getTime() > clearedAt)
-    : messages;
+  // ⚠️ Mémoïsé : sans cela, une conversation « effacée » (horodatage local) reconstruisait
+  // le tableau à CHAQUE rendu, donc `rows` avec, donc `data` changeait d'identité et la
+  // liste se re-rendait entièrement — à chaque frappe dans la zone de saisie comprise.
+  const visibleMessages = useMemo(
+    () =>
+      clearedAt
+        ? messages.filter((m) => new Date(m.createdAt).getTime() > clearedAt)
+        : messages,
+    [messages, clearedAt],
+  );
   // Les médias d'un même envoi (`batchId`) sont réunis en une ligne « album » : une seule
   // bulle, une grille de vignettes, une légende. Tout le reste reste une ligne d'un
   // message. La liste est rendue à partir de ces lignes, plus des messages bruts.
+  // ⚠️ Élément d'en-tête mémoïsé : écrit en ligne, il changeait d'identité à chaque rendu
+  // du parent et faisait re-rendre la cellule d'en-tête de la liste pour rien.
+  const listHeader = useMemo(
+    () => (
+            <View
+              style={{
+                // Rend au fil la hauteur des éléments flottants — header, et bandeau de
+                // partage quand il est là — pour que le premier message ne passe pas dessous.
+                height:
+                  insets.top + HEADER_H + 6 + (liveBannerVisible ? LIVE_BANNER_H + 6 : 0),
+                justifyContent: 'flex-end',
+              }}
+            >
+              <Animated.View style={[{ marginBottom: 8 }, olderStyle]}>
+                <ActivityIndicator size="small" color={NEXA} />
+              </Animated.View>
+            </View>
+    ),
+    [insets.top, liveBannerVisible, olderStyle],
+  );
+
   const rows = useMemo(() => {
     const out: Row[] = [];
     for (const m of visibleMessages) {
@@ -1684,6 +1975,92 @@ export default function ChatScreen() {
     return out;
   }, [visibleMessages]);
 
+  /**
+   * Décide, UNE seule fois, où la conversation s'ouvre : sur le repère s'il reste des
+   * messages à lire, en bas sinon.
+   *
+   * ⚠️ Doit désarmer la fenêtre de suivi armée au chargement de l'historique — elle force
+   * le retour en bas pendant 2,5 s, et gagnerait contre le calage sur le repère.
+   */
+  const decideOpenTarget = useCallback((key: string | null) => {
+    if (openDecidedRef.current) return;
+    openDecidedRef.current = true;
+    if (!key) return;
+    openTargetRef.current = key;
+    atBottomRef.current = false;
+    followUntilRef.current = 0;
+  }, []);
+
+  /**
+   * Lignes dans l'ordre d'AFFICHAGE de la liste inversée : le plus récent en premier.
+   *
+   * ⚠️ `rows` reste chronologique — c'est lui qui porte le regroupement des séries, la
+   * détection du premier non-lu, tout ce qui raisonne « avant / après ». Seule la liste
+   * consomme cet ordre retourné, et tout `scrollToIndex` doit chercher son index ICI.
+   */
+  const displayRows = useMemo(() => [...rows].reverse(), [rows]);
+
+  /**
+   * Unique point de défilement vers une ligne précise (repère de reprise, épinglé, favori).
+   *
+   * Mémorise la cible : si `scrollToIndex` échoue faute de cellule montée,
+   * `onScrollToIndexFailed` s'en approche à l'estimation — ce qui force le rendu — puis
+   * relance depuis ici. Sans cette reprise, l'appel échouait sans le moindre signe.
+   */
+  const scrollToRow = useCallback(
+    (key: string, viewPosition: number, viewOffset = 0, animated = false) => {
+      const index = displayRows.findIndex((r) => r.key === key);
+      if (index < 0) return;
+      pendingScrollRef.current = { key, viewPosition, viewOffset, animated, tries: 0 };
+      listRef.current?.scrollToIndex({ index, animated, viewPosition, viewOffset });
+    },
+    [displayRows],
+  );
+
+  // Second temps du saut vers un message qui n'était pas chargé : la fenêtre est arrivée,
+  // la liste l'a rendue, on peut enfin viser la ligne.
+  useEffect(() => {
+    const id = pendingJumpRef.current;
+    if (!id) return;
+    const row = displayRows.find((r) => r.messages.some((m) => m.id === id));
+    if (!row) return;
+    pendingJumpRef.current = null;
+    scrollToRow(row.key, 0.5, 0, false);
+    const to = setTimeout(() => setHighlightId(null), 2500);
+    return () => clearTimeout(to);
+  }, [displayRows, scrollToRow]);
+
+  /**
+   * Ligne portant le repère de reprise.
+   *
+   * Le compte vient du serveur : il vaut le total réel, pas ce qui se trouve à l'écran.
+   */
+  const firstUnread = useMemo(() => {
+    if (!unreadInfo) return null;
+    const row = rows.find((r) => r.messages.some((m) => m.id === unreadInfo.id));
+    return row ? { key: row.key, count: unreadInfo.count } : null;
+  }, [rows, unreadInfo]);
+
+  // ⚠️ Dans un effet et non pendant le rendu : `decideOpenTarget` écrit dans des refs de
+  // défilement. Se déclenche au premier fil non vide — donc après le chargement de
+  // l'historique, quand `firstUnread` a sa valeur définitive.
+  useEffect(() => {
+    if (!rows.length || openDecidedRef.current) return;
+    // Figé AVANT la décision : les deux doivent désigner la même ligne.
+    setDivider(firstUnread);
+    decideOpenTarget(firstUnread?.key ?? null);
+    // ⚠️ Le calage est lancé ICI, et pas seulement depuis `onContentSizeChange`. Cet effet
+    // s'exécute APRÈS le rendu, donc après le changement de taille du contenu qui suivait
+    // le chargement de l'historique : ce dernier trouvait encore la cible vide. Avant
+    // l'inversion, le contenu grandissait longtemps (cellules montées par lots depuis le
+    // haut) et une mesure ultérieure rattrapait le coup ; inversée, la liste se stabilise
+    // tout de suite et la fenêtre était simplement ratée.
+    if (firstUnread) {
+      scrollToRow(firstUnread.key, 1, -(insets.top + HEADER_H + OPEN_TARGET_MARGIN));
+    }
+  }, [rows.length, firstUnread, decideOpenTarget, scrollToRow, insets.top]);
+
+
   // Sous-titre (priorité : frappe > en ligne > vu le… > rien).
   const subtitle = peerTyping
     ? t('chat.typing')
@@ -1698,18 +2075,65 @@ export default function ChatScreen() {
   // Défilement + surlignage temporaire vers un message (épinglé/favori) demandé par le panneau.
   useEffect(() => {
     if (!scrollTarget) return;
-    // Index de la LIGNE qui porte ce message : un album en réunit plusieurs.
-    const idx = rows.findIndex((r) => r.messages.some((m) => m.id === scrollTarget));
-    if (idx < 0) return; // message non chargé (trop ancien) → on ignore
     // On va ailleurs qu'en bas : la fenêtre de suivi d'ouverture ne doit pas nous y ramener.
     followUntilRef.current = 0;
     atBottomRef.current = false;
-    listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
-    setHighlightId(scrollTarget);
+
+    /**
+     * ⚠️ La cible est copiée et l'état vidé TOUT DE SUITE, et cet effet n'a AUCUN nettoyage.
+     *
+     * Il en avait un — un drapeau « annulé » — et c'est ce qui empêchait le saut de
+     * fonctionner : `setScrollTarget(null)` provoque un rendu, donc relance l'effet, donc
+     * déclenche son nettoyage. La requête partait bien, mais sa réponse arrivait après
+     * l'annulation et était jetée. Un effet qui vide l'état qui le déclenche ne peut pas
+     * annuler son propre travail au nettoyage.
+     *
+     * L'obsolescence est donc suivie par une ref : seule une NOUVELLE demande de saut
+     * périme la précédente.
+     */
+    const targetId = scrollTarget;
     setScrollTarget(null);
-    const to = setTimeout(() => setHighlightId(null), 2500);
-    return () => clearTimeout(to);
-  }, [scrollTarget, rows]);
+    jumpRequestRef.current = targetId;
+
+    const highlight = () => {
+      setHighlightId(targetId);
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = setTimeout(() => setHighlightId(null), 2500);
+    };
+
+    // Le message est déjà en mémoire : rien à charger.
+    const row = displayRows.find((r) => r.messages.some((m) => m.id === targetId));
+    if (row) {
+      scrollToRow(row.key, 0.5, 0, true);
+      highlight();
+      return;
+    }
+
+    /**
+     * Message hors de la mémoire — un épinglé d'il y a un mois, typiquement. On charge une
+     * fenêtre CENTRÉE sur lui : on ne peut pas défiler vers une ligne absente de la liste,
+     * et remonter page par page jusqu'à elle serait interminable.
+     *
+     * Elle REMPLACE le contenu du fil : le chaînage avec ce qui était affiché n'existe pas
+     * forcément, et le recoller donnerait un historique troué. `hasNewer` prend le relais
+     * pour redescendre vers le présent.
+     */
+    apiRequest<AroundPage>(
+      `/conversations/${id}/messages/around/${targetId}?before=25&after=25`,
+    )
+      .then((page) => {
+        if (jumpRequestRef.current !== targetId) return; // un autre saut a été demandé depuis
+        for (const m of page.messages) seenIdsRef.current.add(m.id);
+        hasOlderRef.current = page.hasOlder;
+        hasNewerRef.current = page.hasNewer;
+        setMessages(page.messages.slice().reverse());
+        // Calage en deux temps : `scrollToRow` cherche son index dans `displayRows`, qui
+        // n'existera qu'au rendu suivant le remplacement des messages.
+        pendingJumpRef.current = targetId;
+        highlight();
+      })
+      .catch(() => {});
+  }, [scrollTarget, displayRows, scrollToRow, id]);
 
   const openDetails = () => {
     if (convType === 'group') {
@@ -1973,42 +2397,46 @@ export default function ChatScreen() {
         <FlatList
           ref={listRef}
           style={{ flex: 1 }}
-          data={rows}
+          // ⚠️ Liste INVERSÉE. Elle se rend depuis le bas, si bien que charger de
+          // l'historique devient un ajout À LA FIN — qui ne touche jamais ce qui se trouve
+          // au-dessus du regard. C'est ce qui supprime le sursaut : dans une liste normale,
+          // les messages insérés en tête sortent de la zone visible, y sont virtualisés avec
+          // une hauteur ESTIMÉE, et chaque cellule qui se monte remplace cette estimation —
+          // donc décale le point d'ancrage, une image après l'autre.
+          inverted
+          data={displayRows}
+          // ⚠️ 10 par défaut, ce qui ne mesurait que les 10 messages les plus récents : tout
+          // défilement ciblé plus haut échouait faute de cellule montée. 25 couvre
+          // largement un repère de reprise ou un épinglé récent, pour un coût de montage
+          // négligeable — ce sont des bulles, pas des écrans.
+          initialNumToRender={25}
           keyExtractor={(row) => row.key}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           // Pas de `gap` : l'écart est porté par chaque bulle, il varie selon le regroupement.
           contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 14 }}
-          // ⚠️ Espace de fin en ÉLÉMENT, pas en `paddingBottom` : le débordement de la
+          // ⚠️ Espaces d'extrémité en ÉLÉMENTS, pas en `padding` : le débordement de la
           // liste (marginBottom négatif) place son bas sous la zone de saisie, et il faut
-          // rendre au fil exactement cette hauteur. Un pied de liste est un enfant réel,
-          // donc mesuré et compté dans la taille du contenu — ce dont dépend
-          // `scrollToEnd`, alors qu'un padding de conteneur ne l'était pas ici.
-          // Rend au fil la hauteur occupée par la carte du header (marge d'écran + décalage
-          // de 4 + hauteur), moins le paddingTop déjà appliqué au contenu.
-          ListHeaderComponent={
-            <View
-              style={{
-                // Rend au fil la hauteur des éléments flottants — header, et bandeau de
-                // partage quand il est là — pour que le premier message ne passe pas dessous.
-                height:
-                  insets.top + HEADER_H + 6 + (liveBannerVisible ? LIVE_BANNER_H + 6 : 0),
-                justifyContent: 'flex-end',
-              }}
-            >
-              {loadingOlder && (
-                <ActivityIndicator size="small" color={NEXA} style={{ marginBottom: 8 }} />
-              )}
-            </View>
-          }
-          ListFooterComponent={<View style={{ height: composerOverlap + 24 }} />}
-          // Chargement de l'historique à l'approche du haut du fil.
-          onStartReached={loadOlder}
+          // rendre au fil exactement cette hauteur. Un en-tête ou un pied de liste est un
+          // enfant réel, donc mesuré et compté dans la taille du contenu — ce dont dépend
+          // le calage, alors qu'un padding de conteneur ne l'était pas ici.
+          // ⚠️ Les deux extrémités sont ÉCHANGÉES par l'inversion : l'en-tête de liste
+          // s'affiche en BAS de l'écran, le pied en HAUT. L'espace réservé à la carte
+          // d'en-tête flottante devient donc le PIED, et le débordement sous la zone de
+          // saisie devient l'EN-TÊTE. Les intervertir est l'erreur la plus facile à
+          // commettre ici, et elle ne se voit qu'aux extrémités du fil.
+          ListHeaderComponent={<View style={{ height: composerOverlap + 24 }} />}
+          ListFooterComponent={listHeader}
+          // L'historique est désormais à la FIN du contenu : c'est `onEndReached` qui le
+          // charge, et `maintainVisibleContentPosition` n'a plus lieu d'être — on n'insère
+          // plus rien au-dessus de ce qu'on regarde.
+          onEndReached={loadOlder}
+          onEndReachedThreshold={0.4}
+          // ⚠️ Liste inversée : le DÉBUT, c'est le présent. Sert quand le fil a été ouvert au
+          // milieu de l'historique (repère de reprise, saut vers un épinglé ancien) et qu'il
+          // faut pouvoir redescendre jusqu'au bas — sans quoi ce serait un cul-de-sac.
+          onStartReached={loadNewer}
           onStartReachedThreshold={0.4}
-          // ⚠️ Indispensable ici : insérer des messages EN TÊTE pousse tout le contenu vers
-          // le bas, et sans cela le fil sauterait d'une page entière sous le doigt. L'index
-          // de référence est 1 pour ignorer l'espace de tête, qui n'est pas un message.
-          maintainVisibleContentPosition={{ minIndexForVisible: 1 }}
           scrollEventThrottle={16}
           onScroll={(e) => {
             const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
@@ -2016,15 +2444,27 @@ export default function ChatScreen() {
             // grandi d'une bulle. Un seuil serré ferait basculer « plus en bas » à ce
             // moment-là et couperait le suivi juste après l'avoir armé. C'est le geste de
             // l'utilisateur, pas la mesure au pixel, qui doit arrêter le suivi.
-            const distance = contentSize.height - layoutMeasurement.height - contentOffset.y;
+            // ⚠️ Liste inversée : le bas du fil est à l'offset ZÉRO. La distance au bas
+            // est donc l'offset lui-même, et non ce qu'il reste de contenu en dessous.
+            const distance = contentOffset.y;
             distanceRef.current = distance;
             atBottomRef.current = distance < 100;
+
+            // ⚠️ Chargement des messages plus RÉCENTS déclenché ici, et pas seulement par
+            // `onStartReached` : celui-ci ne se déclenche pas de façon fiable sur une liste
+            // inversée, si bien qu'après un saut au milieu de l'historique on ne pouvait
+            // plus redescendre jusqu'au présent. La mesure nécessaire est déjà calculée
+            // au-dessus, autant s'en servir. `loadNewer` se garde lui-même contre les
+            // appels concurrents et sort tout de suite s'il n'y a rien de plus récent.
+            if (distance < layoutMeasurement.height * 1.5) loadNewer();
           }}
           // Le doigt sur la liste prime sur tout repositionnement automatique.
           onScrollBeginDrag={() => {
             draggingRef.current = true;
-            // L'utilisateur reprend la main : la fenêtre de suivi s'arrête là.
+            // L'utilisateur reprend la main : la fenêtre de suivi s'arrête là, et un
+            // défilement ciblé encore en cours de reprise ne doit pas lui repasser devant.
             followUntilRef.current = 0;
+            pendingScrollRef.current = null;
           }}
           onScrollEndDrag={() => {
             draggingRef.current = false;
@@ -2035,6 +2475,27 @@ export default function ChatScreen() {
           // Seul déclencheur du suivi : le contenu vient de grandir (message, média chargé,
           // clavier). `scrollToBottom` décide s'il faut suivre et repasse jusqu'à se caler.
           onContentSizeChange={() => {
+            // Ouverture sur le repère de reprise : on vise la ligne, pas le bas. Rejoué à
+            // chaque mesure tant que le fil n'est pas dévoilé — les cellules se montent par
+            // lots, et la position juste n'est connue qu'une fois celles du dessus mesurées.
+            if (openTargetRef.current) {
+              // ⚠️ `viewPosition: 1` et non 0 : la liste étant inversée, la fin de la
+              // fenêtre visible correspond au HAUT de l'écran. C'est là qu'on veut le
+              // repère, pour lire vers le bas à partir de lui.
+              //
+              // ⚠️ Décalage NÉGATIF, contre l'intuition. Le calcul de React Native est
+              // `offset = position - viewOffset - …` : un décalage positif RÉDUIT l'offset
+              // de défilement, ce qui, dans une liste inversée, remonte l'élément vers le
+              // haut de l'écran — soit exactement sous la carte d'en-tête qu'on cherchait à
+              // éviter. Le signe opposé le repousse sous elle.
+              scrollToRow(
+                openTargetRef.current,
+                1,
+                -(insets.top + HEADER_H + OPEN_TARGET_MARGIN),
+              );
+              scheduleReveal();
+              return;
+            }
             // Pendant la fenêtre de suivi, le rattrapage reste animé : la mesure d'une
             // bulle haute déplace le fil de plusieurs centaines de pixels, et un saut sec
             // juste après le glissement d'entrée se verrait comme un à-coup.
@@ -2045,7 +2506,10 @@ export default function ChatScreen() {
           }}
           // Filet de sécurité à l'ouverture : le contentSize peut arriver avant que la liste
           // ait sa hauteur → on force une fois le positionnement en bas au premier layout.
-          onLayout={() => scrollToBottom()}
+          onLayout={() => {
+            if (openTargetRef.current) return; // le calage sur le repère s'en charge
+            scrollToBottom();
+          }}
           renderItem={({ item: row, index }: { item: Row; index: number }) => {
             const album = row.messages.length > 1 ? row.messages : null;
             // Un album reste « en envoi » tant qu'un seul de ses médias l'est : il ne doit
@@ -2068,8 +2532,14 @@ export default function ChatScreen() {
             const reaction = isStoryReply && isEmojiOnly(item.content);
             // Position dans la série : pilote le nom, l'écart au précédent et les coins.
             // On compare de ligne à ligne, en prenant les messages qui se font face.
-            const prevRow = rows[index - 1];
-            const nextRow = rows[index + 1];
+            //
+            // ⚠️ `index` parcourt `displayRows`, retourné par l'inversion : le message
+            // chronologiquement PRÉCÉDENT est donc à `index + 1`, et le SUIVANT à
+            // `index - 1`. Les intervertir ne casse rien de visible immédiatement — les
+            // séries se regroupent simplement à l'envers, nom en pied de série et queue de
+            // bulle sur le mauvais message.
+            const prevRow = displayRows[index + 1];
+            const nextRow = displayRows[index - 1];
             const firstOfGroup = !sameGroup(prevRow?.messages[prevRow.messages.length - 1], item);
             const lastOfGroup = !sameGroup(row.messages[row.messages.length - 1], nextRow?.messages[0]);
             const radius = bubbleRadius(isMe, firstOfGroup, lastOfGroup);
@@ -2091,6 +2561,16 @@ export default function ChatScreen() {
               : '';
 
             return (
+              <>
+              {/* Repère de reprise de lecture, posé juste avant le premier message non lu. */}
+              {divider?.key === row.key && (
+                <UnreadDivider
+                  label={t(
+                    divider.count === 1 ? 'chat.new_messages_one' : 'chat.new_messages_other',
+                    { count: divider.count },
+                  )}
+                />
+              )}
               <MessageEnter
                 messageId={item.id}
                 seenIds={seenIdsRef}
@@ -2100,7 +2580,16 @@ export default function ChatScreen() {
                 onLongPress={sending ? undefined : () => openMessageMenu(item.id)}
                 className={`max-w-[80%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
                 style={[
-                  { marginTop: index === 0 ? 0 : firstOfGroup ? GROUP_GAP : GROUP_GAP_TIGHT },
+                  {
+                    // ⚠️ Pas d'écart au-dessus du message le plus ANCIEN, qui ouvre le fil.
+                    // Avec l'inversion il est en dernière position, plus en première.
+                    marginTop:
+                      index === displayRows.length - 1
+                        ? 0
+                        : firstOfGroup
+                          ? GROUP_GAP
+                          : GROUP_GAP_TIGHT,
+                  },
                   highlighted
                     ? // Concentrique avec la bulle qu'il entoure : rayon de la bulle + son écart.
                       {
@@ -2325,9 +2814,50 @@ export default function ChatScreen() {
                   </>
                 )}
               </MessageEnter>
+              </>
             );
           }}
-          onScrollToIndexFailed={() => {}}
+          /**
+           * ⚠️ Sans `getItemLayout` — impossible ici, les hauteurs de bulles étant
+           * variables — `scrollToIndex` échoue tant que la cible n'est pas montée.
+           *
+           * Ignorer l'échec, comme avant, marchait tant que la seule cible était un message
+           * déjà à l'écran. Pour l'ouverture sur le repère, la cible peut être loin dans le
+           * fil : on s'en approche à l'estimation, ce qui force son rendu, puis on retente à
+           * l'image suivante. C'est le remède documenté en l'absence de `getItemLayout`.
+           */
+          onScrollToIndexFailed={(info) => {
+            // On s'approche à l'estimation : ça force le rendu des cellules manquantes.
+            listRef.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: false,
+            });
+            const target = pendingScrollRef.current;
+            // Plafond de reprises : sur une cible introuvable, mieux vaut s'arrêter là que
+            // relancer indéfiniment une liste qui n'ira jamais plus loin.
+            if (!target || target.tries >= SCROLL_MAX_TRIES) {
+              pendingScrollRef.current = null;
+              return;
+            }
+            target.tries += 1;
+            // ⚠️ Un délai, PAS `requestAnimationFrame`. VirtualizedList monte ses cellules
+            // par lots espacés d'`updateCellsBatchingPeriod` (50 ms par défaut) : repasser à
+            // l'image suivante (~16 ms) retombe sur exactement le même nombre de cellules
+            // mesurées, et la reprise tourne à vide — c'est ce que montraient les traces,
+            // avec `highestMeasuredFrameIndex` figé d'un essai à l'autre.
+            setTimeout(() => {
+              const t = pendingScrollRef.current;
+              if (!t) return;
+              const index = displayRows.findIndex((r) => r.key === t.key);
+              if (index < 0) return;
+              listRef.current?.scrollToIndex({
+                index,
+                animated: t.animated,
+                viewPosition: t.viewPosition,
+                viewOffset: t.viewOffset,
+              });
+            }, SCROLL_RETRY_MS);
+          }}
         />
         </Animated.View>
 

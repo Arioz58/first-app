@@ -108,7 +108,9 @@
     "typing": "En train d'écrire…",
     "online": "En ligne",
     "delete": "Supprimer",
-    "delete_confirm": "Supprimer ce message ?"
+    "delete_confirm": "Supprimer ce message ?",
+    "new_messages_one": "1 nouveau message",
+    "new_messages_other": "{{count}} nouveaux messages"
   },
   "details": {
     "title": "Détails",
