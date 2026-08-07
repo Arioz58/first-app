@@ -62,7 +62,19 @@ export default function RootLayout() {
   useEffect(() => {
     const open = (data?: Record<string, unknown>) => {
       const conversationId = data?.conversationId;
-      if (typeof conversationId === "string") router.push(`/chat/${conversationId}`);
+      if (typeof conversationId !== "string") return;
+      // La notification porte deja le nom et la photo affiches (`displayName` /
+      // `avatarUrl`, poses par le serveur pour l'extension iOS) : les transmettre evite
+      // que l'en-tete du chat reste vide le temps du chargement.
+      // `senderName` n'est present qu'en groupe — c'est ainsi que l'extension distingue
+      // les deux cas, on s'en sert pareillement.
+      const name = typeof data?.displayName === "string" ? data.displayName : "";
+      const photo = typeof data?.avatarUrl === "string" ? data.avatarUrl : "";
+      const type = typeof data?.senderName === "string" ? "group" : "direct";
+      router.push({
+        pathname: "/chat/[id]" as any,
+        params: { id: conversationId, name, photo, type },
+      });
     };
 
     // App lancée DEPUIS la notification (elle était fermée) : l'événement est déjà passé

@@ -573,6 +573,15 @@ export default function ChatScreen() {
   // ⚠️ `|| null` et non `?? null` : un paramètre de route absent arrive en chaîne VIDE, que
   // `??` laisserait passer — `UserAvatar` recevrait alors une URL vide au lieu de retomber
   // sur l'initiale.
+  /**
+   * Nom tel que le serveur le connaît.
+   *
+   * ⚠️ Le nom d'en-tête ne venait QUE du paramètre de route. Ça marchait tant qu'on
+   * arrivait depuis un écran qui le connaissait — mais pas depuis une NOTIFICATION, qui
+   * n'en passe aucun : l'en-tête restait vide et l'avatar affichait « ? », y compris une
+   * fois la conversation chargée. L'écran doit pouvoir se nommer lui-même.
+   */
+  const [fetchedName, setFetchedName] = useState('');
   const [groupPhoto, setGroupPhoto] = useState<string | null>(
     typeParam === 'group' ? photo || null : null,
   );
@@ -926,6 +935,12 @@ export default function ChatScreen() {
         setMutedUntil(meta.myMutedUntil);
         setWhoCanSend(meta.whoCanSend ?? 'all');
         setMyRole(meta.myRole ?? 'member');
+        // Groupe : son nom. Direct : celui de l'autre participant.
+        setFetchedName(
+          meta.type === 'group'
+            ? meta.name ?? ''
+            : meta.members.find((m) => m.userId !== me.id)?.user.name ?? '',
+        );
         // État initial des accusés, à partir des autres membres.
         setReceipts(
           Object.fromEntries(
@@ -1126,10 +1141,16 @@ export default function ChatScreen() {
 
         // Photo du groupe changée (par moi depuis les détails, ou par un autre admin) :
         // le header suit sans qu'on ait à rouvrir la conversation.
-        socket.on('group_updated', (d: { conversationId: string; photoUrl?: string | null }) => {
-          if (d.conversationId !== id) return;
-          setGroupPhoto(d.photoUrl ?? null);
-        });
+        socket.on(
+          'group_updated',
+          (d: { conversationId: string; name?: string; photoUrl?: string | null }) => {
+            if (d.conversationId !== id) return;
+            setGroupPhoto(d.photoUrl ?? null);
+            // Le nom aussi : sans ça, un groupe renommé gardait son ancien titre jusqu'à
+            // la prochaine ouverture de l'écran.
+            if (d.name) setFetchedName(d.name);
+          },
+        );
 
         // Reconnexion — retour au premier plan, ou réseau retrouvé. La conversation a été
         // quittée côté serveur en même temps que la connexion : sans ce rattrapage, l'écran
@@ -1629,7 +1650,10 @@ export default function ChatScreen() {
   };
 
   // --- Valeurs dérivées ---
-  const displayName = custom.nickname || name || '';
+  // Le surnom local d'abord, puis le nom du serveur — qui fait foi et couvre l'ouverture
+  // depuis une notification —, le paramètre de route ne servant qu'à remplir l'en-tête
+  // avant la première réponse.
+  const displayName = custom.nickname || fetchedName || name || '';
   const bubbleColor = resolveBubbleColor(custom.bubbleColor);
   // La queue est une View à part : elle ne peut pas hériter du `bg-white dark:bg-zinc-900`
   // des bulles reçues, il faut donc la couleur en dur (zinc-900 = #18181b).

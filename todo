@@ -147,6 +147,19 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
     → images du chat : aucun `transition` ni fond d'attente, elles surgissaient d'un coup dans un trou vide. `lib/mediaAppearance.ts` (fond gris translucide + fondu 180 ms) applique aux bulles, aux albums et a la galerie. Gris TRANSLUCIDE et non une couleur de theme : ces vues sont posees sur des fonds tres varies (bulle blanche, bulle en degrade, visionneuse noire).
     → telechargement groupe (chat/media) : l'indicateur existait mais les fichiers partent UN PAR UN — sur des dizaines de photos, rien ne distinguait « ca avance » de « c'est bloque ». Decompte « 12/40 » a cote de l'indicateur, incremente dans un `finally` (un fichier en echec a quand meme ete traite).
 
+  [FAIT 07/08] Album envoye = UNE seule notification (on en recevait N).
+    ⚠️ Cause structurelle : un message ne porte qu'une piece jointe, donc N photos = N messages, et le serveur poussait par message — alors que le destinataire ne voit qu'UNE bulle.
+    → on pousse sur le PREMIER message de l'album, pas le dernier : ils sont espaces par la duree de chaque televersement, attendre le dernier ferait arriver la notification longtemps apres le message.
+    → le nombre annonce vient du `batchId` (`#<n>`), qui le transportait deja pour le rassemblement cote reception. ⚠️ C'est le nombre VOULU par l'expediteur : si un televersement echoue il en arrivera un de moins. Ecart rare, et la seule alternative serait d'attendre le dernier message.
+    ⚠️ Les messages SUIVANTS ne sont pas supprimes du push : ils basculent en push SILENCIEUX. Les couper priverait un destinataire hors ligne de leur accuse de reception, qui voyage justement dans le push.
+    [A FAIRE] Consequences non traitees, a juger a l'usage : un album compte N messages NON LUS (pastille a N) et emet N `conversation_updated`, donc la liste se rafraichit N fois. Corriger demanderait de compter les batchs comme une unite dans `countUnreadMessages` (SQL) et dans la liste.
+
+  [FAIT 07/08] Ouverture depuis une NOTIFICATION : en-tete vide et avatar « ? ».
+    ⚠️ Cause : `displayName` ne venait QUE du parametre de route. Ca tenait tant qu'on arrivait d'un ecran qui connaissait le nom — une notification n'en passe aucun, et l'en-tete restait vide MEME une fois la conversation chargee. L'ecran ne savait pas se nommer lui-meme.
+    → `fetchedName` alimente par les metadonnees (nom du groupe, ou nom de l'autre participant) et par l'event `group_updated`. Il PRIME sur le parametre de route, qui peut etre perime (groupe renomme depuis) et ne sert plus qu'a remplir l'en-tete avant la premiere reponse.
+    → en complement, `app/_layout.tsx` transmet `displayName` / `avatarUrl` que la notification portait deja (poses par le serveur pour l'extension iOS) : l'en-tete est juste des la premiere image au lieu d'attendre le chargement. `senderName` n'etant present qu'en groupe, il sert a deduire le type — meme regle que l'extension.
+    → au passage : un groupe renomme gardait son ancien titre jusqu'a la reouverture de l'ecran, l'event `group_updated` ne mettant a jour que la photo.
+
 [A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
   → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.
 
