@@ -160,6 +160,13 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
     → en complement, `app/_layout.tsx` transmet `displayName` / `avatarUrl` que la notification portait deja (poses par le serveur pour l'extension iOS) : l'en-tete est juste des la premiere image au lieu d'attendre le chargement. `senderName` n'etant present qu'en groupe, il sert a deduire le type — meme regle que l'extension.
     → au passage : un groupe renomme gardait son ancien titre jusqu'a la reouverture de l'ecran, l'event `group_updated` ne mettant a jour que la photo.
 
+  [FAIT 07/08] App TUEE + appui sur une notification = ecran noir fige. (Arriere-plan : OK.)
+    ⚠️ Cause 1 — `setChecked(true)` etait la DERNIERE instruction de `init`, apres l'ouverture du socket ET l'enregistrement du jeton push. Tant que ces deux-la n'avaient pas repondu, le layout rendait `null` : rien a l'ecran. Et il n'y avait AUCUN try : la moindre erreur de l'un d'eux empechait `setChecked(true)` d'etre atteint et figeait l'app POUR TOUJOURS.
+      Invisible au demarrage normal (l'app est deja lancee, `checked` deja vrai). Mais un lancement A FROID depuis une notification est precisement le moment ou le reseau n'est pas etabli et ou l'enregistrement du jeton peut trainer ou echouer.
+      → l'affichage ne depend plus QUE de la decision d'authentification (`finally`) ; socket, jeton push et compteurs se font APRES le rendu, chacun encaissant son echec.
+    ⚠️ Cause 2 — la navigation depuis la notification partait AVANT que le navigateur existe (le layout rendait encore `null`), donc dans le vide : meme une fois debloque, l'app se serait ouverte sur son ecran par defaut au lieu de la conversation. → cible mise de cote (`pendingChat`) et rejouee des que le navigateur est monte.
+    → l'ecran etait NOIR et non blanc a cause du fond `#000` pose a la racine pour le recul des drawers : il ne cause pas le bug mais il l'a rendu spectaculaire.
+
 [A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
   → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.
 

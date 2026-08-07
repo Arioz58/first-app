@@ -1,6 +1,6 @@
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as Notifications from "expo-notifications";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 // Fournit la position du clavier, mesurée nativement image par image, aux écrans qui
@@ -56,6 +56,11 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const [checked, setChecked] = useState(false);
+  // Miroir du drapeau, lisible depuis les écouteurs de notification : eux sont posés une
+  // fois pour toutes et ne verraient jamais la valeur d'état changer.
+  const checkedRef = useRef(false);
+  // Conversation à ouvrir dès que le navigateur existe (voir `open` ci-dessous).
+  const pendingChat = useRef<Record<string, string> | null>(null);
 
   // Ouverture depuis une notification. Sans cela, taper une notification de message
   // se contentait de lancer l'app sur son dernier écran, sans mener à la conversation.
@@ -71,10 +76,17 @@ export default function RootLayout() {
       const name = typeof data?.displayName === "string" ? data.displayName : "";
       const photo = typeof data?.avatarUrl === "string" ? data.avatarUrl : "";
       const type = typeof data?.senderName === "string" ? "group" : "direct";
-      router.push({
-        pathname: "/chat/[id]" as any,
-        params: { id: conversationId, name, photo, type },
-      });
+      const params = { id: conversationId, name, photo, type };
+
+      // ⚠️ Lancement À FROID depuis une notification : cette fonction est appelée AVANT que
+      // le layout ait rendu quoi que ce soit, donc avant que le navigateur existe — la
+      // navigation partait dans le vide et l'app s'ouvrait sur son écran par défaut. On la
+      // met de côté, l'effet ci-dessous la rejoue une fois le navigateur monté.
+      if (!checkedRef.current) {
+        pendingChat.current = params;
+        return;
+      }
+      router.push({ pathname: "/chat/[id]" as any, params });
     };
 
     // App lancée DEPUIS la notification (elle était fermée) : l'événement est déjà passé
@@ -91,6 +103,15 @@ export default function RootLayout() {
     );
     return () => sub.remove();
   }, [router]);
+
+  // Ouverture différée : le navigateur vient d'être monté, la conversation mise de côté
+  // pendant le lancement peut enfin s'ouvrir.
+  useEffect(() => {
+    if (!checked || !pendingChat.current) return;
+    const params = pendingChat.current;
+    pendingChat.current = null;
+    router.push({ pathname: "/chat/[id]" as any, params });
+  }, [checked, router]);
 
   // Le serveur ne notifie que les utilisateurs hors ligne : on ferme donc le socket dès
   // que l'app passe en arrière-plan, plutôt que d'attendre que la coupure se voie d'elle-même
@@ -112,43 +133,66 @@ export default function RootLayout() {
     // suivi là où il en était, plutôt que de le laisser figé jusqu'à son échéance.
     hydrateLiveShares().catch(() => {});
 
+    /**
+     * ⚠️ L'affichage ne dépend QUE de la décision d'authentification.
+     *
+     * `setChecked(true)` était la DERNIÈRE instruction, après l'ouverture du socket et
+     * l'enregistrement du jeton push. Tant que ces deux-là n'avaient pas répondu, le layout
+     * rendait `null` — donc rien à l'écran. Et il n'y avait aucun `try` : la moindre erreur
+     * de l'un d'eux empêchait `setChecked(true)` d'être atteint, et l'app restait figée sur
+     * un écran vide POUR TOUJOURS.
+     *
+     * Invisible au démarrage normal, où l'app est déjà lancée. Mais un lancement À FROID
+     * depuis une notification est précisément le moment où le réseau n'est pas encore
+     * établi et où l'enregistrement du jeton peut traîner ou échouer.
+     *
+     * Tout ce qui n'est pas la décision d'authentification se fait donc APRÈS le rendu, et
+     * chaque tâche encaisse son échec de son côté.
+     */
     const init = async () => {
-      const token = await getAccessToken();
-      const refreshToken = await getRefreshToken();
-      const inAuth = segments[0] === "(auth)";
+      let authenticated = false;
+      try {
+        const token = await getAccessToken();
+        const refreshToken = await getRefreshToken();
+        const inAuth = segments[0] === "(auth)";
 
-      if (!token) {
-        if (!inAuth) router.replace("/(auth)/welcome");
+        if (!token) {
+          if (!inAuth) router.replace("/(auth)/welcome");
+        } else if (isTokenExpired(token) && (!refreshToken || isTokenExpired(refreshToken))) {
+          await clearTokens();
+          router.replace("/(auth)/welcome");
+        } else {
+          if (inAuth) router.replace("/(tabs)");
+          authenticated = true;
+        }
+      } catch {
+        // Trousseau illisible : mieux vaut rendre l'app, quitte à ce qu'un appel échoue
+        // ensuite avec son message, que la laisser sur un écran vide.
+      } finally {
+        checkedRef.current = true;
         setChecked(true);
-        return;
       }
 
-      const accessExpired = isTokenExpired(token);
-      const refreshExpired = !refreshToken || isTokenExpired(refreshToken);
+      if (!authenticated) return;
 
-      if (accessExpired && refreshExpired) {
-        await clearTokens();
-        router.replace("/(auth)/welcome");
-        setChecked(true);
-        return;
-      }
-
-      if (inAuth) router.replace("/(tabs)");
-      const socket = await connectSocket();
-      // Notifications in-app temps réel (demandes d'amis) quand l'app est ouverte.
-      socket.off("friend_request_received");
-      socket.on("friend_request_received", (p: { from: { name: string } }) => {
-        localNotify(p.from.name, i18n.t("notifications.friend_request"));
-        incrementPendingFriendRequests();
-      });
-      socket.off("friend_request_accepted");
-      socket.on("friend_request_accepted", (p: { by: { name: string } }) => {
-        localNotify(p.by.name, i18n.t("notifications.friend_accepted"));
-      });
-      await registerForPushNotifications();
-      registerDeliveryReceiptTask();
+      connectSocket()
+        .then((socket) => {
+          // Notifications in-app temps réel (demandes d'amis) quand l'app est ouverte.
+          socket.off("friend_request_received");
+          socket.on("friend_request_received", (p: { from: { name: string } }) => {
+            localNotify(p.from.name, i18n.t("notifications.friend_request"));
+            incrementPendingFriendRequests();
+          });
+          socket.off("friend_request_accepted");
+          socket.on("friend_request_accepted", (p: { by: { name: string } }) => {
+            localNotify(p.by.name, i18n.t("notifications.friend_accepted"));
+          });
+        })
+        .catch(() => {});
+      registerForPushNotifications()
+        .then(() => registerDeliveryReceiptTask())
+        .catch(() => {});
       refreshPendingFriendRequests();
-      setChecked(true);
     };
 
     init();
