@@ -1028,6 +1028,22 @@ export default function ChatScreen() {
    * ⚠️ Les anciens messages sont marqués « déjà vus » avant d'être posés : sans cela, toute
    * la page jouerait l'animation d'entrée réservée aux messages qui arrivent.
    */
+  /**
+   * Remplace tout le fil, en tenant `messagesRef` à jour DANS LE MÊME TEMPS.
+   *
+   * ⚠️ La ref était jusqu'ici écrite par un effet, donc APRÈS le rendu. Entre les deux,
+   * `loadNewer` — déclenché par le défilement — lisait encore l'ANCIENNE liste et demandait
+   * au serveur les messages postérieurs à son dernier. Or celui-ci était déjà le dernier de
+   * la conversation : le serveur répondait 0, ce qui était pris pour « il n'y a plus rien »
+   * et coupait la pagination descendante DÉFINITIVEMENT.
+   *
+   * Toute substitution du fil doit donc passer par ici, jamais par `setMessages` seul.
+   */
+  const replaceMessages = useCallback((next: Message[]) => {
+    messagesRef.current = next;
+    setMessages(next);
+  }, []);
+
   const loadOlder = useCallback(async () => {
     if (loadingOlderRef.current || !hasOlderRef.current) return;
     const oldest = messagesRef.current[0];
@@ -1201,7 +1217,7 @@ export default function ChatScreen() {
         for (const m of history) seenIdsRef.current.add(m.id);
         // Le fil s'ouvre en bas, et doit y rester le temps que les bulles soient mesurées.
         followUntilRef.current = Date.now() + OPEN_FOLLOW_WINDOW_MS;
-        setMessages(history.reverse());
+        replaceMessages(history.reverse());
         // Rien à mesurer ni à caler : inutile de faire attendre l'écran vide.
         if (!history.length) revealList();
 
@@ -1426,7 +1442,7 @@ export default function ChatScreen() {
             // Rouvre la décision de calage : le fil vient d'être remplacé, et le repère
             // peut désigner une autre ligne qu'à la dernière ouverture.
             openDecidedRef.current = false;
-            setMessages(history.reverse());
+            replaceMessages(history.reverse());
             apiRequest(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
           })().catch(() => {});
         });
@@ -2126,14 +2142,14 @@ export default function ChatScreen() {
         for (const m of page.messages) seenIdsRef.current.add(m.id);
         hasOlderRef.current = page.hasOlder;
         hasNewerRef.current = page.hasNewer;
-        setMessages(page.messages.slice().reverse());
+        replaceMessages(page.messages.slice().reverse());
         // Calage en deux temps : `scrollToRow` cherche son index dans `displayRows`, qui
         // n'existera qu'au rendu suivant le remplacement des messages.
         pendingJumpRef.current = targetId;
         highlight();
       })
       .catch(() => {});
-  }, [scrollTarget, displayRows, scrollToRow, id]);
+  }, [scrollTarget, displayRows, scrollToRow, replaceMessages, id]);
 
   const openDetails = () => {
     if (convType === 'group') {
