@@ -1,5 +1,6 @@
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as Notifications from "expo-notifications";
+import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -24,6 +25,17 @@ import { hydrateLiveShares } from "../lib/liveLocation";
 import { clearTokens, getAccessToken, getRefreshToken } from "../lib/storage";
 import { initTheme, useThemeColors } from "../lib/theme";
 import "./globals.css";
+
+// ⚠️ À appeler au niveau MODULE, jamais dans un composant ou un effet : sans cela, le splash
+// natif se retire DÈS LE PREMIER RENDU de l'arbre React — et à cet instant ce layout rend
+// encore `null`, la décision d'authentification n'étant pas prise. On découvrait donc la vue
+// racine native, BLANCHE quel que soit le thème, le temps de deux lectures du trousseau.
+// C'est l'éclair blanc entre le splash bleu et l'app.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+// Fondu à la disparition plutôt qu'une coupure sèche : le splash et le premier écran n'ont ni
+// la même couleur ni la même mise en page. ⚠️ `fade` est iOS uniquement ; sur Android le
+// splash se retire sans transition (le correctif du blanc, lui, vaut pour les deux).
+SplashScreen.setOptions({ fade: true, duration: 250 });
 
 // Notif in-app locale (utilisateur en ligne → reçoit l'event socket plutôt qu'un push).
 const localNotify = (title: string, body: string) =>
@@ -128,7 +140,6 @@ export default function RootLayout() {
 
   useEffect(() => {
     setSessionExpiredHandler(() => router.replace("/(auth)/welcome"));
-    initTheme(); // restaure le thème choisi (Système/Clair/Sombre) avant le rendu
     // Un partage de position peut avoir survécu à la fermeture de l'app : on reprend le
     // suivi là où il en était, plutôt que de le laisser figé jusqu'à son échéance.
     hydrateLiveShares().catch(() => {});
@@ -152,6 +163,11 @@ export default function RootLayout() {
     const init = async () => {
       let authenticated = false;
       try {
+        // ⚠️ ATTENDU, et non lancé à côté : c'est une lecture du trousseau. Non attendue, le
+        // premier écran se peignait en CLAIR puis basculait en sombre une image plus tard —
+        // second éclair au lancement, sur les appareils en thème sombre. On est sous le
+        // splash à ce moment-là, donc l'attente ne se voit pas.
+        await initTheme();
         const token = await getAccessToken();
         const refreshToken = await getRefreshToken();
         const inAuth = segments[0] === "(auth)";
@@ -196,6 +212,12 @@ export default function RootLayout() {
     };
 
     init();
+
+    // Filet. `init` pose `checked` dans un `finally`, donc le cas ne devrait pas se produire —
+    // mais une lecture du trousseau qui ne répondrait JAMAIS (ni résolution ni rejet) laisserait
+    // le splash à l'écran indéfiniment, ce qui serait bien pire que l'éclair qu'on corrige.
+    const safety = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 3000);
+    return () => clearTimeout(safety);
   }, []);
 
   // ⚠️ Le fond d'écran du navigateur est BLANC par défaut, quel que soit le thème : celui
@@ -221,7 +243,16 @@ export default function RootLayout() {
 
   // Fond noir : c'est ce qu'on découvre autour de l'écran une fois qu'il a reculé.
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#000" }}>
+    <GestureHandlerRootView
+      style={{ flex: 1, backgroundColor: "#000" }}
+      // ⚠️ Retrait du splash accroché à `onLayout` de la racine, et non à un effet sur
+      // `checked` : un effet s'exécute après le commit React, mais rien ne garantit que la
+      // vue ait été POSÉE — on rouvrirait la fenêtre blanche qu'on vient de fermer, en plus
+      // court. `onLayout` ne se déclenche qu'une fois la racine mesurée et montée.
+      onLayout={() => {
+        SplashScreen.hideAsync().catch(() => {});
+      }}
+    >
     <KeyboardProvider>
     {/* ⚠️ La feuille elle-même n'est PAS ici : elle vit dans un `Modal`, donc au-dessus de
         cette vue et hors de sa transformation — c'est justement ce qui permet de reculer
