@@ -11,12 +11,16 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, {
   FadeInDown,
   FadeOutUp,
+  runOnJS,
+  withSequence,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import * as Clipboard from 'expo-clipboard';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -67,31 +71,30 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ChatBackground } from '../../components/ChatBackground';
 import { GlassSurface, FLOATING_SHADOW } from '../../components/GlassSurface';
 import { RADIUS, ROUND } from '../../lib/radius';
+import { useThreadScroll } from '../../lib/threadScroll';
 import { ProgressiveBlur } from '../../components/ProgressiveBlur';
 import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
 import { UserAvatar } from '../../components/UserAvatar';
+import { QuotedMessage, type Quote } from '../../components/QuotedMessage';
+import {
+  LIKE_EMOJI,
+  MessageActions,
+  buildActions,
+  type Anchor,
+  type MessageAction,
+} from '../../components/MessageActions';
+import {
+  MessageReactions,
+  ReactionsSheet,
+  type Reaction,
+} from '../../components/MessageReactions';
+import { ForwardSheet } from '../../components/ForwardSheet';
 
 const NEXA = '#1E40AF';
 const MUTE_FOREVER = new Date('2999-12-31T00:00:00Z'); // sentinelle « toujours »
 // Plafond de médias par envoi : chaque pièce part en upload S3 depuis le mobile, une
 // sélection massive tiendrait la barre d'envoi occupée trop longtemps.
 const MAX_PENDING = 10;
-// Durée laissée au défilement animé de la FlatList avant la passe de calage finale
-// (le scroll animé natif tourne autour de 300 ms).
-const SMOOTH_SCROLL_MS = 420;
-// Après l'envoi, le fil reste collé au bas pendant cette durée, quoi que disent les mesures.
-//
-// ⚠️ Sans elle, un message LONG se retrouvait sous la zone de saisie : la FlatList le rend
-// d'abord à une hauteur estimée, et sa mesure réelle n'arrive qu'après le calage final. Le
-// contenu grandit alors d'un coup de plusieurs centaines de pixels, mais `atBottomRef` —
-// calculé sur le dernier événement de défilement, donc périmé — est déjà retombé à faux :
-// le repositionnement suivant était abandonné. Seul le geste de l'utilisateur referme cette
-// fenêtre, jamais une mesure.
-const FOLLOW_WINDOW_MS = 1500;
-// Même mécanique à l'ouverture, en plus généreux : un envoi n'ajoute qu'une bulle, alors
-// qu'ici tout un historique est monté par lots et mesuré au fil de l'eau — sans quoi le
-// dernier message se retrouvait sous la zone de saisie dès qu'il était un peu long.
-const OPEN_FOLLOW_WINDOW_MS = 2500;
 // Attente maximale avant d'afficher un album reçu incomplet. Un média peut ne jamais
 // arriver (téléversement en échec chez l'expéditeur) : sans ce plafond, les autres
 // resteraient retenus pour toujours.
@@ -99,12 +102,6 @@ const ALBUM_WAIT_MS = 6000;
 // Marge au-dessus du repère de reprise quand on ouvre dessus : la carte d'en-tête FLOTTE
 // au-dessus du fil, aligner le repère sur le haut de la zone visible le glisserait dessous.
 const OPEN_TARGET_MARGIN = 16;
-// Attente entre deux tentatives de `scrollToIndex`. Calée au-dessus de la période de
-// regroupement des rendus de VirtualizedList (50 ms), sans quoi on retombe sur le même
-// nombre de cellules mesurées.
-const SCROLL_RETRY_MS = 120;
-// De quoi franchir plusieurs lots de cellules ; au-delà, la cible est hors d'atteinte.
-const SCROLL_MAX_TRIES = 8;
 // Taille de page du serveur (`GET /conversations/:id/messages`). Une page incomplète
 // signale le début de la conversation.
 const MESSAGES_PAGE = 30;
@@ -230,6 +227,14 @@ type Message = {
   // URL S3 obtenue une fois le téléversement fini : sert à reconnaître l'écho du serveur
   // et à remplacer le brouillon EXACTEMENT à sa place.
   pendingUploadUrl?: string | null;
+  /** Message cité. Extrait plat renvoyé par le serveur — voir `Quote`. */
+  replyTo?: Quote | null;
+  /** Réactions emoji, une par personne au plus. */
+  reactions?: Reaction[];
+  /** Message transféré depuis une autre conversation. */
+  forwarded?: boolean;
+  /** Message éphémère : date de disparition. Absent = message permanent. */
+  expiresAt?: string | null;
 };
 
 /**
@@ -288,8 +293,6 @@ const sameGroup = (a?: Message, b?: Message) =>
   a.sender.id === b.sender?.id &&
   new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() < GROUP_WINDOW_MS;
 
-// Le conteneur de bulle doit être animé pour porter l'entrée.
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 // Deux ressorts par bulle plutôt qu'un : le déplacement se pose net (amorti), l'échelle
 // garde un léger rebond. Les faire diverger est ce qui donne de la matière à l'entrée —
@@ -302,6 +305,44 @@ const SPRING_THEIRS = {
   pos: { damping: 17, stiffness: 200, mass: 0.7 }, // réception : plus posée, jamais brusque
   scale: { damping: 13, stiffness: 210, mass: 0.7 },
 };
+
+/**
+ * Glissement horizontal à partir duquel la réponse se déclenche.
+ *
+ * ⚠️ Le geste est BORNÉ (`SWIPE_MAX`) et non libre : sans butée, une bulle courte pourrait
+ * traverser l'écran, et le retour ne dirait plus si le seuil a été franchi. La résistance
+ * au-delà du seuil est ce qui fait sentir qu'il est atteint, avant même l'haptique.
+ */
+/** Débord du halo de surlignage autour de la bulle. */
+const HALO_SPREAD = 5;
+/**
+ * Durée pendant laquelle un message reste marqué comme « rejoint ».
+ *
+ * ⚠️ Calée sur la séquence du halo (220 + 260 + 240 + 900 ≈ 1620 ms) plus une marge. Les
+ * 2,5 s d'avant laissaient le drapeau posé près d'une seconde après la fin de l'animation :
+ * sans effet visible, mais deux durées indépendantes finissent toujours par diverger.
+ */
+const HIGHLIGHT_MS = 1700;
+
+/**
+ * Couleur d'accent en version translucide.
+ *
+ * ⚠️ Les couleurs de bulles sont des hex à 6 chiffres (`lib/bubbleColors.ts`) : on y ajoute
+ * le canal alpha plutôt que de maintenir une seconde palette translucide en parallèle, qui
+ * finirait par diverger de la première.
+ */
+const withAlpha = (hex: string, alpha: number) => {
+  const a = Math.round(Math.min(1, Math.max(0, alpha)) * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return /^#[0-9a-f]{6}$/i.test(hex) ? `${hex}${a}` : hex;
+};
+
+const SWIPE_TRIGGER = 56;
+const SWIPE_MAX = 78;
+// Rappel élastique : ressort sur la TRANSLATION uniquement, damping élevé — pas de rebond
+// visible (cf. la règle d'animation du projet).
+const SWIPE_SPRING = { damping: 22, stiffness: 260, mass: 0.7 };
 
 // ⚠️ L'entrée est jouée depuis un effet de montage, PAS via les layout animations
 // (`entering`) : dans une FlatList les cellules sont montées/recyclées par la
@@ -316,8 +357,23 @@ type MessageEnterProps = {
   isMe: boolean;
   className: string;
   style: StyleProp<ViewStyle>;
-  /** Absent tant que le message n'existe pas côté serveur (brouillon d'envoi). */
-  onLongPress?: () => void;
+  /**
+   * Absent tant que le message n'existe pas côté serveur (brouillon d'envoi).
+   *
+   * ⚠️ C'est la bulle qui MESURE sa propre place et la transmet, plutôt que l'appelant qui
+   * lirait `event.target` : sous la nouvelle architecture (Fabric, `newArchEnabled`), la
+   * cible d'un événement tactile n'est pas un nœud sur lequel `measureInWindow` s'applique.
+   * La ref locale, elle, désigne toujours la vue réellement montée.
+   */
+  onLongPress?: (anchor: Anchor) => void;
+  /** Glissement vers la droite = citer ce message. Absent = geste désactivé. */
+  onSwipeReply?: () => void;
+  /** Double-appui = « like ». Absent = geste désactivé. */
+  onDoubleTap?: () => void;
+  /** Le message vient d'être rejoint (épinglé, favori, citation) : on le signale. */
+  highlighted?: boolean;
+  /** Couleur du halo de surlignage — l'accent de la conversation. */
+  accent?: string;
   children: React.ReactNode;
 };
 
@@ -328,6 +384,10 @@ function MessageEnter({
   className,
   style,
   onLongPress,
+  onSwipeReply,
+  onDoubleTap,
+  highlighted,
+  accent,
   children,
 }: MessageEnterProps) {
   // Première apparition à l'écran de ce message ? (l'historique est pré-marqué au chargement)
@@ -356,17 +416,225 @@ function MessageEnter({
         ],
   }));
 
-  return (
-    <AnimatedPressable
-      onLongPress={onLongPress}
-      delayLongPress={300}
+  const bubbleRef = useRef<View>(null);
+
+  /**
+   * Halo de surlignage : deux pulsations, puis un fondu lent.
+   *
+   * ⚠️ Posé en position ABSOLUE derrière la bulle, avec un débord négatif — et non en fond
+   * du conteneur comme avant. Le fond exigeait un `padding` qui n'existait pas le reste du
+   * temps : l'apparition du surlignage décalait donc la bulle, et le fil sautait au moment
+   * précis où l'on demandait à l'utilisateur de regarder quelque chose.
+   *
+   * ⚠️ Seule l'OPACITÉ est animée : elle vit sur le thread UI et ne provoque aucune mise en
+   * page. Animer une couleur de fond ou une échelle ferait recalculer la cellule à chaque
+   * image, dans une liste virtualisée qui monte encore ses voisines.
+   */
+  const halo = useSharedValue(0);
+  useEffect(() => {
+    if (!highlighted) {
+      halo.value = withTiming(0, { duration: 200 });
+      return;
+    }
+    // Deux battements plutôt qu'une apparition tenue : c'est le CHANGEMENT qui attire
+    // l'œil, pas la présence. Un aplat statique de 2,5 s passait inaperçu.
+    halo.value = withSequence(
+      withTiming(1, { duration: 220 }),
+      withTiming(0.35, { duration: 260 }),
+      withTiming(1, { duration: 240 }),
+      withTiming(0, { duration: 900 }),
+    );
+  }, [highlighted, halo]);
+  const haloStyle = useAnimatedStyle(() => ({ opacity: halo.value }));
+
+  // --- Glisser pour répondre ---
+  const dragX = useSharedValue(0);
+  // Le seuil n'est franchi qu'UNE fois par geste : sans ce drapeau, aller-retour autour de
+  // la limite ferait vibrer le téléphone en rafale.
+  const armed = useSharedValue(false);
+
+  const tick = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  }, []);
+
+  const pan = useMemo(
+    () =>
+      Gesture.Pan()
+        // ⚠️ `activeOffsetX` positif SEUL, et `failOffsetY` serré : la bulle vit dans une
+        // liste qui défile verticalement. Sans ces deux bornes, le geste prendrait la main
+        // sur le défilement au moindre mouvement de biais, et le fil deviendrait poisseux.
+        .activeOffsetX([-1000, 14])
+        .failOffsetY([-12, 12])
+        .enabled(!!onSwipeReply)
+        .onUpdate((e) => {
+          if (e.translationX <= 0) {
+            dragX.value = 0;
+            return;
+          }
+          // Résistance progressive au-delà du seuil : la bulle « bute » sans se bloquer net.
+          const raw = e.translationX;
+          dragX.value = Math.min(
+            SWIPE_MAX,
+            raw <= SWIPE_TRIGGER ? raw : SWIPE_TRIGGER + (raw - SWIPE_TRIGGER) * 0.25,
+          );
+          if (!armed.value && raw >= SWIPE_TRIGGER) {
+            armed.value = true;
+            runOnJS(tick)();
+          } else if (armed.value && raw < SWIPE_TRIGGER) {
+            armed.value = false;
+          }
+        })
+        .onEnd(() => {
+          if (armed.value && onSwipeReply) runOnJS(onSwipeReply)();
+          armed.value = false;
+          dragX.value = withSpring(0, SWIPE_SPRING);
+        })
+        // ⚠️ `onFinalize` et pas seulement `onEnd` : un geste peut être ANNULÉ (la liste
+        // prend la main, un autre doigt se pose) sans jamais passer par `onEnd`, et la bulle
+        // resterait alors décalée pour toujours.
+        .onFinalize(() => {
+          armed.value = false;
+          dragX.value = withSpring(0, SWIPE_SPRING);
+        }),
+    [onSwipeReply, tick, armed, dragX],
+  );
+
+  const dragStyle = useAnimatedStyle(() => ({ transform: [{ translateX: dragX.value }] }));
+  // L'icône se révèle avec le glissement et se remplit une fois le seuil atteint.
+  const hintStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, dragX.value / SWIPE_TRIGGER),
+    transform: [{ scale: 0.6 + 0.4 * Math.min(1, dragX.value / SWIPE_TRIGGER) }],
+  }));
+
+  /**
+   * Appui long — geste RNGH, et NON le `onLongPress` d'un `Pressable`.
+   *
+   * ⚠️ C'est le point qui casse quand on mélange les deux systèmes. `Pressable` s'appuie sur
+   * le *responder* JS de React Native ; `GestureDetector` sur les gestes NATIFS. Dès qu'un
+   * geste natif est monté sur la même vue, il court-circuite le responder et l'appui long ne
+   * se déclenche PLUS JAMAIS — le glissement, lui, continue de marcher, ce qui rend le
+   * symptôme trompeur (« seul le swipe fonctionne »). Les deux ne cohabitent pas : tout le
+   * geste doit vivre dans RNGH.
+   */
+  const fire = useCallback(() => {
+    bubbleRef.current?.measureInWindow?.((x, y, width, height) =>
+      onLongPress?.({ x, y, width, height }),
+    );
+  }, [onLongPress]);
+
+  const longPress = useMemo(
+    () =>
+      Gesture.LongPress()
+        .minDuration(300)
+        // Tolérance de quelques pixels : un doigt posé n'est jamais parfaitement immobile,
+        // et sans elle l'appui long échoue une fois sur deux sur un vrai téléphone.
+        .maxDistance(12)
+        .enabled(!!onLongPress)
+        .onStart(() => {
+          runOnJS(fire)();
+        }),
+    [onLongPress, fire],
+  );
+
+  const like = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    onDoubleTap?.();
+  }, [onDoubleTap]);
+
+  /**
+   * Double-appui = « like ».
+   *
+   * ⚠️ `maxDuration` court (250 ms) : c'est le délai pendant lequel un PREMIER appui reste en
+   * suspens, le temps de savoir s'il en vient un second. Trop long, et l'ouverture d'une
+   * image au simple appui paraîtrait poisseuse — ce sont des enfants tappables, sous ce
+   * même détecteur.
+   */
+  const doubleTap = useMemo(
+    () =>
+      Gesture.Tap()
+        .numberOfTaps(2)
+        .maxDuration(250)
+        .enabled(!!onDoubleTap)
+        .onEnd((_e, success) => {
+          if (success) runOnJS(like)();
+        }),
+    [onDoubleTap, like],
+  );
+
+  /**
+   * ⚠️ `Race` et non `Simultaneous` : le premier geste qui s'active ANNULE les autres. Un
+   * doigt qui reste posé donne le menu, un doigt qui part vers la droite donne la citation,
+   * deux appuis donnent le like — jamais deux à la fois. En simultané, glisser après une
+   * seconde d'appui ouvrirait le menu ET poserait la citation.
+   */
+  const gesture = useMemo(
+    () => Gesture.Race(pan, longPress, doubleTap),
+    [pan, longPress, doubleTap],
+  );
+
+  const bubble = (
+    <Animated.View
+      ref={bubbleRef}
       className={className}
       // La bulle éclot depuis son coin bas (côté expéditeur) au lieu de son centre :
       // elle semble sortir du fil plutôt que d'apparaître par-dessus.
       style={[{ transformOrigin: isMe ? 'bottom right' : 'bottom left' }, style, anim]}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          haloStyle,
+          {
+            position: 'absolute',
+            // Débord régulier : le halo entoure la bulle sans la recouvrir, et reste donc
+            // lisible même sur une bulle « moi » déjà colorée.
+            top: -HALO_SPREAD,
+            bottom: -HALO_SPREAD,
+            left: -HALO_SPREAD,
+            right: -HALO_SPREAD,
+            borderRadius: RADIUS.bubble + HALO_SPREAD,
+            borderCurve: 'continuous',
+            borderWidth: 2,
+            borderColor: accent ?? NEXA,
+            backgroundColor: withAlpha(accent ?? NEXA, 0.18),
+          },
+        ]}
+      />
       {children}
-    </AnimatedPressable>
+    </Animated.View>
+  );
+
+  // Aucun geste à monter (brouillon d'envoi) : on laisse la bulle nue plutôt que d'installer
+  // un détecteur inerte qui gênerait quand même les appuis de ses enfants.
+  if (!onSwipeReply && !onLongPress && !onDoubleTap) return bubble;
+
+
+  return (
+    <GestureDetector gesture={gesture}>
+      {/* Enveloppe pleine largeur et IMMOBILE. L'alignement (`self-end`) vit sur la bulle. */}
+      <View>
+        {/*
+          ⚠️ L'icône est HORS du conteneur qui glisse.
+
+          Dedans, elle se déplaçait avec la bulle : sur un message de soi — aligné à droite,
+          donc précédé d'un large vide — on la voyait quand même arriver, ce qui masquait le
+          défaut. Sur un message REÇU, collé à gauche, elle restait en permanence derrière la
+          bulle et n'apparaissait jamais. Fixe, c'est la bulle qui la découvre en glissant.
+        */}
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            hintStyle,
+            { position: 'absolute', left: 10, top: 0, bottom: 0, justifyContent: 'center' },
+          ]}
+        >
+          <View className="w-8 h-8 rounded-full bg-gray-200/90 dark:bg-zinc-700/90 items-center justify-center">
+            <Ionicons name="arrow-undo" size={16} color="#6B7280" />
+          </View>
+        </Animated.View>
+        <Animated.View style={dragStyle}>{bubble}</Animated.View>
+      </View>
+    </GestureDetector>
   );
 }
 
@@ -571,6 +839,8 @@ type MediaPayload = {
   mimeType?: string;
   durationMs?: number;
   batchId?: string;
+  /** Citation. Portée par le premier média d'un envoi seulement (voir `sendMessage`). */
+  replyToId?: string;
 };
 
 // Détecte une réaction emoji seule (≤ 8 pictogrammes) → affichage géant hors bulle
@@ -718,12 +988,55 @@ export default function ChatScreen() {
   const [flags, setFlags] = useState<Flags>({ pinned: [], starred: [] });
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [scrollTarget, setScrollTarget] = useState<string | null>(null);
+  // --- Lot 1 : citation, menu contextuel, réactions, transfert ---
+  /** Message auquel la prochaine saisie répondra. Null = envoi normal. */
+  const [replyTo, setReplyTo] = useState<Quote | null>(null);
+  /** Menu contextuel ouvert : le message visé et la place qu'occupe sa bulle à l'écran. */
+  const [menu, setMenu] = useState<{ messageId: string; anchor: Anchor | null } | null>(null);
+  /**
+   * Messages de la ligne dont on affiche les réactions.
+   *
+   * ⚠️ Une LISTE et non un identifiant : un album est une seule bulle mais plusieurs
+   * messages, et une réaction posée sur sa troisième photo doit apparaître sous la bulle
+   * entière — sinon elle serait invisible, la ligne n'affichant que son premier message.
+   */
+  const [reactionsOf, setReactionsOf] = useState<string[] | null>(null);
+  /** Message à transférer, le temps que l'utilisateur choisisse les destinataires. */
+  const [forwarding, setForwarding] = useState<Message | null>(null);
+  /**
+   * Action choisie dans le menu, exécutée APRÈS sa fermeture.
+   *
+   * ⚠️ Nécessaire pour les actions qui ouvrent une feuille : la présenter pendant que le
+   * Modal du menu se démonte laisse un modal fantôme sur iOS — la feuille n'apparaît jamais,
+   * et rien ne signale l'échec. Même précaution que l'`onClosed` de `BottomSheet`.
+   */
+  const pendingActionRef = useRef<{ messageId: string; action: MessageAction } | null>(null);
+  /**
+   * Membres de la conversation, avec leur nom et leur photo.
+   *
+   * ⚠️ C'est la SEULE source de noms pour la liste « qui a réagi » : le fil ne transporte
+   * que `userId` + `emoji` par réaction, précisément pour ne pas faire une jointure
+   * utilisateur par message et par page.
+   */
+  const [members, setMembers] = useState<{ id: string; name: string; photoUrl?: string | null }[]>(
+    [],
+  );
   const listRef = useRef<FlatList>(null);
+  /**
+   * Lignes d'affichage, lisibles depuis les reprises différées du défilement.
+   *
+   * ⚠️ Une ref alimentée à chaque rendu, et non la valeur capturée par une closure : un
+   * `setTimeout` armé 120 ms plus tôt viserait sinon un index calculé sur une liste qui a
+   * pu être remplacée entre-temps — « scrollToIndex out of range », qui fait planter l'écran.
+   */
+  const displayRowsRef = useRef<{ key: string }[]>([]);
+  // Rendre le focus au champ après « Répondre » : la citation posée, on doit pouvoir
+  // écrire sans avoir à retoucher la barre.
+  const inputRef = useRef<TextInput>(null);
   const typingSentRef = useRef(false); // a-t-on déjà signalé qu'on écrit ?
   const typingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null); // arrêt auto de notre frappe
   const peerTypingRef = useRef<ReturnType<typeof setTimeout> | null>(null); // masquage auto (5 s)
   const otherUserIdRef = useRef<string | null>(null); // pour filtrer les events présence
-  const atBottomRef = useRef(true); // l'utilisateur est-il collé au bas ? (auto-scroll conditionnel)
   // Pièces jointes / médias (Phase D)
   const [viewer, setViewer] = useState<{ type: 'image' | 'video'; url: string } | null>(null);
   const [albumView, setAlbumView] = useState<{ items: AlbumItem[]; index: number } | null>(
@@ -752,11 +1065,10 @@ export default function ChatScreen() {
   // Ids déjà affichés : une bulle ne joue son entrée qu'à sa première apparition réelle
   // (message qui arrive), jamais pour l'historique ni au recyclage des lignes par la FlatList.
   const seenIdsRef = useRef<Set<string>>(new Set());
-  const draggingRef = useRef(false); // l'utilisateur a le doigt sur la liste → on ne le contrarie pas
-  const smoothNextRef = useRef(false); // le prochain repositionnement suit un message qui arrive
-  const smoothingRef = useRef(false); // un défilement animé est en cours : ne pas le couper
-  const distanceRef = useRef(0); // pixels restants sous le bas de l'écran (maj à chaque scroll)
-  const followUntilRef = useRef(0); // fin de la fenêtre « collé au bas » armée par un envoi
+  // ⚠️ Tout ce qui pilotait la POSITION du fil vit désormais dans `useThreadScroll`
+  // (`lib/threadScroll.ts`) : une machine à états où un seul propriétaire déplace le fil à
+  // un instant donné. Les neuf refs qui se trouvaient ici s'annulaient mutuellement — voir
+  // l'en-tête de ce module.
   // Pagination vers le haut : le fil ne charge qu'une page à l'ouverture (les plus récents).
   const messagesRef = useRef<Message[]>([]); // dernière liste connue, sans redéclencher les callbacks
   const loadingOlderRef = useRef(false); // une page est déjà en vol → ne pas en redemander
@@ -771,72 +1083,36 @@ export default function ChatScreen() {
   const hasNewerRef = useRef(false);
   const loadingNewerRef = useRef(false);
 
-  // Ouverture du fil : on le garde INVISIBLE tant qu'il n'est pas calé.
-  //
-  // La liste étant désormais inversée, l'ouverture EN BAS n'a plus besoin de ce voile :
-  // elle s'y rend nativement, à l'offset zéro, sans passer par le début de la conversation.
-  //
-  // ⚠️ Il reste néanmoins nécessaire pour l'ouverture SUR LE REPÈRE de reprise, qui exige
-  // un `scrollToIndex` vers une ligne pas encore montée : ce calage-là, lui, se voit. Il
-  // est conservé pour les deux cas plutôt que conditionné — un fil qui apparaît de deux
-  // façons différentes selon qu'on a des messages en attente se remarquerait davantage que
-  // le fondu lui-même.
-  const listReveal = useSharedValue(0);
-  const revealedRef = useRef(false);
-  const listRevealStyle = useAnimatedStyle(() => ({ opacity: listReveal.value }));
-  const revealList = useCallback(() => {
-    if (revealedRef.current) return;
-    revealedRef.current = true;
-    openTargetRef.current = null;
-    pendingScrollRef.current = null;
-    // Fondu court : la position est déjà bonne, il ne sert qu'à éviter l'apparition sèche.
-    listReveal.value = withTiming(1, { duration: 140 });
-  }, [listReveal]);
-
-  // Repoussé à CHAQUE changement de taille du contenu, donc déclenché par le DERNIER :
-  // les cellules sont montées par lots et le contenu grandit plusieurs fois de suite.
-  // Dévoiler au premier montrerait une position intermédiaire — le saut qu'on veut cacher.
   /**
-   * Ligne à viser à l'ouverture, quand des messages n'ont pas été lus.
+   * Position dans le fil — machine à états (`lib/threadScroll.ts`).
    *
-   * ⚠️ Une ref et non un état : elle est lue depuis `onContentSizeChange`, qui se déclenche
-   * plusieurs fois pendant que les cellules se montent. Un état provoquerait un rendu de
-   * la liste à chaque fois, en plein calage.
-   *
-   * Vidée au dévoilement : passé ce point, le fil reprend son comportement normal — suivre
-   * le bas quand on y est.
+   * ⚠️ Déclaré APRÈS `hasNewerRef`, dont il lit la valeur : plus haut, la closure
+   * `bottomIsLive` référencerait un `const` encore dans sa zone morte.
    */
-  const openTargetRef = useRef<string | null>(null);
-  const openDecidedRef = useRef(false);
+  const scroll = useThreadScroll({
+    listRef,
+    rowsRef: displayRowsRef,
+    anchorOffset: insets.top + HEADER_H + OPEN_TARGET_MARGIN,
+    // Après un saut au milieu de l'historique, le bas du contenu CHARGÉ n'est pas le bas de
+    // la conversation : s'y coller ramènerait l'utilisateur au bout de chaque page.
+    bottomIsLive: useCallback(() => !hasNewerRef.current, []),
+  });
+
   /**
    * Repère effectivement affiché, FIGÉ à l'ouverture.
    *
    * ⚠️ Le calcul se rejoue à chaque changement du fil, donc aussi quand une page d'anciens
    * messages arrive : le repère pouvait apparaître à ce moment-là et insérer sa hauteur au
-   * milieu du fil, décalant d'un coup tout ce qui se trouvait en dessous — le sursaut qu'on
-   * voyait en remontant.
-   *
-   * Contrepartie assumée : si la frontière était au-dessus de la première page, le repère
-   * n'apparaîtra pas en remontant. C'est justement le cas où l'on n'a pas pu ouvrir dessus,
-   * donc où il n'aurait de toute façon pas servi de point de reprise.
+   * milieu du fil, décalant d'un coup tout ce qui se trouvait en dessous.
    */
   const [divider, setDivider] = useState<{ key: string; count: number } | null>(null);
+  const openDecidedRef = useRef(false);
 
-  /**
-   * Défilement ciblé en cours, conservé pour pouvoir le RETENTER.
-   *
-   * ⚠️ Sans `getItemLayout` — impossible, les hauteurs de bulles sont variables —
-   * `scrollToIndex` échoue tant que la cellule visée n'est pas montée. Avant l'inversion ce
-   * cas ne se présentait presque jamais : les messages ANCIENS étaient aux petits indices,
-   * donc toujours rendus (une liste virtualisée rend d'abord son début). Depuis
-   * l'inversion, l'indice 0 est le message le plus RÉCENT — un épinglé ou un repère un peu
-   * ancien se retrouve loin dans la liste, non monté, et l'appel échoue silencieusement.
-   */
   /**
    * Message à rejoindre dès que la fenêtre chargée autour de lui aura été rendue.
    *
-   * ⚠️ En deux temps, obligatoirement : `scrollToRow` cherche son index dans `displayRows`,
-   * qui n'existe qu'après le rendu suivant le remplacement des messages.
+   * ⚠️ En deux temps, obligatoirement : la ligne n'existe qu'après le rendu qui suit le
+   * remplacement des messages.
    */
   const pendingJumpRef = useRef<string | null>(null);
   // Dernière demande de saut : périme les réponses d'une demande précédente.
@@ -844,42 +1120,6 @@ export default function ChatScreen() {
   // ⚠️ Minuterie du surlignage tenue dans une ref : rendue par l'effet, elle était purgée
   // par son propre nettoyage au rendu suivant, avant d'avoir pu s'exécuter.
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const pendingScrollRef = useRef<{
-    key: string;
-    viewPosition: number;
-    viewOffset: number;
-    animated: boolean;
-    tries: number;
-  } | null>(null);
-
-  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scheduleReveal = useCallback(() => {
-    if (revealedRef.current) return;
-    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-    // Couvre le dernier passage de calage de `scrollToBottom` (jusqu'à 120 ms).
-    revealTimerRef.current = setTimeout(() => {
-      // Un calage ciblé est encore en cours de reprise : dévoiler maintenant le montrerait
-      // à l'écran. Le plafond dur reste le garde-fou.
-      if (pendingScrollRef.current) {
-        scheduleReveal();
-        return;
-      }
-      revealList();
-    }, 160);
-  }, [revealList]);
-
-  // Plafond dur : le fil doit apparaître même si les mesures s'enchaînent sans fin, si le
-  // chargement échoue ou si la liste ne grandit jamais. Un écran resté vide serait bien
-  // pire que le saut qu'on corrige.
-  useEffect(() => {
-    // Relevé : les reprises de calage peuvent prendre plusieurs lots de 120 ms.
-    const cap = setTimeout(revealList, 1400);
-    return () => {
-      clearTimeout(cap);
-      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-    };
-  }, [revealList]);
 
   // Brouillon local : la bulle est posée AVANT que le serveur ne la connaisse, pour que la
   // mise en page soit définitive dès le premier instant. Voir OPTIMISTIC dans `sendMessage`.
@@ -891,9 +1131,9 @@ export default function ChatScreen() {
     // qui viendra le remplacer — sinon le message clignoterait à l'écho.
     seenIdsRef.current.add(draft.id);
     setMessages((prev) => mergeMessages(prev, [draft], 'end'));
-    atBottomRef.current = true;
-    followUntilRef.current = Date.now() + FOLLOW_WINDOW_MS;
-  }, []);
+    // Envoyer est une INTENTION : on veut voir son message, où qu'on soit dans le fil.
+    scroll.follow(true);
+  }, [scroll]);
 
   /** Squelette commun à tous les brouillons ; l'appelant complète selon le type. */
   const makeDraft = useCallback(
@@ -937,10 +1177,12 @@ export default function ChatScreen() {
     const items = albumBufRef.current.get(batchId);
     albumBufRef.current.delete(batchId);
     if (!items?.length) return;
-    // L'album entier apparaît d'un coup : le rattrapage doit glisser, pas sauter.
-    smoothNextRef.current = true;
     setMessages((prev) => mergeMessages(prev, items, 'end'));
-  }, []);
+    // L'album entier apparaît d'un coup : si l'on suivait le bas, le rattrapage doit
+    // GLISSER — la mesure d'un album déplace le fil de plusieurs centaines de pixels, et un
+    // saut sec se verrait comme un à-coup.
+    if (scroll.mode() === 'following') scroll.follow(true);
+  }, [scroll]);
 
   // Les minuteries survivraient à la sortie de l'écran et écriraient dans un état démonté.
   useEffect(
@@ -952,69 +1194,6 @@ export default function ChatScreen() {
     },
     [],
   );
-
-  // Faut-il ramener le fil en bas ? Soit on y est déjà, soit on vient d'envoyer et la
-  // fenêtre de suivi couvre les mesures qui arrivent encore.
-  const shouldStick = useCallback(
-    // ⚠️ `hasNewerRef` : après un saut au milieu de l'historique, le bas du contenu CHARGÉ
-    // n'est pas le bas de la conversation. S'y coller ramènerait l'utilisateur au bout de
-    // chaque page fraîchement chargée, contre son défilement. Le suivi reprend dès que le
-    // vrai bas est atteint.
-    () => (atBottomRef.current && !hasNewerRef.current) || followUntilRef.current > Date.now(),
-    [],
-  );
-
-  // Unique point de repositionnement du fil.
-  //
-  // ⚠️ Liste INVERSÉE : le bas du fil — le message le plus récent — est à l'offset ZÉRO, et
-  // non à la fin du contenu. D'où `scrollToOffset({ offset: 0 })` partout ici ; `scrollToEnd`
-  // mènerait au message le plus ANCIEN.
-  //
-  // Deux raisons de repasser plusieurs fois :
-  // - la virtualisation monte les cellules par lots, donc le contenu grandit APRÈS le
-  //   premier scroll (les hauteurs des bulles sont variables, donc estimées jusqu'à mesure) ;
-  // - un média (image, GIF) finit de charger et pousse encore le contenu.
-  // Chaque passe se re-teste : dès que l'utilisateur touche la liste, on s'arrête.
-  const scrollToBottom = useCallback((animated = false) => {
-    const settle = () => {
-      if (shouldStick() && !draggingRef.current) {
-        listRef.current?.scrollToOffset({ offset: 0, animated: false });
-      }
-    };
-    // Un défilement animé est en cours : les changements de taille qui suivent (cellules
-    // montées par lots) ne doivent PAS déclencher un saut, sinon ils l'interrompent.
-    if (smoothingRef.current) return;
-    if (!shouldStick() || draggingRef.current) return;
-
-    listRef.current?.scrollToOffset({ offset: 0, animated });
-
-    if (animated) {
-      // On laisse l'animation se dérouler, puis un seul calage à la fin — et en douceur :
-      // un saut instantané juste après le glissement se voit comme un à-coup.
-      // S'il ne reste rien à rattraper, on ne touche à rien du tout.
-      smoothingRef.current = true;
-      setTimeout(() => {
-        smoothingRef.current = false;
-        // ⚠️ On ne re-teste PAS `atBottomRef` ici : pendant que le glissement était
-        // protégé, la nouvelle bulle a fini d'être montée et le contenu a grandi, si bien
-        // que la distance au bas repasse au-dessus du seuil et que le drapeau retombe à
-        // faux. Abandonner alors laisserait le message envoyé sous la zone de saisie. Un
-        // mouvement lancé volontairement doit être mené à son terme ; seul le geste de
-        // l'utilisateur peut l'annuler.
-        if (draggingRef.current) return;
-        // ⚠️ Aucune condition de distance ici : `distanceRef` vient du dernier événement
-        // de défilement, et il n'en arrive plus une fois le glissement fini — la valeur
-        // date donc d'AVANT que la nouvelle bulle soit mesurée, et vaut ~0 alors qu'il
-        // reste sa hauteur à parcourir. S'y fier faisait renoncer au calage, laissant le
-        // message envoyé sous la zone de saisie. Ce dernier passage est animé : s'il n'y a
-        // rien à rattraper, il ne se voit pas.
-        listRef.current?.scrollToOffset({ offset: 0, animated: true });
-      }, SMOOTH_SCROLL_MS);
-    } else {
-      requestAnimationFrame(settle);
-      setTimeout(settle, 120);
-    }
-  }, [shouldStick]);
 
   // Le fil garde la liste dans un ref : `loadOlder` la lit sans dépendre de l'état, ce qui
   // le garderait sinon recréé à chaque message reçu — et la FlatList avec lui.
@@ -1148,6 +1327,13 @@ export default function ChatScreen() {
         setUnreadInfo(
           meta.firstUnreadId ? { id: meta.firstUnreadId, count: meta.unreadCount ?? 0 } : null,
         );
+        setMembers(
+          meta.members.map((m) => ({
+            id: m.userId,
+            name: m.user.name,
+            photoUrl: m.user.photoUrl,
+          })),
+        );
         // Groupe : son nom. Direct : celui de l'autre participant.
         setFetchedName(
           meta.type === 'group'
@@ -1215,11 +1401,9 @@ export default function ChatScreen() {
             })();
         // Marqué AVANT le rendu : sinon tout l'historique s'animerait à l'ouverture.
         for (const m of history) seenIdsRef.current.add(m.id);
-        // Le fil s'ouvre en bas, et doit y rester le temps que les bulles soient mesurées.
-        followUntilRef.current = Date.now() + OPEN_FOLLOW_WINDOW_MS;
         replaceMessages(history.reverse());
-        // Rien à mesurer ni à caler : inutile de faire attendre l'écran vide.
-        if (!history.length) revealList();
+        // Rien à mesurer ni à caler : inutile de faire attendre devant un écran vide.
+        if (!history.length) scroll.revealNow();
 
         // La conversation est ouverte : tout ce qui précède est lu.
         apiRequest(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
@@ -1289,18 +1473,19 @@ export default function ChatScreen() {
             if (msg.sender?.id !== me.id) {
               apiRequest(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
             }
-            // On se contente d'armer le suivi : envoyer un message ramène toujours en bas,
-            // recevoir n'y ramène que si on y était déjà (sinon on couperait la lecture).
-            // Le repositionnement lui-même est fait par onContentSizeChange, une fois la
-            // bulle montée — deux scrolls concurrents s'interrompaient l'un l'autre.
-            if (msg.sender?.id === me.id) {
-              atBottomRef.current = true;
-              // Couvre les mesures tardives d'une bulle haute (cf. FOLLOW_WINDOW_MS).
-              followUntilRef.current = Date.now() + FOLLOW_WINDOW_MS;
-            }
-            // Ce repositionnement-là accompagne une bulle qui apparaît : il doit glisser,
-            // pas sauter. (À l'ouverture du chat, au contraire, le calage reste immédiat.)
-            smoothNextRef.current = true;
+            /**
+             * ⚠️ Envoyer et recevoir ne se valent pas.
+             *
+             * Un message de MOI ramène toujours en bas — c'est une intention, je viens
+             * d'agir. Un message REÇU ne déplace le fil que si j'y étais déjà : sinon il
+             * couperait la lecture de quelqu'un en train de remonter l'historique.
+             *
+             * Le mouvement GLISSE plutôt que de sauter : il accompagne une bulle qui
+             * apparaît. (À l'ouverture du chat, au contraire, le calage est immédiat — on
+             * ne montre pas un défilement au lever de rideau.)
+             */
+            if (msg.sender?.id === me.id) scroll.follow(true);
+            else if (scroll.mode() === 'following') scroll.follow(true);
           }
         });
 
@@ -1335,6 +1520,24 @@ export default function ChatScreen() {
             if (conversationId === id) {
               setMessages((prev) => prev.filter((m) => m.id !== messageId));
             }
+          },
+        );
+
+        /**
+         * Réactions d'un autre membre.
+         *
+         * ⚠️ Le serveur diffuse l'ÉTAT COMPLET des réactions du message, pas le changement :
+         * deux personnes qui réagissent en même temps ne peuvent donc pas se désynchroniser,
+         * et une diffusion manquée est rattrapée par la suivante. C'est aussi ce qui écrase
+         * proprement la mise à jour optimiste locale.
+         */
+        socket.on(
+          'message_reaction',
+          (d: { conversationId: string; messageId: string; reactions: Reaction[] }) => {
+            if (d.conversationId !== id) return;
+            setMessages((prev) =>
+              prev.map((m) => (m.id === d.messageId ? { ...m, reactions: d.reactions } : m)),
+            );
           },
         );
 
@@ -1410,8 +1613,29 @@ export default function ChatScreen() {
          * apparaître. C'est pourtant le cas le plus courant : on quitte l'app, on la
          * rouvre, elle revient là où on l'avait laissée.
          */
+        /**
+         * Rattrapage à la RECONNEXION : récupérer ce qui a été manqué pendant la coupure.
+         *
+         * ⚠️ La toute PREMIÈRE connexion n'en est pas une : `init` vient de charger le fil et
+         * de décider où le caler. La rejouer était destructeur — le `POST /read` de
+         * l'ouverture ayant déjà effacé `firstUnreadId` côté serveur, le rechargement
+         * retombait sur la branche « dernière page », remplaçait la fenêtre centrée de 166
+         * messages par 30, et ramenait le fil en bas : l'ouverture sur le repère était
+         * annulée une fraction de seconde après avoir eu lieu. C'est aussi ce qui faisait
+         * planter la reprise de défilement, restée pointée sur l'ancienne liste.
+         *
+         * On regarde donc l'état du socket AU MOMENT où l'on pose l'écouteur : s'il n'est
+         * pas encore connecté, le prochain `connect` est la connexion initiale. Déterministe,
+         * là où un garde temporel serait une devinette.
+         */
+        let initialConnectPending = !socket.connected;
         socket.on('connect', () => {
+          // Toujours rejoindre la room : c'est vrai des deux cas.
           socket.emit('join_conversation', id);
+          if (initialConnectPending) {
+            initialConnectPending = false;
+            return;
+          }
           (async () => {
             const fresh = await apiRequest<ConvMeta>(`/conversations/${id}`);
             setUnreadInfo(
@@ -1460,6 +1684,7 @@ export default function ChatScreen() {
       socket?.off('conversation_read');
       socket?.off('removed_from_group');
       socket?.off('message_deleted');
+      socket?.off('message_reaction');
       socket?.off('peer_typing');
       socket?.off('presence_update');
       socket?.off('group_updated');
@@ -1507,6 +1732,11 @@ export default function ChatScreen() {
     const socket = getSocket();
     if (!socket) return;
 
+    // La citation est consommée par CET envoi : on la capture puis on vide la barre tout de
+    // suite, sinon un second message partirait en citant encore le même message.
+    const quoted = replyTo;
+    setReplyTo(null);
+
     // Tap haptique dès le départ, sans attendre l'écho serveur.
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
@@ -1518,8 +1748,12 @@ export default function ChatScreen() {
     if (queue.length === 0) {
       // Texte seul : aucun téléversement, mais le brouillon reste utile — sur un réseau
       // lent la bulle apparaît quand même tout de suite, avec son horloge.
-      pushDraft(makeDraft({ content }));
-      socket.emit('send_message', { conversationId: id, content });
+      pushDraft(makeDraft({ content, replyTo: quoted }));
+      socket.emit('send_message', {
+        conversationId: id,
+        content,
+        replyToId: quoted?.id,
+      });
       return;
     }
 
@@ -1541,6 +1775,9 @@ export default function ChatScreen() {
     //
     // Les brouillons portent le MÊME `batchId` que les messages à venir : c'est ce qui les
     // réunit en un seul album, y compris pendant le remplacement où les deux cohabitent.
+    // ⚠️ La citation ne part qu'avec le PREMIER média : elle appartient à l'envoi, pas à
+    // chaque pièce jointe. La répéter sur les N messages d'un album afficherait N citations
+    // identiques dans une seule bulle d'album.
     const drafts: Message[] = queue.map((item, i) =>
       makeDraft({
         content: i === queue.length - 1 ? content : '',
@@ -1549,6 +1786,7 @@ export default function ChatScreen() {
         mimeType: item.contentType,
         durationMs: item.durationMs,
         batchId,
+        replyTo: i === 0 ? quoted : null,
       }),
     );
     for (const d of drafts) pushDraft(d);
@@ -1572,6 +1810,7 @@ export default function ChatScreen() {
             mimeType: item.contentType,
             durationMs: item.durationMs,
             batchId,
+            replyToId: i === 0 ? quoted?.id : undefined,
           },
           isLast ? content : '',
         );
@@ -1587,7 +1826,7 @@ export default function ChatScreen() {
 
     // Le média porteur de la légende a échoué : le texte ne doit pas disparaître avec lui.
     if (content && !captionSent) {
-      socket.emit('send_message', { conversationId: id, content });
+      socket.emit('send_message', { conversationId: id, content, replyToId: quoted?.id });
     }
     if (failed) Alert.alert(t('error'), t('media.upload_error'));
   };
@@ -1879,54 +2118,196 @@ export default function ChatScreen() {
   };
 
   // --- Épingler / Favori (appui long sur un message) ---
-  const togglePin = (messageId: string, pinned: boolean) =>
-    apiRequest(`/conversations/${id}/messages/${messageId}/pin`, {
-      method: pinned ? 'DELETE' : 'POST',
-    })
-      .then(loadFlags)
-      .catch((e: any) => Alert.alert(t('error'), e.message));
-  const toggleStar = (messageId: string, starred: boolean) =>
-    apiRequest(`/conversations/${id}/messages/${messageId}/star`, {
-      method: starred ? 'DELETE' : 'POST',
-    })
-      .then(loadFlags)
-      .catch((e: any) => Alert.alert(t('error'), e.message));
-  const confirmDelete = (messageId: string) =>
-    Alert.alert(t('chat.delete_confirm'), '', [
-      { text: t('cancel'), style: 'cancel' },
-      {
-        text: t('chat.delete'),
-        style: 'destructive',
-        onPress: () =>
-          apiRequest(`/conversations/${id}/messages/${messageId}`, { method: 'DELETE' })
-            .then(() => setMessages((prev) => prev.filter((m) => m.id !== messageId)))
-            .catch((e: any) => Alert.alert(t('error'), e.message)),
-      },
-    ]);
+  const togglePin = useCallback(
+    (messageId: string, pinned: boolean) =>
+      apiRequest(`/conversations/${id}/messages/${messageId}/pin`, {
+        method: pinned ? 'DELETE' : 'POST',
+      })
+        .then(loadFlags)
+        .catch((e: any) => Alert.alert(t('error'), e.message)),
+    [id, loadFlags, t],
+  );
+  const toggleStar = useCallback(
+    (messageId: string, starred: boolean) =>
+      apiRequest(`/conversations/${id}/messages/${messageId}/star`, {
+        method: starred ? 'DELETE' : 'POST',
+      })
+        .then(loadFlags)
+        .catch((e: any) => Alert.alert(t('error'), e.message)),
+    [id, loadFlags, t],
+  );
+  const confirmDelete = useCallback(
+    (messageId: string) =>
+      Alert.alert(t('chat.delete_confirm'), '', [
+        { text: t('cancel'), style: 'cancel' },
+        {
+          text: t('chat.delete'),
+          style: 'destructive',
+          onPress: () =>
+            apiRequest(`/conversations/${id}/messages/${messageId}`, { method: 'DELETE' })
+              .then(() => setMessages((prev) => prev.filter((m) => m.id !== messageId)))
+              .catch((e: any) => Alert.alert(t('error'), e.message)),
+        },
+      ]),
+    [id, t],
+  );
 
-  const openMessageMenu = (messageId: string) => {
-    const pinned = flags.pinned.includes(messageId);
-    const starred = flags.starred.includes(messageId);
-    const msg = messages.find((m) => m.id === messageId);
-    const isMine = msg?.sender?.id === currentUserId;
-    // Supprimer : mon message, ou admin/modérateur en groupe.
-    const canDelete =
-      isMine || (convType === 'group' && (myRole === 'admin' || myRole === 'moderator'));
-    Alert.alert('', undefined, [
-      {
-        text: pinned ? t('details.unpin') : t('details.pin'),
-        onPress: () => togglePin(messageId, pinned),
-      },
-      {
-        text: starred ? t('details.unstar') : t('details.star'),
-        onPress: () => toggleStar(messageId, starred),
-      },
-      ...(canDelete
-        ? [{ text: t('chat.delete'), style: 'destructive' as const, onPress: () => confirmDelete(messageId) }]
-        : []),
-      { text: t('cancel'), style: 'cancel' as const },
-    ]);
-  };
+  /**
+   * Ouvre le menu contextuel sur un message.
+   *
+   * ⚠️ La bulle est MESURÉE à l'appui long (`measureInWindow`) et sa place transmise au
+   * menu : c'est ce qui lui permet de s'ouvrir contre le message visé plutôt qu'au centre
+   * de l'écran. Sans mesure, le geste désigne un message précis et la réponse apparaît
+   * ailleurs — il faut alors le retrouver des yeux.
+   */
+  const openMessageMenu = useCallback((messageId: string, anchor: Anchor | null) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setMenu({ messageId, anchor });
+  }, []);
+
+  /**
+   * Pose, remplace ou retire une réaction.
+   *
+   * Mise à jour OPTIMISTE : la pastille doit apparaître sous le doigt, pas après un
+   * aller-retour réseau. Le serveur rediffuse ensuite l'état complet (`message_reaction`),
+   * qui fait foi et corrige un éventuel écart.
+   */
+  const react = useCallback(
+    (messageId: string, emoji: string) => {
+      if (!currentUserId) return;
+      // État à restaurer si le serveur refuse.
+      const before = messages.find((m) => m.id === messageId)?.reactions ?? [];
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId) return m;
+          const others = (m.reactions ?? []).filter((r) => r.userId !== currentUserId);
+          const mine = (m.reactions ?? []).find((r) => r.userId === currentUserId);
+          // Reposer le même emoji le retire — c'est le geste attendu depuis la rangée
+          // rapide, où l'emoji actif fait aussi office de bouton d'annulation.
+          const next = mine?.emoji === emoji ? others : [...others, { userId: currentUserId, emoji }];
+          return { ...m, reactions: next };
+        }),
+      );
+      apiRequest<{ reactions: Reaction[] }>(
+        `/conversations/${id}/messages/${messageId}/reaction`,
+        { method: 'POST', body: { emoji } },
+      )
+        // Le serveur fait foi : sa réponse porte l'état complet, qui remplace le nôtre.
+        .then((r) =>
+          setMessages((prev) =>
+            prev.map((m) => (m.id === messageId ? { ...m, reactions: r.reactions } : m)),
+          ),
+        )
+        // ⚠️ En cas d'échec on REMET ce qui était là, sans réémettre : une seconde requête
+        // sur un réseau qui vient de lâcher échouerait pareil, et rien ne dirait à
+        // l'utilisateur que sa réaction n'a pas pris.
+        .catch(() =>
+          setMessages((prev) =>
+            prev.map((m) => (m.id === messageId ? { ...m, reactions: before } : m)),
+          ),
+        );
+    },
+    [currentUserId, id, messages],
+  );
+
+  /** Extrait de citation construit depuis un message du fil (pour répondre). */
+  const toQuote = useCallback(
+    (m: Message): Quote => ({
+      id: m.id,
+      senderId: m.sender?.id ?? '',
+      sender: m.sender ? { id: m.sender.id, name: m.sender.name } : null,
+      type: m.type,
+      content: m.content,
+      mediaUrl: m.mediaUrl,
+      mediaType: m.mediaType,
+      fileName: m.fileName,
+    }),
+    [],
+  );
+
+  const onMessageAction = useCallback(
+    (messageId: string, action: MessageAction) => {
+      const msg = messages.find((m) => m.id === messageId);
+      if (!msg) return;
+      switch (action) {
+        case 'reply':
+          setReplyTo(toQuote(msg));
+          inputRef.current?.focus();
+          break;
+        case 'copy':
+          Clipboard.setStringAsync(msg.content ?? '').catch(() => {});
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          break;
+        case 'forward':
+          setForwarding(msg);
+          break;
+        case 'pin':
+        case 'unpin':
+          togglePin(messageId, action === 'unpin');
+          break;
+        case 'star':
+        case 'unstar':
+          toggleStar(messageId, action === 'unstar');
+          break;
+        case 'delete':
+          confirmDelete(messageId);
+          break;
+      }
+    },
+    [messages, toQuote, togglePin, toggleStar, confirmDelete],
+  );
+
+  /**
+   * Enchaînement après fermeture du menu.
+   *
+   * ⚠️ `requestAnimationFrame` en plus de l'effet : l'effet s'exécute dès le commit, mais le
+   * Modal n'est réellement retiré qu'à l'image suivante. Ouvrir une feuille entre les deux
+   * retombe exactement sur le problème qu'on évite.
+   */
+  useEffect(() => {
+    if (menu || !pendingActionRef.current) return;
+    const pending = pendingActionRef.current;
+    pendingActionRef.current = null;
+    // ⚠️ AUCUN nettoyage qui annulerait l'image demandée : la file vient d'être vidée, et un
+    // rendu survenant entre-temps — un message qui arrive, une frappe — emporterait l'action
+    // avec lui. Un rappel orphelin après démontage est sans conséquence ; une action perdue,
+    // non.
+    requestAnimationFrame(() => onMessageAction(pending.messageId, pending.action));
+  }, [menu, onMessageAction]);
+
+  /**
+   * Transfert : on RÉÉMET le message vers chaque conversation choisie.
+   *
+   * ⚠️ Le média est réutilisé par son URL S3, sans re-téléverser : le fichier est déjà en
+   * ligne, et en poster une copie multiplierait le stockage pour un contenu identique.
+   * ⚠️ La CITATION n'est pas reprise : le message cité n'existe pas dans la conversation
+   * d'arrivée, et l'y afficher exposerait un extrait d'une conversation dont le destinataire
+   * n'est pas membre.
+   */
+  const forwardTo = useCallback(
+    (msg: Message, conversationIds: string[]) => {
+      const socket = getSocket();
+      if (!socket) return;
+      for (const convId of conversationIds) {
+        socket.emit('send_message', {
+          conversationId: convId,
+          content: msg.content ?? '',
+          type: msg.type === 'story_reply' ? 'text' : msg.type,
+          mediaUrl: msg.mediaUrl ?? undefined,
+          mediaType: msg.mediaType ?? undefined,
+          fileName: msg.fileName ?? undefined,
+          fileSize: msg.fileSize ?? undefined,
+          mimeType: msg.mimeType ?? undefined,
+          durationMs: msg.durationMs ?? undefined,
+          latitude: msg.latitude ?? undefined,
+          longitude: msg.longitude ?? undefined,
+          forwarded: true,
+        });
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    },
+    [],
+  );
 
   // --- Valeurs dérivées ---
   // Le surnom local d'abord, puis le nom du serveur — qui fait foi et couvre l'ouverture
@@ -1992,22 +2373,6 @@ export default function ChatScreen() {
   }, [visibleMessages]);
 
   /**
-   * Décide, UNE seule fois, où la conversation s'ouvre : sur le repère s'il reste des
-   * messages à lire, en bas sinon.
-   *
-   * ⚠️ Doit désarmer la fenêtre de suivi armée au chargement de l'historique — elle force
-   * le retour en bas pendant 2,5 s, et gagnerait contre le calage sur le repère.
-   */
-  const decideOpenTarget = useCallback((key: string | null) => {
-    if (openDecidedRef.current) return;
-    openDecidedRef.current = true;
-    if (!key) return;
-    openTargetRef.current = key;
-    atBottomRef.current = false;
-    followUntilRef.current = 0;
-  }, []);
-
-  /**
    * Lignes dans l'ordre d'AFFICHAGE de la liste inversée : le plus récent en premier.
    *
    * ⚠️ `rows` reste chronologique — c'est lui qui porte le regroupement des séries, la
@@ -2015,23 +2380,8 @@ export default function ChatScreen() {
    * consomme cet ordre retourné, et tout `scrollToIndex` doit chercher son index ICI.
    */
   const displayRows = useMemo(() => [...rows].reverse(), [rows]);
-
-  /**
-   * Unique point de défilement vers une ligne précise (repère de reprise, épinglé, favori).
-   *
-   * Mémorise la cible : si `scrollToIndex` échoue faute de cellule montée,
-   * `onScrollToIndexFailed` s'en approche à l'estimation — ce qui force le rendu — puis
-   * relance depuis ici. Sans cette reprise, l'appel échouait sans le moindre signe.
-   */
-  const scrollToRow = useCallback(
-    (key: string, viewPosition: number, viewOffset = 0, animated = false) => {
-      const index = displayRows.findIndex((r) => r.key === key);
-      if (index < 0) return;
-      pendingScrollRef.current = { key, viewPosition, viewOffset, animated, tries: 0 };
-      listRef.current?.scrollToIndex({ index, animated, viewPosition, viewOffset });
-    },
-    [displayRows],
-  );
+  // Alimente la ref lue par les reprises différées du défilement (voir sa déclaration).
+  displayRowsRef.current = displayRows;
 
   // Second temps du saut vers un message qui n'était pas chargé : la fenêtre est arrivée,
   // la liste l'a rendue, on peut enfin viser la ligne.
@@ -2041,10 +2391,10 @@ export default function ChatScreen() {
     const row = displayRows.find((r) => r.messages.some((m) => m.id === id));
     if (!row) return;
     pendingJumpRef.current = null;
-    scrollToRow(row.key, 0.5, 0, false);
-    const to = setTimeout(() => setHighlightId(null), 2500);
+    scroll.jumpTo(row.key);
+    const to = setTimeout(() => setHighlightId(null), HIGHLIGHT_MS);
     return () => clearTimeout(to);
-  }, [displayRows, scrollToRow]);
+  }, [displayRows, scroll]);
 
   /**
    * Ligne portant le repère de reprise.
@@ -2057,24 +2407,28 @@ export default function ChatScreen() {
     return row ? { key: row.key, count: unreadInfo.count } : null;
   }, [rows, unreadInfo]);
 
-  // ⚠️ Dans un effet et non pendant le rendu : `decideOpenTarget` écrit dans des refs de
-  // défilement. Se déclenche au premier fil non vide — donc après le chargement de
-  // l'historique, quand `firstUnread` a sa valeur définitive.
+  /**
+   * Où la conversation s'ouvre : sur le repère s'il reste des messages à lire, en bas sinon.
+   *
+   * ⚠️ Dans un effet et non pendant le rendu — `scroll.open` écrit dans l'état de
+   * défilement. Se déclenche au premier fil non vide, donc après le chargement de
+   * l'historique, quand `firstUnread` a sa valeur définitive. La décision est prise UNE
+   * seule fois : elle ne doit pas se rejouer parce qu'une page d'anciens messages est
+   * arrivée.
+   */
   useEffect(() => {
     if (!rows.length || openDecidedRef.current) return;
+    openDecidedRef.current = true;
     // Figé AVANT la décision : les deux doivent désigner la même ligne.
     setDivider(firstUnread);
-    decideOpenTarget(firstUnread?.key ?? null);
     // ⚠️ Le calage est lancé ICI, et pas seulement depuis `onContentSizeChange`. Cet effet
     // s'exécute APRÈS le rendu, donc après le changement de taille du contenu qui suivait
     // le chargement de l'historique : ce dernier trouvait encore la cible vide. Avant
     // l'inversion, le contenu grandissait longtemps (cellules montées par lots depuis le
     // haut) et une mesure ultérieure rattrapait le coup ; inversée, la liste se stabilise
     // tout de suite et la fenêtre était simplement ratée.
-    if (firstUnread) {
-      scrollToRow(firstUnread.key, 1, -(insets.top + HEADER_H + OPEN_TARGET_MARGIN));
-    }
-  }, [rows.length, firstUnread, decideOpenTarget, scrollToRow, insets.top]);
+    scroll.open(firstUnread?.key ?? null);
+  }, [rows.length, firstUnread, scroll]);
 
 
   // Sous-titre (priorité : frappe > en ligne > vu le… > rien).
@@ -2091,9 +2445,6 @@ export default function ChatScreen() {
   // Défilement + surlignage temporaire vers un message (épinglé/favori) demandé par le panneau.
   useEffect(() => {
     if (!scrollTarget) return;
-    // On va ailleurs qu'en bas : la fenêtre de suivi d'ouverture ne doit pas nous y ramener.
-    followUntilRef.current = 0;
-    atBottomRef.current = false;
 
     /**
      * ⚠️ La cible est copiée et l'état vidé TOUT DE SUITE, et cet effet n'a AUCUN nettoyage.
@@ -2114,13 +2465,13 @@ export default function ChatScreen() {
     const highlight = () => {
       setHighlightId(targetId);
       if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-      highlightTimerRef.current = setTimeout(() => setHighlightId(null), 2500);
+      highlightTimerRef.current = setTimeout(() => setHighlightId(null), HIGHLIGHT_MS);
     };
 
     // Le message est déjà en mémoire : rien à charger.
     const row = displayRows.find((r) => r.messages.some((m) => m.id === targetId));
     if (row) {
-      scrollToRow(row.key, 0.5, 0, true);
+      scroll.jumpTo(row.key);
       highlight();
       return;
     }
@@ -2143,13 +2494,13 @@ export default function ChatScreen() {
         hasOlderRef.current = page.hasOlder;
         hasNewerRef.current = page.hasNewer;
         replaceMessages(page.messages.slice().reverse());
-        // Calage en deux temps : `scrollToRow` cherche son index dans `displayRows`, qui
-        // n'existera qu'au rendu suivant le remplacement des messages.
+        // Calage en deux temps : le saut cherche son index dans `displayRows`, qui n'existera
+        // qu'au rendu suivant le remplacement des messages.
         pendingJumpRef.current = targetId;
         highlight();
       })
       .catch(() => {});
-  }, [scrollTarget, displayRows, scrollToRow, replaceMessages, id]);
+  }, [scrollTarget, displayRows, scroll, replaceMessages, id]);
 
   const openDetails = () => {
     if (convType === 'group') {
@@ -2237,6 +2588,372 @@ export default function ChatScreen() {
   // route, et la liste ne se dévoile de toute façon qu'une fois calée en bas. L'écran rend
   // donc sa mise en page finale tout de suite — fond, en-tête, zone de saisie — et se
   // remplit. En cas d'échec de chargement, `init` renvoie à l'accueil.
+  /**
+   * Rendu d'une ligne du fil.
+   *
+   * ⚠️ Sorti de `renderItem` pour être appelé DEUX fois : par la liste, et par l'aperçu du
+   * menu contextuel, qui redessine la bulle par-dessus le voile pour qu'elle reste nette.
+   * La découpe rectangulaire qu'on faisait avant laissait voir un cadre aux angles de la
+   * bulle, ses coins étant arrondis — seule une vraie copie donne le bon rendu.
+   *
+   * `mode: 'preview'` retire ce qui n'a pas de sens hors liste : le repère de reprise,
+   * l'animation d'entrée et les gestes.
+   */
+  const renderRow = (row: Row, index: number, mode: 'list' | 'preview' = 'list') => {
+    const album = row.messages.length > 1 ? row.messages : null;
+    // Un album reste « en envoi » tant qu'un seul de ses médias l'est : il ne doit
+    // pas s'éclaircir par morceaux au fil des téléversements.
+    const sending = row.messages.some((m) => m.pendingLocal);
+    const item = row.messages[0];
+
+    // Bandeau système centré (rejoint le groupe, éphémères, etc.)
+    if (item.type === 'system') {
+      return (
+        <View className="items-center my-2 px-6">
+          <Text className="text-sm text-gray-500 dark:text-zinc-400 bg-gray-100 dark:bg-zinc-800 rounded-full px-3.5 py-1.5 text-center">
+            {systemText(item.content)}
+          </Text>
+        </View>
+      );
+    }
+    const isMe = item.sender?.id === currentUserId;
+    const isStoryReply = isStoryReplyMsg(item);
+    const reaction = isStoryReply && isEmojiOnly(item.content);
+    // Position dans la série : pilote le nom, l'écart au précédent et les coins.
+    // On compare de ligne à ligne, en prenant les messages qui se font face.
+    //
+    // ⚠️ `index` parcourt `displayRows`, retourné par l'inversion : le message
+    // chronologiquement PRÉCÉDENT est donc à `index + 1`, et le SUIVANT à
+    // `index - 1`. Les intervertir ne casse rien de visible immédiatement — les
+    // séries se regroupent simplement à l'envers, nom en pied de série et queue de
+    // bulle sur le mauvais message.
+    const prevRow = displayRows[index + 1];
+    const nextRow = displayRows[index - 1];
+    const firstOfGroup = !sameGroup(prevRow?.messages[prevRow.messages.length - 1], item);
+    const lastOfGroup = !sameGroup(row.messages[row.messages.length - 1], nextRow?.messages[0]);
+    const radius = bubbleRadius(isMe, firstOfGroup, lastOfGroup);
+    // On n'accuse que ses propres envois — d'où l'absence de statut sur les
+    // messages reçus.
+    const sendStatus: SendStatus | undefined = !isMe
+      ? undefined
+      : sending
+        ? 'sending'
+        : statusAt(item.createdAt);
+    // Sur un album, ces marqueurs valent pour la ligne entière : un seul média
+    // épinglé suffit à la signaler.
+    const isPinned = row.messages.some((m) => flags.pinned.includes(m.id));
+    const isStarred = row.messages.some((m) => flags.starred.includes(m.id));
+    const highlighted = row.messages.some((m) => m.id === highlightId);
+    // La légende d'un album est portée par le dernier média qui en a une.
+    const albumCaption = album
+      ? [...album].reverse().find((m) => m.content)?.content ?? ''
+      : '';
+    /**
+     * Citation, construite UNE fois puis posée dans la bulle du type concerné.
+     *
+     * ⚠️ Sur un album elle est portée par le PREMIER média (c'est ainsi qu'elle est
+     * envoyée) : la chercher sur `item` seul la perdrait dès que l'ordre d'arrivée
+     * des médias diffère de l'ordre d'envoi.
+     */
+    const quoted = album ? album.find((m) => m.replyTo)?.replyTo : item.replyTo;
+    const quoteBlock = quoted ? (
+      <QuotedMessage
+        quote={quoted}
+        currentUserId={currentUserId ?? ''}
+        accent={isMe ? '#FFFFFF' : bubbleColor}
+        onColored={isMe}
+        // Le saut passe par le même chemin que les épinglés : il sait charger une
+        // fenêtre autour d'un message absent de la mémoire.
+        onPress={() => setScrollTarget(quoted.id)}
+      />
+    ) : null;
+
+    return (
+      <>
+      {/* Repère de reprise de lecture, posé juste avant le premier message non lu. */}
+      {mode === 'list' && divider?.key === row.key && (
+        <UnreadDivider
+          label={t(
+            divider.count === 1 ? 'chat.new_messages_one' : 'chat.new_messages_other',
+            { count: divider.count },
+          )}
+        />
+      )}
+      <MessageEnter
+        messageId={item.id}
+        seenIds={seenIdsRef}
+        isMe={isMe}
+        // Pas de menu sur un brouillon : son identifiant est local, épingler ou
+        // mettre en favori s'adresserait à un message que le serveur ne connaît pas.
+        // Aucun geste non plus sur l'aperçu du menu : c'est une COPIE, agir dessus
+        // rouvrirait un menu par-dessus celui qui est déjà ouvert.
+        onLongPress={
+          sending || mode === 'preview'
+            ? undefined
+            : (anchor) => openMessageMenu(item.id, anchor)
+        }
+        onSwipeReply={
+          sending || mode === 'preview' ? undefined : () => setReplyTo(toQuote(item))
+        }
+        // Même basculement que la rangée rapide : re-liker retire le like, et liker un
+        // message déjà marqué d'un autre emoji le remplace — une réaction par personne,
+        // quel que soit le chemin emprunté.
+        onDoubleTap={
+          sending || mode === 'preview' ? undefined : () => react(item.id, LIKE_EMOJI)
+        }
+        className={`max-w-[80%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
+        style={[
+          {
+            // ⚠️ Pas d'écart au-dessus du message le plus ANCIEN, qui ouvre le fil.
+            // Avec l'inversion il est en dernière position, plus en première.
+            // Aucun non plus pour l'aperçu du menu : il est posé à une position
+            // absolue, un écart le décalerait de la bulle qu'il recouvre.
+            marginTop:
+              mode === 'preview' || index === displayRows.length - 1
+                ? 0
+                : firstOfGroup
+                  ? GROUP_GAP
+                  : GROUP_GAP_TIGHT,
+          },
+        ]}
+        highlighted={highlighted}
+        accent={bubbleColor}
+      >
+        {(isPinned || isStarred) && (
+          <View
+            className={`flex-row items-center gap-1 mb-0.5 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
+          >
+            {isPinned && <Ionicons name="pin" size={12} color="#9CA3AF" />}
+            {isStarred && <Ionicons name="star" size={12} color="#F59E0B" />}
+          </View>
+        )}
+        {album ? (
+          <>
+            {!isMe && firstOfGroup && (
+              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">
+                {item.sender?.name}
+              </Text>
+            )}
+            <View
+              style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+              className={`p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+            >
+              {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
+              {quoteBlock && <View className="px-1 pt-1">{quoteBlock}</View>}
+              <MediaGrid
+                items={album.map((m) => ({
+                  id: m.id,
+                  mediaUrl: m.mediaUrl as string,
+                  mediaType: m.mediaType,
+                }))}
+                onOpen={(i) =>
+                  setAlbumView({
+                    items: album.map((m) => ({
+                      id: m.id,
+                      mediaUrl: m.mediaUrl as string,
+                      mediaType: m.mediaType,
+                    })),
+                    index: i,
+                  })
+                }
+                // ⚠️ Ancre NULLE : la grille ne mesure pas ses tuiles, le menu se
+                // centre alors de lui-même. Le média visé reste le bon — c'est son
+                // identifiant qui voyage, pas sa position.
+                onLongPressItem={
+                  sending ? () => {} : (mid: string) => openMessageMenu(mid, null)
+                }
+              />
+              {albumCaption ? (
+                <View className="px-2 pt-1.5 pb-0.5">
+                  <Text
+                    className={`text-base ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
+                  >
+                    {albumCaption}
+                  </Text>
+                  <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} status={sendStatus} />
+                </View>
+              ) : (
+                <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} overlay status={sendStatus} />
+              )}
+              {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
+              {sending && <SendingVeil />}
+            </View>
+          </>
+        ) : item.type === 'location' &&
+          item.latitude != null &&
+          item.longitude != null ? (
+          <>
+            {!isMe && firstOfGroup && (
+              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">
+                {item.sender?.name}
+              </Text>
+            )}
+            {/* Aperçu hors bulle, comme les médias : la carte se suffit à elle-même. */}
+            <View style={[BUBBLE_SHADOW, ROUND.bubble]} className="overflow-hidden">
+              <LocationBubble
+                latitude={item.latitude}
+                longitude={item.longitude}
+                address={item.content}
+                onPress={() =>
+                  setViewLocation({
+                    latitude: item.latitude!,
+                    longitude: item.longitude!,
+                    address: item.content,
+                  })
+                }
+              />
+            </View>
+            <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
+          </>
+        ) : isStoryReply ? (
+          <>
+            {/* Libellé contextuel : répondu / réagi */}
+            <View
+              className={`flex-row items-center gap-1 mb-1 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
+            >
+              <Ionicons name="arrow-undo" size={13} color="#9CA3AF" />
+              <Text className="text-xs text-gray-400 dark:text-zinc-500">
+                {reaction
+                  ? isMe
+                    ? t('chat.you_reacted')
+                    : t('chat.reacted', { name: item.sender?.name })
+                  : isMe
+                    ? t('chat.you_replied')
+                    : t('chat.replied', { name: item.sender?.name })}
+              </Text>
+            </View>
+
+            {/* Vignette verticale de la story */}
+            {item.storyMediaUrl && (
+              <Image
+                source={{ uri: item.storyMediaUrl }}
+                className="border border-gray-200 dark:border-zinc-800 bg-gray-100 dark:bg-zinc-800 mb-1"
+                style={{ ...ROUND.inner, width: 56, height: 94 }}
+              />
+            )}
+
+            {/* Réaction emoji en grand, ou bulle de texte */}
+            {reaction ? (
+              <Text style={{ fontSize: 56, lineHeight: 64 }} className="px-1">
+                {item.content}
+              </Text>
+            ) : (
+              <View
+                style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+                className={`px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+              >
+                {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
+                <Text
+                  className={`text-lg ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
+                >
+                  {item.content}
+                </Text>
+                <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
+              </View>
+            )}
+          </>
+        ) : item.mediaUrl ? (
+          <>
+            {!isMe && firstOfGroup && (
+              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
+            )}
+            {isImageLike(item.mediaType) ? (
+              // Image/vidéo/GIF en bulle : le média affleure les bords (padding
+              // fin) et la légende vit DANS la bulle, sous le média.
+              <View
+                style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+                className={`p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+              >
+                {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
+                {quoteBlock && <View className="px-1 pt-1">{quoteBlock}</View>}
+                <MessageMedia
+                  message={item}
+                  tint={bubbleColor}
+                  onOpenImage={(url) => setViewer({ type: 'image', url })}
+                  onOpenVideo={(url) => setViewer({ type: 'video', url })}
+                />
+                {item.content ? (
+                  <View className="px-2 pt-1.5 pb-0.5">
+                    <Text
+                      className={`text-base ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
+                    >
+                      {item.content}
+                    </Text>
+                    <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
+                  </View>
+                ) : (
+                  <BubbleTime iso={item.createdAt} isMe={isMe} overlay status={sendStatus} />
+                )}
+                {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
+                {sending && <SendingVeil />}
+              </View>
+            ) : (
+              // Audio/document : bulle aux couleurs de l'expéditeur, avec la carte
+              // du fichier posée dessus dans un ton contrasté. Le nom de fichier
+              // et l'icône teintée gardent ainsi un fond clair sur lequel se lire,
+              // sans que la bulle ait à renoncer à sa couleur.
+              <View
+                style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+                className={`p-1.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+              >
+                {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
+                {quoteBlock}
+                <View
+                  style={ROUND.inner}
+                  className={`px-3 py-2 ${isMe ? 'bg-white dark:bg-zinc-800' : 'bg-gray-100 dark:bg-zinc-800'}`}
+                >
+                  <MessageMedia
+                    message={item}
+                    tint={bubbleColor}
+                    onOpenImage={() => {}}
+                    onOpenVideo={() => {}}
+                  />
+                </View>
+                <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
+                {lastOfGroup && (
+                  <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />
+                )}
+              </View>
+            )}
+          </>
+        ) : (
+          <>
+            {!isMe && firstOfGroup && (
+              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
+            )}
+            <Pressable
+              onPress={
+                firstUrl(item.content) ? () => Linking.openURL(firstUrl(item.content)!) : undefined
+              }
+              style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+              className={`px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+            >
+              {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
+              {quoteBlock}
+              <Text
+                className={`text-lg ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'} ${firstUrl(item.content) ? 'underline' : ''}`}
+              >
+                {item.content}
+              </Text>
+              <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
+              {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
+            </Pressable>
+          </>
+        )}
+
+        {/* Réactions : posées sous la bulle, dans le même conteneur — elles
+            appartiennent au message, elles ne forment pas une ligne à part. */}
+        <MessageReactions
+          reactions={row.messages.flatMap((m) => m.reactions ?? [])}
+          currentUserId={currentUserId ?? ''}
+          isMe={isMe}
+          onPress={() => setReactionsOf(row.messages.map((m) => m.id))}
+        />
+      </MessageEnter>
+      </>
+    );
+  };
+
   return (
     <View className="flex-1 bg-white dark:bg-zinc-900">
       {/* Couche de fond unique, derrière la page entière : sans elle, la bande de safe
@@ -2409,7 +3126,7 @@ export default function ChatScreen() {
         {/* Enveloppe porteuse du fondu d'ouverture. Posée AUTOUR de la liste et non sur
             elle : la liste doit être montée et mesurée normalement — c'est ce qui lui
             permet de se caler en bas — elle ne doit simplement pas être vue avant. */}
-        <Animated.View style={[{ flex: 1 }, listRevealStyle]}>
+        <Animated.View style={[{ flex: 1 }, scroll.revealStyle]}>
         <FlatList
           ref={listRef}
           style={{ flex: 1 }}
@@ -2454,426 +3171,32 @@ export default function ChatScreen() {
           onStartReached={loadNewer}
           onStartReachedThreshold={0.4}
           scrollEventThrottle={16}
+          /**
+           * ⚠️ Les handlers ci-dessous ne DÉCIDENT plus rien : ils transmettent l'événement à
+           * la machine à états (`lib/threadScroll.ts`), qui seule sait si le fil peut bouger.
+           *
+           * Auparavant chacun entretenait ses propres drapeaux — et pendant un calage sur le
+           * repère de reprise, `onScroll` continuait de mettre à jour « suis-je en bas ? » en
+           * réaction à NOTRE PROPRE défilement, si bien que le mode « suivre le bas »
+           * reprenait la main et annulait le calage qui venait d'aboutir.
+           */
           onScroll={(e) => {
-            const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-            // Marge volontairement large : entre deux passes de calage, le contenu a déjà
-            // grandi d'une bulle. Un seuil serré ferait basculer « plus en bas » à ce
-            // moment-là et couperait le suivi juste après l'avoir armé. C'est le geste de
-            // l'utilisateur, pas la mesure au pixel, qui doit arrêter le suivi.
-            // ⚠️ Liste inversée : le bas du fil est à l'offset ZÉRO. La distance au bas
-            // est donc l'offset lui-même, et non ce qu'il reste de contenu en dessous.
-            const distance = contentOffset.y;
-            distanceRef.current = distance;
-            atBottomRef.current = distance < 100;
-
+            scroll.onScroll(e);
             // ⚠️ Chargement des messages plus RÉCENTS déclenché ici, et pas seulement par
             // `onStartReached` : celui-ci ne se déclenche pas de façon fiable sur une liste
-            // inversée, si bien qu'après un saut au milieu de l'historique on ne pouvait
-            // plus redescendre jusqu'au présent. La mesure nécessaire est déjà calculée
-            // au-dessus, autant s'en servir. `loadNewer` se garde lui-même contre les
-            // appels concurrents et sort tout de suite s'il n'y a rien de plus récent.
-            if (distance < layoutMeasurement.height * 1.5) loadNewer();
+            // inversée, si bien qu'après un saut au milieu de l'historique on ne pouvait plus
+            // redescendre jusqu'au présent. `loadNewer` se garde lui-même contre les appels
+            // concurrents et sort tout de suite s'il n'y a rien de plus récent.
+            const { layoutMeasurement, contentOffset } = e.nativeEvent;
+            if (contentOffset.y < layoutMeasurement.height * 1.5) loadNewer();
           }}
-          // Le doigt sur la liste prime sur tout repositionnement automatique.
-          onScrollBeginDrag={() => {
-            draggingRef.current = true;
-            // L'utilisateur reprend la main : la fenêtre de suivi s'arrête là, et un
-            // défilement ciblé encore en cours de reprise ne doit pas lui repasser devant.
-            followUntilRef.current = 0;
-            pendingScrollRef.current = null;
-          }}
-          onScrollEndDrag={() => {
-            draggingRef.current = false;
-          }}
-          onMomentumScrollEnd={() => {
-            draggingRef.current = false;
-          }}
-          // Seul déclencheur du suivi : le contenu vient de grandir (message, média chargé,
-          // clavier). `scrollToBottom` décide s'il faut suivre et repasse jusqu'à se caler.
-          onContentSizeChange={() => {
-            // Ouverture sur le repère de reprise : on vise la ligne, pas le bas. Rejoué à
-            // chaque mesure tant que le fil n'est pas dévoilé — les cellules se montent par
-            // lots, et la position juste n'est connue qu'une fois celles du dessus mesurées.
-            if (openTargetRef.current) {
-              // ⚠️ `viewPosition: 1` et non 0 : la liste étant inversée, la fin de la
-              // fenêtre visible correspond au HAUT de l'écran. C'est là qu'on veut le
-              // repère, pour lire vers le bas à partir de lui.
-              //
-              // ⚠️ Décalage NÉGATIF, contre l'intuition. Le calcul de React Native est
-              // `offset = position - viewOffset - …` : un décalage positif RÉDUIT l'offset
-              // de défilement, ce qui, dans une liste inversée, remonte l'élément vers le
-              // haut de l'écran — soit exactement sous la carte d'en-tête qu'on cherchait à
-              // éviter. Le signe opposé le repousse sous elle.
-              scrollToRow(
-                openTargetRef.current,
-                1,
-                -(insets.top + HEADER_H + OPEN_TARGET_MARGIN),
-              );
-              scheduleReveal();
-              return;
-            }
-            // Pendant la fenêtre de suivi, le rattrapage reste animé : la mesure d'une
-            // bulle haute déplace le fil de plusieurs centaines de pixels, et un saut sec
-            // juste après le glissement d'entrée se verrait comme un à-coup.
-            const smooth = smoothNextRef.current || followUntilRef.current > Date.now();
-            smoothNextRef.current = false;
-            scrollToBottom(smooth);
-            scheduleReveal();
-          }}
-          // Filet de sécurité à l'ouverture : le contentSize peut arriver avant que la liste
-          // ait sa hauteur → on force une fois le positionnement en bas au premier layout.
-          onLayout={() => {
-            if (openTargetRef.current) return; // le calage sur le repère s'en charge
-            scrollToBottom();
-          }}
-          renderItem={({ item: row, index }: { item: Row; index: number }) => {
-            const album = row.messages.length > 1 ? row.messages : null;
-            // Un album reste « en envoi » tant qu'un seul de ses médias l'est : il ne doit
-            // pas s'éclaircir par morceaux au fil des téléversements.
-            const sending = row.messages.some((m) => m.pendingLocal);
-            const item = row.messages[0];
-
-            // Bandeau système centré (rejoint le groupe, éphémères, etc.)
-            if (item.type === 'system') {
-              return (
-                <View className="items-center my-2 px-6">
-                  <Text className="text-sm text-gray-500 dark:text-zinc-400 bg-gray-100 dark:bg-zinc-800 rounded-full px-3.5 py-1.5 text-center">
-                    {systemText(item.content)}
-                  </Text>
-                </View>
-              );
-            }
-            const isMe = item.sender?.id === currentUserId;
-            const isStoryReply = isStoryReplyMsg(item);
-            const reaction = isStoryReply && isEmojiOnly(item.content);
-            // Position dans la série : pilote le nom, l'écart au précédent et les coins.
-            // On compare de ligne à ligne, en prenant les messages qui se font face.
-            //
-            // ⚠️ `index` parcourt `displayRows`, retourné par l'inversion : le message
-            // chronologiquement PRÉCÉDENT est donc à `index + 1`, et le SUIVANT à
-            // `index - 1`. Les intervertir ne casse rien de visible immédiatement — les
-            // séries se regroupent simplement à l'envers, nom en pied de série et queue de
-            // bulle sur le mauvais message.
-            const prevRow = displayRows[index + 1];
-            const nextRow = displayRows[index - 1];
-            const firstOfGroup = !sameGroup(prevRow?.messages[prevRow.messages.length - 1], item);
-            const lastOfGroup = !sameGroup(row.messages[row.messages.length - 1], nextRow?.messages[0]);
-            const radius = bubbleRadius(isMe, firstOfGroup, lastOfGroup);
-            // On n'accuse que ses propres envois — d'où l'absence de statut sur les
-            // messages reçus.
-            const sendStatus: SendStatus | undefined = !isMe
-              ? undefined
-              : sending
-                ? 'sending'
-                : statusAt(item.createdAt);
-            // Sur un album, ces marqueurs valent pour la ligne entière : un seul média
-            // épinglé suffit à la signaler.
-            const isPinned = row.messages.some((m) => flags.pinned.includes(m.id));
-            const isStarred = row.messages.some((m) => flags.starred.includes(m.id));
-            const highlighted = row.messages.some((m) => m.id === highlightId);
-            // La légende d'un album est portée par le dernier média qui en a une.
-            const albumCaption = album
-              ? [...album].reverse().find((m) => m.content)?.content ?? ''
-              : '';
-
-            return (
-              <>
-              {/* Repère de reprise de lecture, posé juste avant le premier message non lu. */}
-              {divider?.key === row.key && (
-                <UnreadDivider
-                  label={t(
-                    divider.count === 1 ? 'chat.new_messages_one' : 'chat.new_messages_other',
-                    { count: divider.count },
-                  )}
-                />
-              )}
-              <MessageEnter
-                messageId={item.id}
-                seenIds={seenIdsRef}
-                isMe={isMe}
-                // Pas de menu sur un brouillon : son identifiant est local, épingler ou
-                // mettre en favori s'adresserait à un message que le serveur ne connaît pas.
-                onLongPress={sending ? undefined : () => openMessageMenu(item.id)}
-                className={`max-w-[80%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
-                style={[
-                  {
-                    // ⚠️ Pas d'écart au-dessus du message le plus ANCIEN, qui ouvre le fil.
-                    // Avec l'inversion il est en dernière position, plus en première.
-                    marginTop:
-                      index === displayRows.length - 1
-                        ? 0
-                        : firstOfGroup
-                          ? GROUP_GAP
-                          : GROUP_GAP_TIGHT,
-                  },
-                  highlighted
-                    ? // Concentrique avec la bulle qu'il entoure : rayon de la bulle + son écart.
-                      {
-                        backgroundColor: 'rgba(250,204,21,0.25)',
-                        borderRadius: RADIUS.bubble + 2,
-                        borderCurve: 'continuous' as const,
-                        padding: 2,
-                      }
-                    : null,
-                ]}
-              >
-                {(isPinned || isStarred) && (
-                  <View
-                    className={`flex-row items-center gap-1 mb-0.5 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
-                  >
-                    {isPinned && <Ionicons name="pin" size={12} color="#9CA3AF" />}
-                    {isStarred && <Ionicons name="star" size={12} color="#F59E0B" />}
-                  </View>
-                )}
-                {album ? (
-                  <>
-                    {!isMe && firstOfGroup && (
-                      <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">
-                        {item.sender?.name}
-                      </Text>
-                    )}
-                    <View
-                      style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
-                      className={`p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
-                    >
-                      {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
-                      <MediaGrid
-                        items={album.map((m) => ({
-                          id: m.id,
-                          mediaUrl: m.mediaUrl as string,
-                          mediaType: m.mediaType,
-                        }))}
-                        onOpen={(i) =>
-                          setAlbumView({
-                            items: album.map((m) => ({
-                              id: m.id,
-                              mediaUrl: m.mediaUrl as string,
-                              mediaType: m.mediaType,
-                            })),
-                            index: i,
-                          })
-                        }
-                        onLongPressItem={sending ? () => {} : openMessageMenu}
-                      />
-                      {albumCaption ? (
-                        <View className="px-2 pt-1.5 pb-0.5">
-                          <Text
-                            className={`text-base ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
-                          >
-                            {albumCaption}
-                          </Text>
-                          <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} status={sendStatus} />
-                        </View>
-                      ) : (
-                        <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} overlay status={sendStatus} />
-                      )}
-                      {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
-                      {sending && <SendingVeil />}
-                    </View>
-                  </>
-                ) : item.type === 'location' &&
-                  item.latitude != null &&
-                  item.longitude != null ? (
-                  <>
-                    {!isMe && firstOfGroup && (
-                      <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">
-                        {item.sender?.name}
-                      </Text>
-                    )}
-                    {/* Aperçu hors bulle, comme les médias : la carte se suffit à elle-même. */}
-                    <View style={[BUBBLE_SHADOW, ROUND.bubble]} className="overflow-hidden">
-                      <LocationBubble
-                        latitude={item.latitude}
-                        longitude={item.longitude}
-                        address={item.content}
-                        onPress={() =>
-                          setViewLocation({
-                            latitude: item.latitude!,
-                            longitude: item.longitude!,
-                            address: item.content,
-                          })
-                        }
-                      />
-                    </View>
-                    <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
-                  </>
-                ) : isStoryReply ? (
-                  <>
-                    {/* Libellé contextuel : répondu / réagi */}
-                    <View
-                      className={`flex-row items-center gap-1 mb-1 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
-                    >
-                      <Ionicons name="arrow-undo" size={13} color="#9CA3AF" />
-                      <Text className="text-xs text-gray-400 dark:text-zinc-500">
-                        {reaction
-                          ? isMe
-                            ? t('chat.you_reacted')
-                            : t('chat.reacted', { name: item.sender?.name })
-                          : isMe
-                            ? t('chat.you_replied')
-                            : t('chat.replied', { name: item.sender?.name })}
-                      </Text>
-                    </View>
-
-                    {/* Vignette verticale de la story */}
-                    {item.storyMediaUrl && (
-                      <Image
-                        source={{ uri: item.storyMediaUrl }}
-                        className="border border-gray-200 dark:border-zinc-800 bg-gray-100 dark:bg-zinc-800 mb-1"
-                        style={{ ...ROUND.inner, width: 56, height: 94 }}
-                      />
-                    )}
-
-                    {/* Réaction emoji en grand, ou bulle de texte */}
-                    {reaction ? (
-                      <Text style={{ fontSize: 56, lineHeight: 64 }} className="px-1">
-                        {item.content}
-                      </Text>
-                    ) : (
-                      <View
-                        style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
-                        className={`px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
-                      >
-                        {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
-                        <Text
-                          className={`text-lg ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
-                        >
-                          {item.content}
-                        </Text>
-                        <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
-                      </View>
-                    )}
-                  </>
-                ) : item.mediaUrl ? (
-                  <>
-                    {!isMe && firstOfGroup && (
-                      <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
-                    )}
-                    {isImageLike(item.mediaType) ? (
-                      // Image/vidéo/GIF en bulle : le média affleure les bords (padding
-                      // fin) et la légende vit DANS la bulle, sous le média.
-                      <View
-                        style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
-                        className={`p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
-                      >
-                        {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
-                        <MessageMedia
-                          message={item}
-                          tint={bubbleColor}
-                          onOpenImage={(url) => setViewer({ type: 'image', url })}
-                          onOpenVideo={(url) => setViewer({ type: 'video', url })}
-                        />
-                        {item.content ? (
-                          <View className="px-2 pt-1.5 pb-0.5">
-                            <Text
-                              className={`text-base ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
-                            >
-                              {item.content}
-                            </Text>
-                            <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
-                          </View>
-                        ) : (
-                          <BubbleTime iso={item.createdAt} isMe={isMe} overlay status={sendStatus} />
-                        )}
-                        {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
-                        {sending && <SendingVeil />}
-                      </View>
-                    ) : (
-                      // Audio/document : bulle aux couleurs de l'expéditeur, avec la carte
-                      // du fichier posée dessus dans un ton contrasté. Le nom de fichier
-                      // et l'icône teintée gardent ainsi un fond clair sur lequel se lire,
-                      // sans que la bulle ait à renoncer à sa couleur.
-                      <View
-                        style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
-                        className={`p-1.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
-                      >
-                        {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
-                        <View
-                          style={ROUND.inner}
-                          className={`px-3 py-2 ${isMe ? 'bg-white dark:bg-zinc-800' : 'bg-gray-100 dark:bg-zinc-800'}`}
-                        >
-                          <MessageMedia
-                            message={item}
-                            tint={bubbleColor}
-                            onOpenImage={() => {}}
-                            onOpenVideo={() => {}}
-                          />
-                        </View>
-                        <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
-                        {lastOfGroup && (
-                          <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />
-                        )}
-                      </View>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    {!isMe && firstOfGroup && (
-                      <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
-                    )}
-                    <Pressable
-                      onPress={
-                        firstUrl(item.content) ? () => Linking.openURL(firstUrl(item.content)!) : undefined
-                      }
-                      style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
-                      className={`px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
-                    >
-                      {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
-                      <Text
-                        className={`text-lg ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'} ${firstUrl(item.content) ? 'underline' : ''}`}
-                      >
-                        {item.content}
-                      </Text>
-                      <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
-                      {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
-                    </Pressable>
-                  </>
-                )}
-              </MessageEnter>
-              </>
-            );
-          }}
-          /**
-           * ⚠️ Sans `getItemLayout` — impossible ici, les hauteurs de bulles étant
-           * variables — `scrollToIndex` échoue tant que la cible n'est pas montée.
-           *
-           * Ignorer l'échec, comme avant, marchait tant que la seule cible était un message
-           * déjà à l'écran. Pour l'ouverture sur le repère, la cible peut être loin dans le
-           * fil : on s'en approche à l'estimation, ce qui force son rendu, puis on retente à
-           * l'image suivante. C'est le remède documenté en l'absence de `getItemLayout`.
-           */
-          onScrollToIndexFailed={(info) => {
-            // On s'approche à l'estimation : ça force le rendu des cellules manquantes.
-            listRef.current?.scrollToOffset({
-              offset: info.averageItemLength * info.index,
-              animated: false,
-            });
-            const target = pendingScrollRef.current;
-            // Plafond de reprises : sur une cible introuvable, mieux vaut s'arrêter là que
-            // relancer indéfiniment une liste qui n'ira jamais plus loin.
-            if (!target || target.tries >= SCROLL_MAX_TRIES) {
-              pendingScrollRef.current = null;
-              return;
-            }
-            target.tries += 1;
-            // ⚠️ Un délai, PAS `requestAnimationFrame`. VirtualizedList monte ses cellules
-            // par lots espacés d'`updateCellsBatchingPeriod` (50 ms par défaut) : repasser à
-            // l'image suivante (~16 ms) retombe sur exactement le même nombre de cellules
-            // mesurées, et la reprise tourne à vide — c'est ce que montraient les traces,
-            // avec `highestMeasuredFrameIndex` figé d'un essai à l'autre.
-            setTimeout(() => {
-              const t = pendingScrollRef.current;
-              if (!t) return;
-              const index = displayRows.findIndex((r) => r.key === t.key);
-              if (index < 0) return;
-              listRef.current?.scrollToIndex({
-                index,
-                animated: t.animated,
-                viewPosition: t.viewPosition,
-                viewOffset: t.viewOffset,
-              });
-            }, SCROLL_RETRY_MS);
-          }}
+          onScrollBeginDrag={scroll.onScrollBeginDrag}
+          onScrollEndDrag={scroll.onScrollEndDrag}
+          onMomentumScrollEnd={scroll.onMomentumScrollEnd}
+          onContentSizeChange={scroll.onContentSizeChange}
+          onLayout={scroll.onLayout}
+          onScrollToIndexFailed={scroll.onScrollToIndexFailed}
+          renderItem={({ item: row, index }) => renderRow(row, index)}
         />
         </Animated.View>
 
@@ -2908,6 +3231,24 @@ export default function ChatScreen() {
         ) : (
           /* Input */
           <>
+            {/* Citation en cours de rédaction. Posée AU-DESSUS des vignettes de médias :
+                elle vaut pour l'envoi entier, pas pour une pièce jointe en particulier. */}
+            {replyTo && (
+              <Animated.View
+                entering={FadeInDown.duration(160)}
+                exiting={FadeOutUp.duration(140)}
+                className="px-3 pb-1"
+              >
+                <GlassSurface radius={RADIUS.inner} style={{ padding: 4 }}>
+                  <QuotedMessage
+                    quote={replyTo}
+                    currentUserId={currentUserId ?? ''}
+                    accent={bubbleColor}
+                    onDismiss={() => setReplyTo(null)}
+                  />
+                </GlassSurface>
+              </Animated.View>
+            )}
             <PendingMediaBar items={pending} onRemove={removePending} />
             {/* Éléments posés SUR le fond de conversation : pas de barre opaque ni de
                 séparateur, chaque bloc porte son propre verre dépoli. */}
@@ -2925,6 +3266,7 @@ export default function ChatScreen() {
 
               <GlassSurface radius={22} style={{ flex: 1, minHeight: 44, justifyContent: 'center' }}>
                 <TextInput
+                  ref={inputRef}
                   className="px-4 py-2.5 text-lg text-gray-900 dark:text-zinc-100"
                   style={{ maxHeight: INPUT_MAX_H, lineHeight: INPUT_LINE_H }}
                   placeholder={t('chat.message_placeholder')}
@@ -3015,6 +3357,77 @@ export default function ChatScreen() {
         title={t('media.attach')}
         comingLabel={t('media.coming_soon')}
         actions={attachActions}
+      />
+
+      {/* Menu contextuel d'un message (appui long) */}
+      {menu && (() => {
+        const msg = messages.find((m) => m.id === menu.messageId);
+        if (!msg) return null;
+        const isMine = msg.sender?.id === currentUserId;
+        return (
+          <MessageActions
+            visible
+            anchor={menu.anchor}
+            isMine={isMine}
+            myReaction={msg.reactions?.find((r) => r.userId === currentUserId)?.emoji}
+            actions={buildActions(t, {
+              hasText: !!msg.content && msg.type !== 'location',
+              pinned: flags.pinned.includes(msg.id),
+              starred: flags.starred.includes(msg.id),
+              // Supprimer : mon message, ou admin/modérateur en groupe.
+              canDelete:
+                isMine ||
+                (convType === 'group' && (myRole === 'admin' || myRole === 'moderator')),
+              ephemeral: !!msg.expiresAt,
+            })}
+            preview={(() => {
+              // La ligne à recopier, avec son index : c'est lui qui porte le regroupement
+              // de série, donc les coins et la queue de la bulle.
+              const i = displayRows.findIndex((r) => r.messages.some((m) => m.id === msg.id));
+              return i < 0 ? null : renderRow(displayRows[i], i, 'preview');
+            })()}
+            onReact={(emoji) => react(msg.id, emoji)}
+            onAction={(action) => {
+              pendingActionRef.current = { messageId: msg.id, action };
+              setMenu(null);
+            }}
+            onClose={() => setMenu(null)}
+          />
+        );
+      })()}
+
+      {/* Qui a réagi */}
+      <ReactionsSheet
+        visible={!!reactionsOf}
+        reactions={
+          reactionsOf
+            ? messages.filter((m) => reactionsOf.includes(m.id)).flatMap((m) => m.reactions ?? [])
+            : []
+        }
+        members={members}
+        currentUserId={currentUserId ?? ''}
+        onClose={() => setReactionsOf(null)}
+        onRemoveMine={() => {
+          // Retirer, c'est reposer le MÊME emoji — et sur le message qui le porte
+          // réellement, qui n'est pas forcément le premier de la ligne.
+          const owner = messages.find(
+            (m) =>
+              reactionsOf?.includes(m.id) && m.reactions?.some((r) => r.userId === currentUserId),
+          );
+          const mine = owner?.reactions?.find((r) => r.userId === currentUserId);
+          if (owner && mine) react(owner.id, mine.emoji);
+          setReactionsOf(null);
+        }}
+      />
+
+      {/* Transférer vers d'autres conversations */}
+      <ForwardSheet
+        visible={!!forwarding}
+        onClose={() => setForwarding(null)}
+        onConfirm={(ids) => {
+          if (forwarding) forwardTo(forwarding, ids);
+          setForwarding(null);
+        }}
       />
       </SafeAreaView>
     </View>

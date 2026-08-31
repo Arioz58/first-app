@@ -220,6 +220,68 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
     [ANCIEN - resolu ci-dessus] Pagination DESCENDANTE : apres un saut au milieu de l'historique, on ne peut toujours pas redescendre jusqu'au present. `onStartReached` ne se declenche pas de facon fiable sur liste inversee (contrairement a `onEndReached`, qui lui fonctionne), et le declenchement de secours pose dans `onScroll` (distance < 1,5 ecran) n'a rien change non plus. NON DIAGNOSTIQUE : reste a verifier, dans l'ordre, que `hasNewerRef` est bien VRAI apres la fenetre centree (le serveur renvoie `hasNewer` quand `fromPivot.length === after + 1`), que `loadNewer` est bien APPELE, et ce que renvoie `?newerCursor=`. Poser des traces plutot que continuer a supposer — c'est ce qui a fait gagner du temps sur le repere.
     [A VERIFIER] L'animation d'entree des bulles : signalee absente, jamais reproduite ni infirmee — les traces posees ne couvraient que l'ouverture. A retester en envoyant/recevant, maintenant que le reste est en place.
 
+[FAIT 30/08] Lancement de l'app : eclair BLANC entre le splash et l'app.
+  ⚠️ Cause : `preventAutoHideAsync()` n'etait appele NULLE PART. Le splash natif se retire donc de lui-meme des le PREMIER RENDU de l'arbre React — or a cet instant `RootLayout` rend encore `null` (la decision d'authentification n'est pas prise). Ce qu'on voyait n'etait pas un ecran de l'app mais la vue racine NATIVE, blanche quel que soit le theme.
+  → `SplashScreen.preventAutoHideAsync()` au niveau MODULE (jamais dans un composant ni un effet : dans un effet, l'appel arrive apres que le splash s'est deja retire) + retrait accroche a `onLayout` de la vue racine.
+  ⚠️ `onLayout` et non un effet sur `checked` : un effet s'execute apres le commit React, sans garantie que la vue ait ete POSEE — on rouvrirait la meme fenetre blanche, juste plus courte.
+  → 2e cause de flash traitee au passage : `initTheme()` etait LANCE sans etre attendu, malgre son commentaire « avant le rendu ». En theme sombre, le premier ecran se peignait en clair puis basculait une image plus tard. Desormais `await` dans `init`, donc sous le splash — l'attente ne se voit pas.
+  → filet : retrait force au bout de 3 s. `init` pose `checked` dans un `finally`, mais une lecture du trousseau qui ne repondrait JAMAIS laisserait le splash affiche indefiniment — pire que l'eclair corrige.
+  → contrepartie assumee : le splash reste visible le temps de la decision d'authentification (quelques dizaines de ms de lectures du trousseau). C'est le but — montrer le splash plutot que du blanc.
+  ⚠️ `fade: true` (fondu de sortie) est iOS UNIQUEMENT ; sur Android le splash se retire sans transition. La suppression du blanc, elle, vaut pour les deux plateformes. Aucun rebuild natif : le module et son plugin etaient deja en place.
+
+[REFONTE CHAT — approche] Demande du 30/08 : « refaire le systeme de conversation de zero » facon WhatsApp.
+  DECISION (validee avec le client) : PAS de reecriture, remplacement INCREMENTAL par lots livrables.
+  ⚠️ Trois points du cahier des charges contredisent des decisions deja prises ET testees ici :
+    1. « ne jamais inverser la FlatList, gerer le scroll manuellement » = exactement ce qui causait le sursaut a la remontee, corrige le 07/08. La cause est la virtualisation (hauteurs ESTIMEES remplacees cellule par cellule), qu'aucun controle manuel n'enleve. On GARDE `inverted`.
+    2. « pagination bricolee » : elle a ete refaite correctement le 08/08 (fenetre centree serveur + curseurs dans les deux sens). C'est justement ce que le cahier des charges redemande en 1.2 / 1.3 / 7.
+    3. FlashList (module natif, gain au-dela de plusieurs milliers de cellules) et IndexedDB (n'existe pas en RN ; « meme session » = un cache memoire suffit) : ecartes tant qu'aucune mesure ne les justifie.
+  Lots : 1 interactions ✅ · 2 reperes dans le fil · 3 edition/suppression/multi-selection · 4 rendu du texte · 5 recherche dans la conversation · 6 etats limites.
+
+[FAIT 30/08 - LOT 1] Interactions sur les messages : citation, reactions, menu contextuel, copier, transferer.
+  BACKEND (migration `message_reply_reactions`) :
+    → `Message.replyToId` en auto-relation. ⚠️ `onDelete: SetNull` et SURTOUT pas `Cascade` : en cascade, supprimer un message effacerait toutes les REPONSES qu'il a recues.
+    → `Message.forwarded` (booleen). On ne remonte volontairement PAS a la source : elle peut etre une conversation ou le destinataire n'est pas.
+    → modele `MessageReaction` avec `@@unique([messageId, userId])` : UNE reaction par personne, comme WhatsApp. Reagir a nouveau REMPLACE ; reposer le meme emoji RETIRE (seul moyen d'annuler depuis la rangee rapide).
+    → tout passe par `MESSAGE_SELECT`, point de lecture unique : historique, fenetre centree et pagination en heritent sans changement.
+    ⚠️ `sanitizeQuotes` : `liveMessages` filtre la PAGE, pas la RELATION — un ephemere expire restait lisible dans l'apercu de la citation, bien apres sa disparition du fil. C'est precisement ce qu'un ephemere promet de ne pas faire. Le serveur vide donc l'extrait et marque `expired`.
+    ⚠️ Le socket VERIFIE que le message cite appartient a la conversation : l'identifiant vient du client, sans ce controle on pouvait citer un message d'une conversation dont on n'est pas membre et en faire renvoyer l'extrait a tout le monde. Une citation invalide est IGNOREE (le message part quand meme) plutot que refusee — perdre le texte de l'utilisateur serait pire.
+    → reactions : `POST /conversations/:id/messages/:msgId/reaction { emoji }` (`emoji: null` retire) + diffusion socket `message_reaction`. La diffusion porte l'ETAT COMPLET des reactions du message, pas le delta : deux personnes qui reagissent en meme temps ne peuvent pas se desynchroniser, et une diffusion manquee est rattrapee par la suivante.
+    → verifie par les donnees (curl + SQL) : poser 👍 → remplacer par ❤️ → reposer ❤️ (retrait) → 0 ligne en base ; emoji trop long refuse ; `replyTo` remonte bien avec auteur et extrait.
+  APP :
+    → `components/QuotedMessage.tsx` — un seul apercu de citation pour DEUX emplacements (dans la bulle, au-dessus du champ de saisie). Les faire diverger, c'est resumer le meme message de deux facons.
+    → `components/MessageActions.tsx` — menu contextuel flottant (6 reactions rapides + « + » vers le selecteur complet, puis les actions) qui remplace l'`Alert.alert` d'avant. ⚠️ Il se place CONTRE la bulle, mesuree a l'appui long : au-dessus si elle est en bas de l'ecran, en dessous sinon. Un menu qui surgit au centre oblige a retrouver des yeux ce qu'on avait sous le doigt.
+    ⚠️ C'est la BULLE qui mesure sa propre place (ref locale + `measureInWindow`) et la transmet, pas l'appelant qui lirait `event.target` : sous la nouvelle architecture (Fabric), la cible d'un evenement tactile n'est pas un noeud mesurable.
+    → sans ancre (tuile d'album, la grille ne mesure pas ses cases) le menu se CENTRE : mal place reste utilisable, absent ne l'est pas.
+    → `components/MessageReactions.tsx` — pastilles sous la bulle (chevauchement leger : elles appartiennent au message, une ligne a part doublerait l'espacement des series) + feuille « qui a reagi ».
+    ⚠️ Les noms des auteurs de reactions viennent des MEMBRES deja charges (`GET /conversations/:id`), pas d'une requete dediee : le fil ne transporte que `userId` + `emoji`, sinon c'etait une jointure utilisateur par message et par page.
+    ⚠️ Sur un ALBUM les reactions sont AGREGEES sur la ligne : une bulle, plusieurs messages — une reaction posee sur la 3e photo serait invisible si l'on ne regardait que le premier message. Le retrait vise le message qui porte reellement ma reaction.
+    → glisser vers la droite = repondre, integre a `MessageEnter`. ⚠️ `activeOffsetX` positif seul + `failOffsetY` serre : la bulle vit dans une liste qui defile, sans ces bornes le geste prend la main au moindre mouvement de biais et le fil devient poisseux. Butee a `SWIPE_MAX` avec resistance progressive (on sent le seuil avant l'haptique), nettoyage dans `onFinalize` et pas seulement `onEnd` — un geste ANNULE ne passe jamais par `onEnd` et la bulle resterait decalee pour toujours.
+    → tap sur une citation = saut vers l'original : passe par `setScrollTarget`, qui sait deja charger une fenetre autour d'un message absent de la memoire (acquis du 08/08).
+    → reactions en OPTIMISTE (la pastille doit apparaitre sous le doigt) ; en cas d'echec on REMET l'etat precedent sans reemettre — une seconde requete sur un reseau qui vient de lacher echouerait pareil.
+    → la citation est portee par le PREMIER media d'un envoi seulement : elle appartient a l'envoi, la repeter sur les N messages d'un album afficherait N citations identiques dans une seule bulle.
+    → transfert (`components/ForwardSheet.tsx`, multi-selection) : le media est REUTILISE par son URL S3, sans re-televerser. ⚠️ La CITATION n'est pas reprise — le message cite n'existe pas dans la conversation d'arrivee, et l'y afficher exposerait un extrait d'une conversation dont le destinataire n'est pas membre.
+    ⚠️ REBUILD NATIF requis : `expo-clipboard` installe (action « Copier »).
+  [A FAIRE au lot 2] `GROUP_WINDOW_MS` vaut 5 min, le cahier des charges demande 2 min — a trancher avec les separateurs de date, meme sujet.
+
+[FAIT 31/08 - REECRITURE de la couche POSITION du fil] `lib/threadScroll.ts`.
+  ⚠️ CE QUI N'ALLAIT PAS, et qui n'etait pas un bug isole : le defilement etait pilote par NEUF refs independantes (`followUntilRef`, `atBottomRef`, `openTargetRef`, `pendingScrollRef`, `revealedRef`, `draggingRef`, `distanceRef`, `smoothNextRef`, `smoothingRef`) lues et ecrites depuis SEIZE endroits. Chacune ajoutee pour eteindre un symptome precis, chacune justifiee isolement — mais ensemble, PERSONNE NE POSSEDAIT le defilement a un instant donne. C'est ce que le client ressentait comme « tres fragile », et il avait raison.
+  Le defaut qui l'a revele : a l'ouverture sur le repere, le fil se calait dessus PUIS redescendait aussitot en bas. `revealList()` effacait `openTargetRef`, et `onScroll` continuait d'entretenir « suis-je en bas ? » PENDANT le calage — en reaction a NOTRE PROPRE defilement. Les cellules se montant par lots, l'offset repassait sous le seuil, le drapeau basculait, et le mode « suivre le bas » reprenait la main a la mesure suivante.
+  → MACHINE A ETATS, un seul proprietaire du defilement a la fois :
+      opening   le fil se cale (repere ou bas) et reste MASQUE ; les mesures ne peuvent rien armer, elles relancent seulement le calage.
+      anchored  une position est TENUE. Rien ne deplace le fil — ni un message qui arrive, ni une image qui charge, ni une page d'historique.
+      following colle au bas, suit ce qui arrive.
+      jumping   trajet vers un message precis, puis on tient la position atteinte.
+    ⚠️ L'etat de SORTIE d'`opening` depend de ce qu'on visait : une ligne → `anchored` (c'est LA correction), le bas → `following`.
+    ⚠️ Pendant `opening` et `jumping`, `onScroll` ne deduit RIEN : lire un defilement qu'on a soi-meme provoque pour en tirer une intention est la faute d'origine.
+    → les seize handlers ne DECIDENT plus, ils DEMANDENT ; l'etat accepte ou refuse.
+    → disparait au passage la « fenetre de suivi » de 2,5 s (`followUntilRef`), qui laissait n'importe quelle mesure arrivee dans l'intervalle deplacer le fil. Remplacee par une transition explicite : envoyer un message est une INTENTION, pas une fenetre de temps.
+  → bilan : 9 refs et 5 constantes retirees de `chat/[id].tsx`, 386 lignes dans un module a part, zero vestige. Aucun backend, aucune migration.
+  [FIX 31/08] Crash « scrollToIndex out of range: requested index 79 is out of 0 to 29 » : la reprise differee (`setTimeout` de 120 ms) visait un index calcule sur le `displayRows` CAPTURE par sa closure, alors que le fil avait ete remplace entre-temps. Elle relit desormais une ref, et abandonne si la cible a disparu.
+  [FIX 31/08] Le rattrapage `socket.on('connect')` se rejouait sur la connexion INITIALE : le `POST /read` de l'ouverture ayant deja efface `firstUnreadId`, il retombait sur la branche « derniere page », remplacait la fenetre centree de 166 messages par 30 et ramenait le fil en bas. On regarde `socket.connected` au moment de poser l'ecouteur — deterministe, la ou un garde temporel serait une devinette.
+  [FIX 31/08 - REGRESSION du lot 1] L'appui long ne declenchait plus rien (seul le swipe marchait).
+    ⚠️ Cause : `Pressable` (systeme de RESPONDER JS de React Native) place sous un `GestureDetector` (gestes NATIFS de RNGH). Des qu'un geste natif est monte sur la meme vue, il court-circuite le responder et `onLongPress` ne se declenche PLUS JAMAIS — tandis que le glissement, lui, continue de marcher, ce qui rend le symptome trompeur. Les deux systemes ne cohabitent pas sur une meme vue.
+    → tout le geste passe en RNGH : `Gesture.LongPress().minDuration(300).maxDistance(12)` compose en `Race` avec le Pan — le premier qui s'active annule l'autre, donc jamais le menu ET la citation. `maxDistance` non nul : un doigt pose n'est jamais parfaitement immobile.
+
 [A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
   → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.
 

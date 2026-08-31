@@ -88,6 +88,7 @@ first-app-web/       → Next.js — à créer au Mois 3
 - **react-native-webview** — visionneuse de documents in-app (`DocumentViewer`) ⚠️ **module natif** (rebuild requis)
 - **qrcode** (+ `@types/qrcode`) — QR de profil rendu en **pur JS** (aucun module natif), voir `components/QrCode.tsx`
 - **expo-haptics** — retours haptiques (capture, envoi, scan QR, tuiles de pièces jointes)
+- **expo-clipboard** — action « Copier » du menu contextuel d'un message ⚠️ **module natif** (rebuild requis après install)
 - **@bacons/apple-targets** — extension de notification iOS (`targets/`) ⚠️ **module natif** (rebuild requis) — voir la section Notifications push
 - **moti** — animations déclaratives de l'onboarding et de `StepIndicator`
 - TypeScript strict
@@ -182,6 +183,10 @@ components/
 ├── FriendsPanel.tsx     # Panneau Amis (sous-onglets mes amis / reçues / envoyées, actions inline, badge demandes) — segment « Amis » de l'onglet Contacts
 ├── ChatBackground.tsx   # Fond de conversation (asset nexa clair/sombre par défaut, preset couleur/dégradé, ou photo perso)
 ├── ChatWallpaperPicker.tsx # Sélecteur de fond de conversation (BottomSheet, presets + galerie, aperçu live)
+├── QuotedMessage.tsx    # Aperçu d'un message cité — **un seul composant pour deux emplacements** (dans la bulle, au-dessus du champ de saisie)
+├── MessageActions.tsx   # Menu contextuel d'un message (6 réactions rapides + « + », puis les actions) — placé **contre la bulle**, mesurée à l'appui long
+├── MessageReactions.tsx # Pastilles de réactions sous la bulle + feuille « qui a réagi »
+├── ForwardSheet.tsx     # Transférer un message vers plusieurs conversations (le média est réutilisé par son URL S3, sans re-téléversement)
 ├── MessageMedia.tsx     # Rendu d'une pièce jointe dans la bulle selon `mediaType` (image/gif, vidéo, audio, document)
 ├── MediaViewer.tsx      # Visionneuse plein écran image/vidéo (Modal, expo-video pour la vidéo)
 ├── AudioMessage.tsx     # Lecteur de message vocal (expo-audio : play/pause + progression + durée)
@@ -204,6 +209,7 @@ lib/
 ├── friendRequests.ts    # Store externe (`useSyncExternalStore`) du **compteur de demandes d'ami reçues** — alimente le badge natif de l'onglet Contacts et la pastille du segment Amis
 ├── unreadMessages.ts    # Store externe du **total de messages non lus** (détail par conversation) — badge de l'onglet Discussion **et** pastille de l'icône de l'app
 ├── config.ts            # BASE_URL (local/Railway selon `__DEV__`) + PRIVACY_URL / PRIVACY_POLICY_VERSION + GIPHY_API_KEY + INVITE_URL (⚠️ 3 placeholders + 1 clé en dur, cf. Sécurité)
+├── threadScroll.ts      # **Position dans le fil de discussion** — machine à états (`opening`/`anchored`/`following`/`jumping`), **un seul propriétaire du défilement** à la fois. Remplace les 9 refs qui s'annulaient mutuellement (voir la section Chat)
 ├── theme.ts             # Thème clair/sombre : `ThemePref`, `getThemePref`/`setThemePref` (SecureStore), `initTheme()` au démarrage, `useThemeColors()` (palette sémantique pour les props en dur)
 ├── contacts.ts          # Répertoire : permission, normalisation E.164 (libphonenumber-js, région déduite de `expo-localization`, défaut TR), `POST /users/contacts/match`, **cache mémoire** du dernier résultat (évite de re-synchroniser à chaque bascule de segment → rate limit)
 ├── documents.ts         # Documents : extension/MIME, `isViewableDocument` (formats rendus par WebView), téléchargement + partage **iOS et Android** (`expo-sharing`, type MIME requis côté Android)
@@ -298,6 +304,7 @@ GET  /conversations/:id/starred                   → mes messages favoris (pers
 GET  /conversations/:id/flags                     → `{ pinned: string[], starred: string[] }` — ids pour décorer les bulles
 POST/DELETE /conversations/:id/messages/:msgId/pin   → épingler / désépingler
 POST/DELETE /conversations/:id/messages/:msgId/star  → mettre / retirer des favoris
+POST /conversations/:id/messages/:msgId/reaction  → poser / remplacer / retirer une réaction `{ emoji }` (`null` = retrait). ⚠️ **Une** réaction par personne (`@@unique([messageId, userId])`) : le même emoji reposé la RETIRE. Diffuse `message_reaction` avec l'**état complet** des réactions du message — jamais un delta, sinon deux réactions simultanées divergent
 GET  /conversations/:id/media?category=&cursor=   → pièces jointes paginées (30/page) — `category` : media | images | videos | documents | audio | gifs | links
 GET  /conversations/:id/media-counts              → compteurs par catégorie (images, videos, documents, audio, gifs, links)
 POST /conversations/:id/members                   → ajouter membres (admin **ou modérateur**)
@@ -331,6 +338,7 @@ leave_conversation(conversationId)
 
 // Serveur → Client
 new_message(message)                              → refus si blocage (conv directe) ; pièces jointes + `hasLink` (détection d'URL) + `expiresAt` si la conv est en éphémère ; + push aux destinataires offline **acceptés** (titre = nom de l'expéditeur en direct, **nom du groupe** en groupe avec « Alice : … » dans le corps ; illustration = photo du groupe ou de l'expéditeur ; `data` porte `conversationId`, `senderName`, `avatarUrl` — lus par l'extension iOS) (pas de push aux membres en « demande » accepted=false → badge uniquement, ni aux membres ayant coupé les notifs `mutedUntil` dans le futur). ⚠️ **Messages système** (`type:'system'`, `content` = JSON `{ k: clé i18n, by, ...params }`) émis via `createSystemMessage` (`messages.service`) sur événements groupe/éphémère (member_added/removed/left, group_created/renamed, ephemeral_on/off) : rendus en **bandeau centré** côté app (traduits via `system.*` selon la langue du lecteur), **exclus des non-lus** (`type != 'system'` dans le COUNT), exclus de la recherche, pas de push. Pas de message « chiffrement bout en bout » tant que l'E2E n'existe pas (V2).
+message_reaction({ conversationId, messageId, reactions }) → état complet des réactions d'un message (voir l'endpoint)
 peer_typing({ conversationId, userId, typing })   → le correspondant écrit (masquage auto après 5 s côté app)
 conversation_updated({ conversationId, message }) → **room `user:<id>`** (≠ `new_message` qui part dans `conv:<id>`) : met à jour la LISTE des conversations même si la conv n'a jamais été ouverte dans la session. Payload allégé volontairement (l'objet `message` complet embarque `sender` avec téléphone + token FCM). Émis à tous les membres, **émetteur inclus** (ses autres appareils)
 presence_update({ userId, online, lastSeenAt })   → connexion/déconnexion d'un contact (gating `privacyLastSeen` appliqué serveur)
@@ -482,6 +490,30 @@ Principe transverse : **ce qui est cosmétique et personnel reste local** (Secur
 - **Vocaux** : `VoiceRecorderBar` (chrono, annulation, envoi ; < 1 s ignoré) avec tracé d'onde live dérivé du `metering` — plage resserrée −50→0 dB et courbe accentuée, sinon le tracé paraît plat. À la lecture (`AudioMessage`), onde **seekable au doigt** + **multiplicateur de vitesse** (1×/1,5×/2×).
 - **Documents** : `DocumentViewer` in-app (WebView). Formats bureautiques non garantis → écran de repli avec téléchargement. ⚠️ Aucun service de conversion tiers (transmettre l'URL d'un document privé à Google Docs Viewer reviendrait à le lui faire télécharger).
 - ⚠️ **Session audio** : toujours repasser par `enterPlaybackMode()` (`lib/audioMode.ts`) après un enregistrement, sinon iOS garde `PlayAndRecord` et **tout** ce qui est lu ensuite sort par l'écouteur téléphonique.
+
+### Lot 1 — citations, réactions, menu contextuel (30 août 2026)
+
+Refonte du chat « façon WhatsApp » menée **par lots incrémentaux**, pas en réécriture : le fil porte une quarantaine de corrections non évidentes (bulles optimistes, albums, accusés en arrière-plan, fenêtre centrée) qu'un redémarrage à zéro reperdrait une par une. ⚠️ La **liste inversée** et la **pagination à fenêtre centrée** sont conservées — ce sont les corrections des 7 et 8 août, pas des scories.
+
+- Migration `message_reply_reactions` : `Message.replyToId` (auto-relation, **`onDelete: SetNull`** — en cascade, supprimer un message effacerait toutes les réponses qu'il a reçues), `Message.forwarded`, modèle `MessageReaction` (`@@unique([messageId, userId])`).
+- Tout passe par **`MESSAGE_SELECT`**, point de lecture unique : historique, `around`, pagination en héritent sans ligne supplémentaire.
+- ⚠️ **`sanitizeQuotes`** : `liveMessages` filtre la page, **pas la relation** — un éphémère expiré restait lisible dans l'aperçu de la citation. Le serveur vide l'extrait et pose `expired`.
+- ⚠️ Le socket **vérifie que le message cité appartient à la conversation** : l'identifiant vient du client, et sans ce contrôle on citerait un message d'une conversation dont on n'est pas membre. Une citation invalide est **ignorée**, pas refusée — le message part quand même, perdre le texte de l'utilisateur serait pire.
+- ⚠️ La **bulle mesure sa propre place** (ref + `measureInWindow`) pour ancrer le menu : sous la nouvelle architecture (Fabric), `event.target` n'est pas un nœud mesurable.
+- ⚠️ Sur un **album**, les réactions sont **agrégées sur la ligne** (une bulle = plusieurs messages) ; le retrait vise le message qui porte réellement ma réaction. La **citation** n'est portée que par le **premier** média d'un envoi.
+- ⚠️ Le **transfert** ne reprend pas la citation : le message cité n'existe pas dans la conversation d'arrivée, et l'y afficher exposerait un extrait d'une conversation dont le destinataire n'est pas membre.
+- Glisser vers la droite = répondre : `activeOffsetX` positif seul + `failOffsetY` serré (sinon le geste prend la main sur le défilement), nettoyage dans **`onFinalize`** et pas seulement `onEnd` — un geste annulé ne passe jamais par `onEnd`.
+
+### Position dans le fil — `lib/threadScroll.ts` (31 août 2026)
+
+Le défilement était piloté par **9 refs** lues et écrites depuis **16 endroits**. Chacune avait été ajoutée pour éteindre un symptôme et se justifiait isolément ; ensemble, **personne ne possédait le défilement** à un instant donné. Symptôme qui l'a révélé : à l'ouverture sur le repère, le fil se calait dessus **puis redescendait aussitôt en bas** — `onScroll` entretenait « suis-je en bas ? » pendant le calage, en réaction à notre propre défilement.
+
+- **4 états, un seul actif** : `opening` (calage, fil masqué) → `anchored` (position tenue, **rien** ne déplace le fil) / `following` (collé au bas) ; `jumping` pour un saut ciblé.
+- ⚠️ L'état de **sortie** d'`opening` dépend de ce qu'on visait : une ligne → `anchored`, le bas → `following`. C'est le correctif.
+- ⚠️ Pendant `opening` et `jumping`, `onScroll` **ne déduit rien** : lire un défilement qu'on a soi-même provoqué pour en tirer une intention est la faute d'origine.
+- Les handlers de la liste ne décident plus, ils **demandent** ; l'état accepte ou refuse.
+- Disparaît au passage la « fenêtre de suivi » de 2,5 s, remplacée par une transition explicite : envoyer un message est une **intention**, pas un intervalle de temps.
+- ⚠️ **Ne pas remettre de `Pressable` sous le `GestureDetector` d'une bulle** : le responder JS de React Native est court-circuité par les gestes natifs de RNGH, et `onLongPress` ne se déclenche plus jamais (le swipe, lui, continue — symptôme trompeur). Appui long et glissement vivent tous deux dans RNGH, composés en `Race`.
 
 ### Points d'attention
 
