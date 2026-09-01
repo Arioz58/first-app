@@ -127,7 +127,15 @@
     "reactions_title_one": "{{count}} tepki",
     "reactions_title_other": "{{count}} tepki",
     "tap_to_remove": "Kaldırmak için dokunun",
-    "former_member": "Eski üye"
+    "former_member": "Eski üye",
+    "today": "Bugün",
+    "yesterday": "Dün",
+    "jump_to_bottom": "Aşağı dön",
+    "new_message_from": "{{name}} kişisinden yeni mesaj",
+    "say_hello": "{{name}} kişisine merhaba deyin!",
+    "empty_hint": "Sohbeti başlatmak için ilk mesajı gönderin.",
+    "pinned_one": "Sabitlenmiş mesaj",
+    "pinned_of": "{{index}}/{{total}}"
   },
   "details": {
     "title": "Ayrıntılar",

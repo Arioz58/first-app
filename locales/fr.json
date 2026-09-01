@@ -127,7 +127,15 @@
     "reactions_title_one": "{{count}} réaction",
     "reactions_title_other": "{{count}} réactions",
     "tap_to_remove": "Appuyer pour retirer",
-    "former_member": "Ancien membre"
+    "former_member": "Ancien membre",
+    "today": "Aujourd'hui",
+    "yesterday": "Hier",
+    "jump_to_bottom": "Revenir en bas",
+    "new_message_from": "Nouveau message de {{name}}",
+    "say_hello": "Dites bonjour à {{name}} !",
+    "empty_hint": "Envoyez le premier message pour démarrer la conversation.",
+    "pinned_one": "Message épinglé",
+    "pinned_of": "{{index}}/{{total}}"
   },
   "details": {
     "title": "Détails",

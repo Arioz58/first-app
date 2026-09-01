@@ -75,7 +75,7 @@ import { useThreadScroll } from '../../lib/threadScroll';
 import { ProgressiveBlur } from '../../components/ProgressiveBlur';
 import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
 import { UserAvatar } from '../../components/UserAvatar';
-import { QuotedMessage, type Quote } from '../../components/QuotedMessage';
+import { QuotedMessage, quoteSummary, type Quote } from '../../components/QuotedMessage';
 import {
   LIKE_EMOJI,
   MessageActions,
@@ -190,7 +190,10 @@ const isImageLike = (mt?: string | null) => mt === 'image' || mt === 'video' || 
 
 // Regroupement des bulles : messages consécutifs d'un même auteur, dans une fenêtre courte.
 // Le nom n'est rendu qu'en tête de série, l'espacement se resserre à l'intérieur.
-const GROUP_WINDOW_MS = 5 * 60 * 1000;
+// ⚠️ Deux minutes, et non cinq : au-delà, deux messages qui se répondent à quelques minutes
+// d'intervalle étaient soudés en une seule série, sans queue de bulle entre eux — on perdait
+// le repère qui dit « ce sont deux prises de parole distinctes ».
+const GROUP_WINDOW_MS = 2 * 60 * 1000;
 const GROUP_GAP = 10; // entre deux séries
 const GROUP_GAP_TIGHT = 3; // à l'intérieur d'une série
 // Coin situé côté « flux », entre deux messages d'une même série. Il était resserré (9), à
@@ -663,6 +666,71 @@ function SendingVeil() {
 }
 
 /**
+ * Libellé d'un séparateur de date : « Aujourd'hui », « Hier », puis la date elle-même.
+ *
+ * ⚠️ Comparaison sur la date LOCALE (`toDateString`) et non sur un écart en heures : deux
+ * messages séparés de dix minutes peuvent tomber de part et d'autre de minuit, et un calcul
+ * en durée les mettrait le même jour.
+ */
+const dayLabel = (iso: string, t: (k: string) => string): string => {
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return t('chat.today');
+  if (d.toDateString() === yesterday.toDateString()) return t('chat.yesterday');
+  // Moins d'une semaine : le jour de la semaine suffit et se lit plus vite qu'une date.
+  if (today.getTime() - d.getTime() < 6 * 24 * 3600 * 1000) {
+    return d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+  const sameYear = d.getFullYear() === today.getFullYear();
+  return d.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'long',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
+};
+
+/**
+ * Pastille « nouveau message », qui monte depuis le bas.
+ *
+ * ⚠️ Animation PILOTÉE À LA MAIN plutôt que par `entering`. La pastille et le bouton rond
+ * « revenir en bas » rendent tous deux un `Pressable` à la même position dans le même
+ * parent : React réconcilie l'instance existante au lieu de la remonter, donc aucune
+ * animation d'entrée ne se déclenche — d'où l'apparition sèche. Un `key` distinct forcerait
+ * le remontage, mais l'animation resterait à la merci de la réconciliation ; ici elle
+ * dépend d'une valeur qu'on contrôle.
+ *
+ * ⚠️ Que du `withTiming` : le ressort sur l'échelle est proscrit dans ce projet (un
+ * dépassement sur une pastille de texte se lit comme un défaut, pas comme du ressort).
+ */
+function PillEnter({ children }: { children: React.ReactNode }) {
+  const p = useSharedValue(0);
+  useEffect(() => {
+    p.value = withTiming(1, { duration: 240 });
+  }, [p]);
+  const style = useAnimatedStyle(() => ({
+    opacity: Math.min(1, p.value * 1.6), // lisible avant d'être arrivée
+    transform: [{ translateY: 16 * (1 - p.value) }, { scale: 0.94 + 0.06 * p.value }],
+  }));
+  return <Animated.View style={style}>{children}</Animated.View>;
+}
+
+/** Pastille de date, posée dans le fil avant le premier message d'une journée. */
+function DateSeparator({ label }: { label: string }) {
+  return (
+    <View className="items-center my-3">
+      <Text
+        style={ROUND.inner}
+        className="text-xs font-medium text-gray-600 dark:text-zinc-300 bg-white/85 dark:bg-zinc-800/85 px-3 py-1 overflow-hidden"
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+/**
  * Repère « reprendre ici » : trait continu portant le nombre de messages restant à lire.
  *
  * Posé DANS le fil, à sa place chronologique, et non en bandeau flottant : c'est un point
@@ -1011,6 +1079,23 @@ export default function ChatScreen() {
    * et rien ne signale l'échec. Même précaution que l'`onClosed` de `BottomSheet`.
    */
   const pendingActionRef = useRef<{ messageId: string; action: MessageAction } | null>(null);
+  /**
+   * Messages arrivés pendant qu'on lisait plus haut dans le fil.
+   *
+   * ⚠️ Distinct des non-lus de la conversation : ceux-là ont été RECUS sous les yeux de
+   * l'utilisateur, dans l'écran ouvert. Ils ne servent qu'à la pastille flottante et
+   * retombent dès qu'on revient en bas — le serveur, lui, les considère déjà lus.
+   */
+  const [missed, setMissed] = useState<{ count: number; name: string } | null>(null);
+  /**
+   * Bandeau des messages épinglés : index affiché, et fermeture manuelle.
+   *
+   * ⚠️ La fermeture ne DÉSÉPINGLE pas — elle masque le bandeau pour la durée de l'écran.
+   * Désépingler est une action partagée par tous les membres ; masquer un bandeau ne
+   * regarde que soi.
+   */
+  const [pinIndex, setPinIndex] = useState(0);
+  const [pinBarHidden, setPinBarHidden] = useState(false);
   /**
    * Membres de la conversation, avec leur nom et leur photo.
    *
@@ -1486,6 +1571,13 @@ export default function ChatScreen() {
              */
             if (msg.sender?.id === me.id) scroll.follow(true);
             else if (scroll.mode() === 'following') scroll.follow(true);
+            else if (msg.type !== 'system') {
+              // On lit plus haut : on ne bouge pas le fil, on signale seulement.
+              setMissed((prev) => ({
+                count: (prev?.count ?? 0) + 1,
+                name: msg.sender?.name ?? '',
+              }));
+            }
           }
         });
 
@@ -2210,6 +2302,43 @@ export default function ChatScreen() {
     [currentUserId, id, messages],
   );
 
+  /**
+   * Messages épinglés présents dans le fil, du plus récent au plus ancien.
+   *
+   * ⚠️ Construit depuis `flags.pinned` ET les messages chargés : un épinglé hors de la
+   * mémoire n'a pas d'aperçu à montrer. Le saut, lui, sait aller le chercher (fenêtre
+   * centrée), donc on garde tous les identifiants et on n'affiche un extrait que si on l'a.
+   */
+  const pinnedRows = useMemo(
+    () =>
+      [...flags.pinned].sort((a, b) => {
+        const ta = messages.find((m) => m.id === a)?.createdAt ?? '';
+        const tb = messages.find((m) => m.id === b)?.createdAt ?? '';
+        return tb.localeCompare(ta);
+      }),
+    [flags.pinned, messages],
+  );
+  const pinnedPreview = useMemo(() => {
+    const msg = messages.find((m) => m.id === pinnedRows[pinIndex]);
+    if (!msg) return '…';
+    if (msg.content) return msg.content;
+    const { label } = quoteSummary(
+      { id: msg.id, senderId: msg.sender?.id ?? '', type: msg.type, mediaType: msg.mediaType, fileName: msg.fileName },
+      t,
+    );
+    return label;
+  }, [messages, pinnedRows, pinIndex, t]);
+
+  // L'index doit rester dans les bornes : désépingler pendant qu'on cycle le ferait sortir.
+  useEffect(() => {
+    setPinIndex((i) => (pinnedRows.length ? i % pinnedRows.length : 0));
+  }, [pinnedRows.length]);
+
+  // Revenu en bas : ce qui était signalé a été vu.
+  useEffect(() => {
+    if (scroll.atBottom) setMissed(null);
+  }, [scroll.atBottom]);
+
   /** Extrait de citation construit depuis un message du fil (pour répondre). */
   const toQuote = useCallback(
     (m: Message): Quote => ({
@@ -2644,6 +2773,12 @@ export default function ChatScreen() {
     const isPinned = row.messages.some((m) => flags.pinned.includes(m.id));
     const isStarred = row.messages.some((m) => flags.starred.includes(m.id));
     const highlighted = row.messages.some((m) => m.id === highlightId);
+    // Dernière ligne de `displayRows` = message le plus ancien chargé : il ouvre forcément
+    // une journée à l'écran, même si la conversation se poursuit au-dessus.
+    const prevMsg = displayRows[index + 1]?.messages[0];
+    const newDay =
+      !prevMsg ||
+      new Date(prevMsg.createdAt).toDateString() !== new Date(item.createdAt).toDateString();
     // La légende d'un album est portée par le dernier média qui en a une.
     const albumCaption = album
       ? [...album].reverse().find((m) => m.content)?.content ?? ''
@@ -2670,6 +2805,13 @@ export default function ChatScreen() {
 
     return (
       <>
+      {/*
+        Séparateur de date, avant le premier message d'une journée.
+        ⚠️ Rendu AVANT la bulle dans le JSX, donc au-dessus d'elle : l'inversion retourne
+        l'ordre des CELLULES, pas le contenu de chacune. Le message chronologiquement
+        précédent est à `index + 1`.
+      */}
+      {mode === 'list' && newDay && <DateSeparator label={dayLabel(item.createdAt, t)} />}
       {/* Repère de reprise de lecture, posé juste avant le premier message non lu. */}
       {mode === 'list' && divider?.key === row.key && (
         <UnreadDivider
@@ -3120,6 +3262,62 @@ export default function ChatScreen() {
         </Animated.View>
       )}
 
+      {/*
+        Bandeau des messages épinglés, sous l'en-tête.
+        ⚠️ Il affiche l'épinglé le plus RÉCENT en premier, et chaque appui passe au suivant
+        en cyclant — c'est ce qui permet de tous les atteindre sans ouvrir un écran de plus.
+      */}
+      {!pinBarHidden && pinnedRows.length > 0 && (
+        <Animated.View
+          entering={FadeInDown.duration(200)}
+          exiting={FadeOutUp.duration(160)}
+          // ⚠️ ABSOLU comme l'en-tête, et non dans le flux : en flux il occuperait de la
+          // hauteur et pousserait la liste vers le bas, ce qui ferait sauter tout le fil à
+          // l'apparition comme à la fermeture du bandeau.
+          style={{
+            position: 'absolute',
+            top: insets.top + 4 + HEADER_H + 6,
+            left: 10,
+            right: 10,
+            zIndex: 9,
+          }}
+        >
+          <GlassSurface radius={RADIUS.inner} style={FLOATING_SHADOW}>
+            <View className="flex-row items-center px-3 py-2">
+              <Ionicons name="pin" size={15} color={NEXA} />
+              <View className="flex-1 ml-2.5">
+                <Text className="text-xs font-semibold text-nexa dark:text-blue-300">
+                  {pinnedRows.length > 1
+                    ? t('chat.pinned_of', {
+                        index: pinIndex + 1,
+                        total: pinnedRows.length,
+                      })
+                    : t('chat.pinned_one')}
+                </Text>
+                <Text numberOfLines={1} className="text-sm text-gray-700 dark:text-zinc-300">
+                  {pinnedPreview}
+                </Text>
+              </View>
+              <Pressable
+                hitSlop={8}
+                className="px-2 py-1"
+                onPress={() => {
+                  const target = pinnedRows[pinIndex];
+                  if (target) setScrollTarget(target);
+                  // On avance APRÈS avoir sauté : le prochain appui mène au suivant.
+                  setPinIndex((i) => (i + 1) % pinnedRows.length);
+                }}
+              >
+                <Ionicons name="arrow-forward" size={16} color="#9CA3AF" />
+              </Pressable>
+              <Pressable hitSlop={8} className="pl-1" onPress={() => setPinBarHidden(true)}>
+                <Ionicons name="close" size={16} color="#9CA3AF" />
+              </Pressable>
+            </View>
+          </GlassSurface>
+        </Animated.View>
+      )}
+
       {/* Messages */}
       <KeyboardAvoidingView className="flex-1" behavior="padding">
         <View style={{ flex: 1, marginBottom: -composerOverlap }}>
@@ -3197,8 +3395,77 @@ export default function ChatScreen() {
           onLayout={scroll.onLayout}
           onScrollToIndexFailed={scroll.onScrollToIndexFailed}
           renderItem={({ item: row, index }) => renderRow(row, index)}
+          /**
+           * Conversation vide.
+           * ⚠️ Retourné (`scaleY: -1`) : dans une liste inversée, TOUT est retourné, y compris
+           * ce composant — sans quoi le texte s'afficherait à l'envers.
+           */
+          ListEmptyComponent={
+            <View style={{ transform: [{ scaleY: -1 }] }} className="items-center px-10 pt-24">
+              <View className="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-900/30 items-center justify-center mb-4">
+                <Ionicons name="chatbubble-ellipses" size={30} color={NEXA} />
+              </View>
+              <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100 text-center">
+                {t('chat.say_hello', { name: displayName })}
+              </Text>
+              <Text className="text-sm text-gray-400 dark:text-zinc-500 text-center mt-1.5">
+                {t('chat.empty_hint')}
+              </Text>
+            </View>
+          }
         />
         </Animated.View>
+
+        {/*
+          Retour en bas + pastille de nouveau message.
+          ⚠️ Posés dans le conteneur de la LISTE, dont le bas déborde sous la zone de saisie
+          (`marginBottom` négatif) : d'où le décalage de `composerOverlap`, sans lequel ils
+          se rangeraient derrière le verre du composeur.
+        */}
+        {!scroll.atBottom && (
+          <Animated.View
+            entering={FadeInDown.duration(180)}
+            exiting={FadeOutUp.duration(140)}
+            pointerEvents="box-none"
+            style={{ position: 'absolute', right: 14, left: 14, bottom: composerOverlap + 10 }}
+          >
+            {missed ? (
+              // Un message est arrivé pendant qu'on lisait plus haut : on annonce QUI, ce
+              // qui suffit à décider d'y aller ou non sans quitter sa lecture.
+              // ⚠️ `key` distinct de l'autre branche : sans lui, React réutilise le même
+              // `Pressable` d'une branche à l'autre et `PillEnter` ne serait jamais remonté.
+              <PillEnter key="pill">
+                <Pressable
+                  onPress={() => scroll.follow(true)}
+                  style={[FLOATING_SHADOW, ROUND.bubble]}
+                  className="self-center flex-row items-center gap-2 bg-nexa px-3.5 py-2"
+                >
+                  <Ionicons name="arrow-down" size={15} color="white" />
+                  <Text numberOfLines={1} className="text-white text-sm font-medium">
+                    {missed.count > 1
+                      ? t('chat.new_messages_other', { count: missed.count })
+                      : t('chat.new_message_from', { name: missed.name })}
+                  </Text>
+                </Pressable>
+              </PillEnter>
+            ) : (
+              <PillEnter key="fab">
+                <Pressable
+                  onPress={() => scroll.follow(true)}
+                  accessibilityLabel={t('chat.jump_to_bottom')}
+                  style={[FLOATING_SHADOW]}
+                  className="self-end w-11 h-11 rounded-full bg-white dark:bg-zinc-800 items-center justify-center"
+                >
+                  <Ionicons
+                    name="chevron-down"
+                    size={22}
+                    color={scheme === 'dark' ? '#3B82F6' : NEXA}
+                  />
+                </Pressable>
+              </PillEnter>
+            )}
+          </Animated.View>
+        )}
 
         {/* ⚠️ Pas de dégradé de flou en bas, volontairement. Il a été essayé puis retiré :
             vivant dans le conteneur que le clavier décale, il était recomposé à chaque

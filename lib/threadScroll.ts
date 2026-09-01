@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FlatList, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
@@ -81,6 +81,15 @@ export function useThreadScroll({
   // `onContentSizeChange`, qui se déclenche plusieurs fois pendant que les cellules se
   // montent. Un état provoquerait un rendu de la liste en plein calage.
   const modeRef = useRef<ThreadScrollMode>('opening');
+  /**
+   * Copie RENDUE de « le fil est-il collé au bas ? ».
+   *
+   * ⚠️ Un état en plus de la ref, et non à sa place : la ref pilote le calage et doit
+   * pouvoir changer plusieurs fois par image sans provoquer de rendu. Mais un bouton
+   * « revenir en bas » doit, lui, apparaître et disparaître — il lui faut donc une valeur
+   * rendue. On ne la met à jour que quand elle CHANGE, pas à chaque événement de défilement.
+   */
+  const [atBottom, setAtBottom] = useState(true);
   const targetRef = useRef<Target | null>(null);
   const draggingRef = useRef(false);
   /** Dernière distance au bas mesurée. Une OBSERVATION, jamais une décision. */
@@ -108,6 +117,8 @@ export function useThreadScroll({
      * On visait le bas → `following`.
      */
     modeRef.current = targetRef.current ? 'anchored' : 'following';
+    // Ouvert sur le repère = on n'est PAS en bas : le bouton de retour doit s'afficher.
+    setAtBottom(!targetRef.current);
     targetRef.current = null;
     reveal.value = withTiming(1, { duration: REVEAL_MS });
   }, [reveal]);
@@ -238,6 +249,7 @@ export function useThreadScroll({
   const jumpTo = useCallback(
     (key: string) => {
       modeRef.current = 'jumping';
+      setAtBottom(false);
       if (!focusRow(key, 0.5, 0, true)) modeRef.current = 'anchored';
     },
     [focusRow],
@@ -255,6 +267,7 @@ export function useThreadScroll({
     (animated = false) => {
       modeRef.current = 'following';
       targetRef.current = null;
+      setAtBottom(true);
       toBottom(animated);
     },
     [toBottom],
@@ -279,11 +292,15 @@ export function useThreadScroll({
       // exactement ce qui annulait l'ouverture sur le repère.
       if (modeRef.current === 'opening' || modeRef.current === 'jumping') return;
       // Seul un fil réellement au bas passe en suivi ; s'en éloigner l'arrête.
-      if (distanceRef.current < AT_BOTTOM_PX && bottomIsLive()) {
+      const low = distanceRef.current < AT_BOTTOM_PX && bottomIsLive();
+      if (low) {
         modeRef.current = 'following';
       } else if (modeRef.current === 'following') {
         modeRef.current = 'anchored';
       }
+      // ⚠️ Écrit seulement au CHANGEMENT : `onScroll` tire à chaque image, et un `setState`
+      // par événement re-rendrait toute la liste pendant le défilement.
+      setAtBottom((prev) => (prev === low ? prev : low));
     },
     [bottomIsLive],
   );
@@ -368,6 +385,8 @@ export function useThreadScroll({
   return {
     revealStyle,
     mode,
+    /** Valeur RENDUE : pilote le bouton « revenir en bas » et la pastille de nouveau message. */
+    atBottom,
     isAtBottom,
     // transitions
     open,

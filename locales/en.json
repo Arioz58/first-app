@@ -127,7 +127,15 @@
     "reactions_title_one": "{{count}} reaction",
     "reactions_title_other": "{{count}} reactions",
     "tap_to_remove": "Tap to remove",
-    "former_member": "Former member"
+    "former_member": "Former member",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "jump_to_bottom": "Back to bottom",
+    "new_message_from": "New message from {{name}}",
+    "say_hello": "Say hi to {{name}}!",
+    "empty_hint": "Send the first message to start the conversation.",
+    "pinned_one": "Pinned message",
+    "pinned_of": "{{index}}/{{total}}"
   },
   "details": {
     "title": "Details",
