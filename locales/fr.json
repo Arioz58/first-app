@@ -135,7 +135,22 @@
     "say_hello": "Dites bonjour à {{name}} !",
     "empty_hint": "Envoyez le premier message pour démarrer la conversation.",
     "pinned_one": "Message épinglé",
-    "pinned_of": "{{index}}/{{total}}"
+    "pinned_of": "{{index}}/{{total}}",
+    "edit": "Modifier",
+    "edited": "modifié",
+    "editing": "Modification du message",
+    "select": "Sélectionner",
+    "message_info": "Infos du message",
+    "delete_for_me": "Supprimer pour moi",
+    "delete_for_all": "Supprimer pour tout le monde",
+    "deleted_message": "Ce message a été supprimé",
+    "deleted_by_you": "Vous avez supprimé ce message",
+    "info_sent": "Envoyé",
+    "info_delivered": "Remis",
+    "info_read": "Lu",
+    "info_pending": "En attente",
+    "show_more": "Voir plus",
+    "show_less": "Voir moins"
   },
   "details": {
     "title": "Détails",

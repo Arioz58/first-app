@@ -183,6 +183,9 @@ components/
 ├── FriendsPanel.tsx     # Panneau Amis (sous-onglets mes amis / reçues / envoyées, actions inline, badge demandes) — segment « Amis » de l'onglet Contacts
 ├── ChatBackground.tsx   # Fond de conversation (asset nexa clair/sombre par défaut, preset couleur/dégradé, ou photo perso)
 ├── ChatWallpaperPicker.tsx # Sélecteur de fond de conversation (BottomSheet, presets + galerie, aperçu live)
+├── MessageText.tsx      # Texte d'une bulle : formatage `*gras*`/`_italique_`/`~barré~`/`` `mono` ``, liens **tous** cliquables, repli « Voir plus » au-delà de 8 lignes (débordement **mesuré**, pas deviné)
+├── LinkPreviewCard.tsx  # Carte d'aperçu Open Graph (le **domaine** toujours affiché en premier : titre et image viennent du site, le domaine est le seul repère vérifiable)
+├── MessageInfoSheet.tsx # Statuts détaillés d'un message, membre par membre — **aucune requête**, tout vient des accusés déjà chargés
 ├── QuotedMessage.tsx    # Aperçu d'un message cité — **un seul composant pour deux emplacements** (dans la bulle, au-dessus du champ de saisie)
 ├── MessageActions.tsx   # Menu contextuel d'un message (6 réactions rapides + « + », puis les actions) — placé **contre la bulle**, mesurée à l'appui long
 ├── MessageReactions.tsx # Pastilles de réactions sous la bulle + feuille « qui a réagi »
@@ -304,13 +307,14 @@ GET  /conversations/:id/starred                   → mes messages favoris (pers
 GET  /conversations/:id/flags                     → `{ pinned: string[], starred: string[] }` — ids pour décorer les bulles
 POST/DELETE /conversations/:id/messages/:msgId/pin   → épingler / désépingler
 POST/DELETE /conversations/:id/messages/:msgId/star  → mettre / retirer des favoris
+PATCH /conversations/:id/messages/:messageId  → modifier le texte d'un de SES messages `{ content }` (15 min, texte seul) → socket `message_edited`
 POST /conversations/:id/messages/:msgId/reaction  → poser / remplacer / retirer une réaction `{ emoji }` (`null` = retrait). ⚠️ **Une** réaction par personne (`@@unique([messageId, userId])`) : le même emoji reposé la RETIRE. Diffuse `message_reaction` avec l'**état complet** des réactions du message — jamais un delta, sinon deux réactions simultanées divergent
 GET  /conversations/:id/media?category=&cursor=   → pièces jointes paginées (30/page) — `category` : media | images | videos | documents | audio | gifs | links
 GET  /conversations/:id/media-counts              → compteurs par catégorie (images, videos, documents, audio, gifs, links)
 POST /conversations/:id/members                   → ajouter membres (admin **ou modérateur**)
 PATCH /conversations/:id/members/:userId/role     → changer le rôle d'un membre `{ role: admin|moderator|member }` (**admin requis**) + bandeau système
 PATCH /conversations/:id/settings                 → réglage groupe `{ whoCanSend: all|admins }` (admin requis)
-DELETE /conversations/:id/messages/:messageId     → supprimer un message (l'**auteur**, ou **admin/modérateur** en groupe) → socket `message_deleted`
+DELETE /conversations/:id/messages/:messageId?scope=me|all → supprimer. `me` = pour soi (table `MessageDeletion`, filtrée dans `liveMessages`) ; `all` = **soft delete** qui VIDE réellement `content`/`mediaUrl` (délai **2 jours** pour l'auteur, illimité pour admin/modérateur) → socket `message_deleted`. ⚠️ Le fichier S3 n'est pas supprimé (voir `todo`)
 DELETE /conversations/:id/members/:userId         → expulser un membre (admin requis)
 POST /conversations/:id/leave                     → quitter (promeut prochain admin si besoin)
 PATCH /conversations/:id                          → éditer groupe (admin requis) : `name` / `photoUrl` / `description` (bandeau système « renommé » si name)
@@ -339,6 +343,8 @@ leave_conversation(conversationId)
 // Serveur → Client
 new_message(message)                              → refus si blocage (conv directe) ; pièces jointes + `hasLink` (détection d'URL) + `expiresAt` si la conv est en éphémère ; + push aux destinataires offline **acceptés** (titre = nom de l'expéditeur en direct, **nom du groupe** en groupe avec « Alice : … » dans le corps ; illustration = photo du groupe ou de l'expéditeur ; `data` porte `conversationId`, `senderName`, `avatarUrl` — lus par l'extension iOS) (pas de push aux membres en « demande » accepted=false → badge uniquement, ni aux membres ayant coupé les notifs `mutedUntil` dans le futur). ⚠️ **Messages système** (`type:'system'`, `content` = JSON `{ k: clé i18n, by, ...params }`) émis via `createSystemMessage` (`messages.service`) sur événements groupe/éphémère (member_added/removed/left, group_created/renamed, ephemeral_on/off) : rendus en **bandeau centré** côté app (traduits via `system.*` selon la langue du lecteur), **exclus des non-lus** (`type != 'system'` dans le COUNT), exclus de la recherche, pas de push. Pas de message « chiffrement bout en bout » tant que l'E2E n'existe pas (V2).
 message_reaction({ conversationId, messageId, reactions }) → état complet des réactions d'un message (voir l'endpoint)
+message_edited({ conversationId, messageId, content, editedAt }) → texte modifié par son auteur
+message_preview({ conversationId, messageId, linkPreview }) → aperçu Open Graph du premier lien, résolu **après** l'envoi (voir `src/lib/unfurl.ts`)
 peer_typing({ conversationId, userId, typing })   → le correspondant écrit (masquage auto après 5 s côté app)
 conversation_updated({ conversationId, message }) → **room `user:<id>`** (≠ `new_message` qui part dans `conv:<id>`) : met à jour la LISTE des conversations même si la conv n'a jamais été ouverte dans la session. Payload allégé volontairement (l'objet `message` complet embarque `sender` avec téléphone + token FCM). Émis à tous les membres, **émetteur inclus** (ses autres appareils)
 presence_update({ userId, online, lastSeenAt })   → connexion/déconnexion d'un contact (gating `privacyLastSeen` appliqué serveur)
@@ -514,6 +520,14 @@ Le défilement était piloté par **9 refs** lues et écrites depuis **16 endroi
 - Les handlers de la liste ne décident plus, ils **demandent** ; l'état accepte ou refuse.
 - Disparaît au passage la « fenêtre de suivi » de 2,5 s, remplacée par une transition explicite : envoyer un message est une **intention**, pas un intervalle de temps.
 - ⚠️ **Ne pas remettre de `Pressable` sous le `GestureDetector` d'une bulle** : le responder JS de React Native est court-circuité par les gestes natifs de RNGH, et `onLongPress` ne se déclenche plus jamais (le swipe, lui, continue — symptôme trompeur). Appui long et glissement vivent tous deux dans RNGH, composés en `Race`.
+
+### Aperçu de liens — `src/lib/unfurl.ts` (1er sept. 2026)
+
+- ⚠️ **Côté serveur par choix de confidentialité** : le faire depuis l'app révélerait l'IP de **chaque destinataire** au site visé — un lien vers un serveur qu'on contrôle suffirait à savoir qui a ouvert la conversation, et quand. **À documenter dans la politique de confidentialité.**
+- Attaché au **message** (relation dans `MESSAGE_SELECT`) : aucune requête côté app, et un lien partagé dans un groupe n'est visité qu'**une fois au total** (modèle `LinkPreview` indexé sur l'URL = cache ; les échecs sont mémorisés aussi, TTL 6 h).
+- Résolu **après** l'envoi et sans l'attendre (event `message_preview`) : visiter un site prend jusqu'à 5 s.
+- ⚠️ **SSRF** — le risque principal (URL fournie par l'utilisateur, serveur dans un VPC AWS). Le nom est résolu **avant** toute requête et **toutes** ses adresses vérifiées ; les redirections sont **manuelles**, chaque saut repassant le contrôle ; IPv4 **et** IPv6, formes mappées `::ffff:` comprises ; lecture bornée à 256 Ko ; http(s) seulement. 10 tentatives de contournement testées et bloquées.
+- ⏳ Reste au Mois 5 : la fenêtre **TOCTOU** entre la vérification DNS et la connexion (parade = agent HTTP à `lookup` personnalisé).
 
 ### Points d'attention
 

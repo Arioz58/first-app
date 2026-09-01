@@ -48,6 +48,9 @@ export type MessageAction =
   | 'unpin'
   | 'star'
   | 'unstar'
+  | 'edit'
+  | 'info'
+  | 'select'
   | 'delete';
 
 type ActionDef = {
@@ -266,6 +269,9 @@ export function MessageActions({
   );
 }
 
+/** Fenêtre de modification de ses propres messages — doit rester alignée sur le serveur. */
+export const EDIT_WINDOW_MS = 15 * 60 * 1000;
+
 /** Construit la liste d'actions selon le message et les droits de l'utilisateur. */
 export const buildActions = (
   t: (k: string) => string,
@@ -276,27 +282,59 @@ export const buildActions = (
     canDelete: boolean;
     /** Un éphémère ne se transfère pas : le sortir de sa conversation annulerait sa durée de vie. */
     ephemeral: boolean;
+    /** Mien ET texte ET dans la fenêtre : les trois conditions de la modification. */
+    canEdit: boolean;
+    /** Les statuts détaillés n'ont de sens que sur ses propres envois. */
+    isMine: boolean;
+    /** Un message supprimé n'accepte plus que la sélection. */
+    deleted: boolean;
   },
-): ActionDef[] => [
-  { key: 'reply', label: t('chat.reply'), icon: 'arrow-undo' },
-  ...(opts.hasText ? [{ key: 'copy' as const, label: t('chat.copy'), icon: 'copy-outline' as const }] : []),
-  ...(opts.ephemeral
-    ? []
-    : [{ key: 'forward' as const, label: t('chat.forward'), icon: 'arrow-redo' as const }]),
-  opts.pinned
-    ? { key: 'unpin', label: t('details.unpin'), icon: 'pin-outline' }
-    : { key: 'pin', label: t('details.pin'), icon: 'pin' },
-  opts.starred
-    ? { key: 'unstar', label: t('details.unstar'), icon: 'star-outline' }
-    : { key: 'star', label: t('details.star'), icon: 'star' },
-  ...(opts.canDelete
-    ? [
-        {
-          key: 'delete' as const,
-          label: t('chat.delete'),
-          icon: 'trash-outline' as const,
-          destructive: true,
-        },
-      ]
-    : []),
-];
+): ActionDef[] => {
+  if (opts.deleted) {
+    return [
+      { key: 'select', label: t('chat.select'), icon: 'checkmark-circle-outline' },
+      ...(opts.canDelete
+        ? [
+            {
+              key: 'delete' as const,
+              label: t('chat.delete'),
+              icon: 'trash-outline' as const,
+              destructive: true,
+            },
+          ]
+        : []),
+    ];
+  }
+  return [
+    { key: 'reply', label: t('chat.reply'), icon: 'arrow-undo' },
+    ...(opts.hasText
+      ? [{ key: 'copy' as const, label: t('chat.copy'), icon: 'copy-outline' as const }]
+      : []),
+    ...(opts.ephemeral
+      ? []
+      : [{ key: 'forward' as const, label: t('chat.forward'), icon: 'arrow-redo' as const }]),
+    ...(opts.canEdit
+      ? [{ key: 'edit' as const, label: t('chat.edit'), icon: 'create-outline' as const }]
+      : []),
+    opts.pinned
+      ? { key: 'unpin', label: t('details.unpin'), icon: 'pin-outline' }
+      : { key: 'pin', label: t('details.pin'), icon: 'pin' },
+    opts.starred
+      ? { key: 'unstar', label: t('details.unstar'), icon: 'star-outline' }
+      : { key: 'star', label: t('details.star'), icon: 'star' },
+    ...(opts.isMine
+      ? [{ key: 'info' as const, label: t('chat.message_info'), icon: 'information-circle-outline' as const }]
+      : []),
+    { key: 'select', label: t('chat.select'), icon: 'checkmark-circle-outline' },
+    ...(opts.canDelete
+      ? [
+          {
+            key: 'delete' as const,
+            label: t('chat.delete'),
+            icon: 'trash-outline' as const,
+            destructive: true,
+          },
+        ]
+      : []),
+  ];
+};

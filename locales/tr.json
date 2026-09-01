@@ -135,7 +135,22 @@
     "say_hello": "{{name}} kişisine merhaba deyin!",
     "empty_hint": "Sohbeti başlatmak için ilk mesajı gönderin.",
     "pinned_one": "Sabitlenmiş mesaj",
-    "pinned_of": "{{index}}/{{total}}"
+    "pinned_of": "{{index}}/{{total}}",
+    "edit": "Düzenle",
+    "edited": "düzenlendi",
+    "editing": "Mesaj düzenleniyor",
+    "select": "Seç",
+    "message_info": "Mesaj bilgisi",
+    "delete_for_me": "Benden sil",
+    "delete_for_all": "Herkesten sil",
+    "deleted_message": "Bu mesaj silindi",
+    "deleted_by_you": "Bu mesajı sildiniz",
+    "info_sent": "Gönderildi",
+    "info_delivered": "İletildi",
+    "info_read": "Okundu",
+    "info_pending": "Bekliyor",
+    "show_more": "Daha fazla göster",
+    "show_less": "Daha az göster"
   },
   "details": {
     "title": "Ayrıntılar",

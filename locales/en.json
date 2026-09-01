@@ -135,7 +135,22 @@
     "say_hello": "Say hi to {{name}}!",
     "empty_hint": "Send the first message to start the conversation.",
     "pinned_one": "Pinned message",
-    "pinned_of": "{{index}}/{{total}}"
+    "pinned_of": "{{index}}/{{total}}",
+    "edit": "Edit",
+    "edited": "edited",
+    "editing": "Editing message",
+    "select": "Select",
+    "message_info": "Message info",
+    "delete_for_me": "Delete for me",
+    "delete_for_all": "Delete for everyone",
+    "deleted_message": "This message was deleted",
+    "deleted_by_you": "You deleted this message",
+    "info_sent": "Sent",
+    "info_delivered": "Delivered",
+    "info_read": "Read",
+    "info_pending": "Pending",
+    "show_more": "Show more",
+    "show_less": "Show less"
   },
   "details": {
     "title": "Details",

@@ -26,9 +26,10 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Linking from 'expo-linking';
 import { AudioModule } from 'expo-audio';
+import i18n from '../../lib/i18n';
 import { apiRequest } from '../../lib/api';
 import { connectSocket, getSocket } from '../../lib/socket';
-import { uploadFile, firstUrl } from '../../lib/upload';
+import { uploadFile } from '../../lib/upload';
 import { MessageMedia } from '../../components/MessageMedia';
 import { AttachmentSheet, type AttachAction } from '../../components/AttachmentSheet';
 import { PendingMediaBar, type PendingMedia } from '../../components/PendingMediaBar';
@@ -75,8 +76,11 @@ import { useThreadScroll } from '../../lib/threadScroll';
 import { ProgressiveBlur } from '../../components/ProgressiveBlur';
 import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
 import { UserAvatar } from '../../components/UserAvatar';
+import { MessageText } from '../../components/MessageText';
+import { LinkPreviewCard, type LinkPreview } from '../../components/LinkPreviewCard';
 import { QuotedMessage, quoteSummary, type Quote } from '../../components/QuotedMessage';
 import {
+  EDIT_WINDOW_MS,
   LIKE_EMOJI,
   MessageActions,
   buildActions,
@@ -89,6 +93,7 @@ import {
   type Reaction,
 } from '../../components/MessageReactions';
 import { ForwardSheet } from '../../components/ForwardSheet';
+import { MessageInfoSheet } from '../../components/MessageInfoSheet';
 
 const NEXA = '#1E40AF';
 const MUTE_FOREVER = new Date('2999-12-31T00:00:00Z'); // sentinelle « toujours »
@@ -238,6 +243,12 @@ type Message = {
   forwarded?: boolean;
   /** Message éphémère : date de disparition. Absent = message permanent. */
   expiresAt?: string | null;
+  /** Modifié par son auteur : la bulle porte alors la mention « modifié ». */
+  editedAt?: string | null;
+  /** Supprimé pour tout le monde : le serveur a vidé son contenu, la ligne subsiste. */
+  deletedAt?: string | null;
+  /** Aperçu du premier lien, résolu par le serveur APRÈS l'envoi (arrive par socket). */
+  linkPreview?: LinkPreview | null;
 };
 
 /**
@@ -326,6 +337,14 @@ const HALO_SPREAD = 5;
  * sans effet visible, mais deux durées indépendantes finissent toujours par diverger.
  */
 const HIGHLIGHT_MS = 1700;
+/**
+ * Fenêtre de suppression « pour tout le monde ».
+ *
+ * ⚠️ Doit rester alignée sur `DELETE_FOR_ALL_MS` du serveur, qui reste seul juge. Deux jours
+ * et non les 60 s du cahier des charges : une minute ne couvre pas le cas courant —
+ * s'apercevoir d'une erreur en relisant.
+ */
+const DELETE_FOR_ALL_MS = 2 * 24 * 3600 * 1000;
 
 /**
  * Couleur d'accent en version translucide.
@@ -373,6 +392,8 @@ type MessageEnterProps = {
   onSwipeReply?: () => void;
   /** Double-appui = « like ». Absent = geste désactivé. */
   onDoubleTap?: () => void;
+  /** Appui simple. N'existe qu'en mode sélection — ailleurs, ce sont les enfants qui répondent. */
+  onTap?: () => void;
   /** Le message vient d'être rejoint (épinglé, favori, citation) : on le signale. */
   highlighted?: boolean;
   /** Couleur du halo de surlignage — l'accent de la conversation. */
@@ -389,6 +410,7 @@ function MessageEnter({
   onLongPress,
   onSwipeReply,
   onDoubleTap,
+  onTap,
   highlighted,
   accent,
   children,
@@ -570,9 +592,26 @@ function MessageEnter({
    * deux appuis donnent le like — jamais deux à la fois. En simultané, glisser après une
    * seconde d'appui ouvrirait le menu ET poserait la citation.
    */
+  /**
+   * Appui simple, monté SEULEMENT en mode sélection.
+   *
+   * ⚠️ Hors sélection, il ne faut surtout pas de tap au niveau de la bulle : ce sont les
+   * enfants qui répondent (ouvrir une image, lire un vocal, suivre un lien), et un geste
+   * natif au parent leur volerait l'appui.
+   */
+  const tap = useMemo(
+    () =>
+      Gesture.Tap()
+        .enabled(!!onTap)
+        .onEnd((_e, success) => {
+          if (success && onTap) runOnJS(onTap)();
+        }),
+    [onTap],
+  );
+
   const gesture = useMemo(
-    () => Gesture.Race(pan, longPress, doubleTap),
-    [pan, longPress, doubleTap],
+    () => Gesture.Race(pan, longPress, doubleTap, tap),
+    [pan, longPress, doubleTap, tap],
   );
 
   const bubble = (
@@ -604,12 +643,21 @@ function MessageEnter({
         ]}
       />
       {children}
+      {/*
+        ⚠️ Voile transparent posé PAR-DESSUS le contenu en mode sélection.
+
+        Sans lui, le geste de tap au niveau de la bulle ne verrait jamais les appuis tombant
+        sur un enfant tappable — image, vidéo, carte de document, lecteur vocal, lien : ceux-ci
+        répondent les premiers, et taper une photo l'ouvrirait en plein écran au lieu de la
+        cocher. Le voile intercepte tout le contenu d'un coup, quel que soit son type.
+      */}
+      {onTap && <Pressable style={StyleSheet.absoluteFill} onPress={onTap} />}
     </Animated.View>
   );
 
   // Aucun geste à monter (brouillon d'envoi) : on laisse la bulle nue plutôt que d'installer
   // un détecteur inerte qui gênerait quand même les appuis de ses enfants.
-  if (!onSwipeReply && !onLongPress && !onDoubleTap) return bubble;
+  if (!onSwipeReply && !onLongPress && !onDoubleTap && !onTap) return bubble;
 
 
   return (
@@ -837,16 +885,25 @@ function BubbleTime({
   isMe,
   overlay = false,
   status,
+  edited = false,
 }: {
   iso: string;
   isMe: boolean;
   overlay?: boolean;
   /** Absent sur les messages reçus : on n'accuse que ses propres envois. */
   status?: SendStatus;
+  /**
+   * Message modifié depuis son envoi.
+   *
+   * ⚠️ Posé CONTRE l'heure et non sous la bulle : c'est une précision sur l'envoi, au même
+   * titre que l'heure, et une ligne séparée ferait grandir toutes les bulles modifiées.
+   */
+  edited?: boolean;
 }) {
   if (overlay) {
     return (
       <View className="absolute bottom-1.5 right-1.5 flex-row items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5">
+        {edited && <Text className="text-[10px] text-white/80">{i18n.t('chat.edited')}</Text>}
         <Text className="text-[10px] text-white">{formatTime(iso)}</Text>
         {status && <StatusIcon status={status} tone="rgba(255,255,255,0.85)" />}
       </View>
@@ -854,6 +911,13 @@ function BubbleTime({
   }
   return (
     <View className="flex-row items-center gap-1 self-end mt-0.5">
+      {edited && (
+        <Text
+          className={`text-[11px] italic ${isMe ? 'text-white/60' : 'text-gray-400 dark:text-zinc-500'}`}
+        >
+          {i18n.t('chat.edited')}
+        </Text>
+      )}
       <Text
         className={`text-[11px] ${isMe ? 'text-white/70' : 'text-gray-400 dark:text-zinc-500'}`}
       >
@@ -911,15 +975,38 @@ type MediaPayload = {
   replyToId?: string;
 };
 
-// Détecte une réaction emoji seule (≤ 8 pictogrammes) → affichage géant hors bulle
-const isEmojiOnly = (raw?: string | null): boolean => {
+/**
+ * Compte les pictogrammes d'un message qui n'en contient QUE.
+ *
+ * Renvoie 0 si le texte contient autre chose. Sert à deux endroits : la réaction à une story
+ * (affichage géant) et les messages composés d'un à trois emojis, rendus en grand hors bulle.
+ *
+ * ⚠️ On retire les ZWJ et sélecteurs de variante AVANT de compter : une famille 👨‍👩‍👧 ou un
+ * cœur ❤️ sont écrits sur plusieurs points de code, et les compter tels quels ferait passer
+ * un seul emoji pour trois — donc rendu en petit alors qu'il devrait être agrandi.
+ */
+const emojiCount = (raw?: string | null): number => {
   const t = (raw ?? '').trim();
-  if (!t) return false;
-  // retire espaces, ZWJ (‍) et variation selector (️)
+  if (!t) return 0;
   const stripped = t.replace(/[\s‍️]/gu, '');
-  if (!stripped || [...stripped].length > 8) return false;
-  return /^\p{Extended_Pictographic}+$/u.test(stripped);
+  if (!stripped || !/^\p{Extended_Pictographic}+$/u.test(stripped)) return 0;
+  return [...stripped].length;
 };
+
+// Réaction emoji seule (≤ 8 pictogrammes) → affichage géant hors bulle.
+const isEmojiOnly = (raw?: string | null): boolean => {
+  const n = emojiCount(raw);
+  return n > 0 && n <= 8;
+};
+
+/**
+ * Taille d'un message composé uniquement d'emojis.
+ *
+ * ⚠️ Dégressive : trois emojis à la taille d'un seul déborderaient de la largeur d'une bulle
+ * sur un petit écran. Au-delà de trois, on retombe sur du texte ordinaire — c'est la règle
+ * du cahier des charges, et une phrase entière en pictogrammes n'est plus une réaction.
+ */
+const BIG_EMOJI_SIZE = [0, 52, 44, 38];
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -1094,6 +1181,17 @@ export default function ChatScreen() {
    * Désépingler est une action partagée par tous les membres ; masquer un bandeau ne
    * regarde que soi.
    */
+  /**
+   * Message en cours de modification. Le composeur bascule alors en mode édition.
+   *
+   * ⚠️ On garde le texte D'ORIGINE : annuler doit restaurer ce qu'on écrivait avant, et la
+   * comparaison évite d'envoyer une requête pour un texte inchangé.
+   */
+  const [editing, setEditing] = useState<{ id: string; original: string } | null>(null);
+  /** Message dont on affiche les statuts détaillés. */
+  const [infoOf, setInfoOf] = useState<string | null>(null);
+  /** Mode multi-sélection : identifiants retenus. Vide = mode inactif. */
+  const [selection, setSelection] = useState<string[] | null>(null);
   const [pinIndex, setPinIndex] = useState(0);
   const [pinBarHidden, setPinBarHidden] = useState(false);
   /**
@@ -1605,13 +1703,71 @@ export default function ChatScreen() {
           if (conversationId === id) router.replace('/(tabs)');
         });
 
-        // Message supprimé (par l'auteur ou un admin/modérateur) → le retirer.
+        /**
+         * Message supprimé POUR TOUS.
+         *
+         * ⚠️ On ne le RETIRE plus du fil : on le marque. Le retirer ferait disparaître une
+         * ligne au milieu de la lecture — le fil sauterait de sa hauteur — et surtout on ne
+         * dirait pas ce qui s'est passé. Le serveur a déjà vidé le contenu de son côté ;
+         * ici on ne garde que la trace.
+         */
         socket.on(
           'message_deleted',
           ({ conversationId, messageId }: { conversationId: string; messageId: string }) => {
-            if (conversationId === id) {
-              setMessages((prev) => prev.filter((m) => m.id !== messageId));
-            }
+            if (conversationId !== id) return;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === messageId
+                  ? {
+                      ...m,
+                      deletedAt: new Date().toISOString(),
+                      content: '',
+                      mediaUrl: null,
+                      mediaType: null,
+                      fileName: null,
+                      latitude: null,
+                      longitude: null,
+                      storyMediaUrl: null,
+                      reactions: [],
+                    }
+                  : m,
+              ),
+            );
+          },
+        );
+
+        /**
+         * Aperçu de lien, résolu après coup.
+         *
+         * ⚠️ Il arrive SÉPARÉMENT du message, parfois plusieurs secondes après : visiter le
+         * site distant prend du temps, et faire attendre l'envoi pour cela rendrait la
+         * conversation poisseuse. La bulle se complète toute seule quand il arrive.
+         */
+        socket.on(
+          'message_preview',
+          (d: { conversationId: string; messageId: string; linkPreview: LinkPreview }) => {
+            if (d.conversationId !== id) return;
+            setMessages((prev) =>
+              prev.map((m) => (m.id === d.messageId ? { ...m, linkPreview: d.linkPreview } : m)),
+            );
+          },
+        );
+
+        // Message modifié par son auteur.
+        socket.on(
+          'message_edited',
+          (d: {
+            conversationId: string;
+            messageId: string;
+            content: string;
+            editedAt: string;
+          }) => {
+            if (d.conversationId !== id) return;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === d.messageId ? { ...m, content: d.content, editedAt: d.editedAt } : m,
+              ),
+            );
           },
         );
 
@@ -1777,6 +1933,8 @@ export default function ChatScreen() {
       socket?.off('removed_from_group');
       socket?.off('message_deleted');
       socket?.off('message_reaction');
+      socket?.off('message_edited');
+      socket?.off('message_preview');
       socket?.off('peer_typing');
       socket?.off('presence_update');
       socket?.off('group_updated');
@@ -1817,7 +1975,41 @@ export default function ChatScreen() {
     }, 3000);
   };
 
+  /** Valide la modification en cours. Le composeur revient ensuite à son état normal. */
+  const commitEdit = useCallback(async () => {
+    if (!editing) return;
+    const content = text.trim();
+    const target = editing;
+    // On sort du mode édition AVANT l'aller-retour : la barre doit répondre au doigt, et un
+    // échec se signale par une alerte, pas en laissant l'utilisateur coincé en édition.
+    setEditing(null);
+    setText(target.original);
+    const current = messages.find((m) => m.id === target.id)?.content ?? '';
+    if (!content || content === current) return;
+
+    // Optimiste : la bulle porte le nouveau texte tout de suite, le serveur confirmera.
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === target.id ? { ...m, content, editedAt: new Date().toISOString() } : m,
+      ),
+    );
+    apiRequest(`/conversations/${id}/messages/${target.id}`, {
+      method: 'PATCH',
+      body: { content },
+    }).catch((e: any) => {
+      // Refus du serveur (fenêtre écoulée, horloge décalée) : on remet le texte d'origine.
+      setMessages((prev) =>
+        prev.map((m) => (m.id === target.id ? { ...m, content: current } : m)),
+      );
+      Alert.alert(t('error'), e.message);
+    });
+  }, [editing, text, messages, id, t]);
+
   const sendMessage = async () => {
+    if (editing) {
+      await commitEdit();
+      return;
+    }
     const content = text.trim();
     const queue = pending;
     if (!content && queue.length === 0) return;
@@ -2228,20 +2420,66 @@ export default function ChatScreen() {
         .catch((e: any) => Alert.alert(t('error'), e.message)),
     [id, loadFlags, t],
   );
+  /**
+   * Suppression d'un message.
+   *
+   * ⚠️ Deux portées, proposées seulement quand les DEUX sont possibles : « pour tout le
+   * monde » n'est offert que sur ses propres messages récents (ou en modération). Proposer
+   * un choix dont une branche sera refusée par le serveur serait pire que de ne pas
+   * l'offrir.
+   */
   const confirmDelete = useCallback(
-    (messageId: string) =>
+    (messageId: string) => {
+      const msg = messages.find((m) => m.id === messageId);
+      const isMine = msg?.sender?.id === currentUserId;
+      const moderates = convType === 'group' && (myRole === 'admin' || myRole === 'moderator');
+      const recent =
+        !!msg && Date.now() - new Date(msg.createdAt).getTime() < DELETE_FOR_ALL_MS;
+      const canDeleteForAll = moderates || (isMine && recent && !msg?.deletedAt);
+
+      const run = (scope: 'me' | 'all') =>
+        apiRequest(`/conversations/${id}/messages/${messageId}?scope=${scope}`, {
+          method: 'DELETE',
+        })
+          .then(() =>
+            setMessages((prev) =>
+              scope === 'me'
+                ? // Pour soi : la ligne disparaît réellement de MON fil.
+                  prev.filter((m) => m.id !== messageId)
+                : // Pour tous : elle reste, marquée. L'écho socket fera de même chez les
+                  // autres ; on l'applique tout de suite pour ne pas attendre l'aller-retour.
+                  prev.map((m) =>
+                    m.id === messageId
+                      ? {
+                          ...m,
+                          deletedAt: new Date().toISOString(),
+                          content: '',
+                          mediaUrl: null,
+                          mediaType: null,
+                          fileName: null,
+                          reactions: [],
+                        }
+                      : m,
+                  ),
+            ),
+          )
+          .catch((e: any) => Alert.alert(t('error'), e.message));
+
       Alert.alert(t('chat.delete_confirm'), '', [
         { text: t('cancel'), style: 'cancel' },
-        {
-          text: t('chat.delete'),
-          style: 'destructive',
-          onPress: () =>
-            apiRequest(`/conversations/${id}/messages/${messageId}`, { method: 'DELETE' })
-              .then(() => setMessages((prev) => prev.filter((m) => m.id !== messageId)))
-              .catch((e: any) => Alert.alert(t('error'), e.message)),
-        },
-      ]),
-    [id, t],
+        { text: t('chat.delete_for_me'), style: 'destructive', onPress: () => run('me') },
+        ...(canDeleteForAll
+          ? [
+              {
+                text: t('chat.delete_for_all'),
+                style: 'destructive' as const,
+                onPress: () => run('all'),
+              },
+            ]
+          : []),
+      ]);
+    },
+    [id, t, messages, currentUserId, convType, myRole],
   );
 
   /**
@@ -2334,6 +2572,22 @@ export default function ChatScreen() {
     setPinIndex((i) => (pinnedRows.length ? i % pinnedRows.length : 0));
   }, [pinnedRows.length]);
 
+  /**
+   * Ajoute ou retire un message de la sélection.
+   *
+   * ⚠️ Vider la sélection SORT du mode : garder une barre d'actions ouverte sur zéro message
+   * laisserait l'utilisateur dans un état sans issue visible, sinon la croix.
+   */
+  const toggleSelected = useCallback((messageId: string) => {
+    setSelection((prev) => {
+      if (!prev) return [messageId];
+      const next = prev.includes(messageId)
+        ? prev.filter((x) => x !== messageId)
+        : [...prev, messageId];
+      return next.length ? next : null;
+    });
+  }, []);
+
   // Revenu en bas : ce qui était signalé a été vu.
   useEffect(() => {
     if (scroll.atBottom) setMissed(null);
@@ -2378,12 +2632,24 @@ export default function ChatScreen() {
         case 'unstar':
           toggleStar(messageId, action === 'unstar');
           break;
+        case 'edit':
+          setEditing({ id: msg.id, original: text });
+          setText(msg.content ?? '');
+          setReplyTo(null); // une modification n'est pas une réponse
+          inputRef.current?.focus();
+          break;
+        case 'info':
+          setInfoOf(msg.id);
+          break;
+        case 'select':
+          setSelection([msg.id]);
+          break;
         case 'delete':
           confirmDelete(messageId);
           break;
       }
     },
-    [messages, toQuote, togglePin, toggleStar, confirmDelete],
+    [messages, toQuote, togglePin, toggleStar, confirmDelete, text],
   );
 
   /**
@@ -2775,6 +3041,16 @@ export default function ChatScreen() {
     const highlighted = row.messages.some((m) => m.id === highlightId);
     // Dernière ligne de `displayRows` = message le plus ancien chargé : il ouvre forcément
     // une journée à l'écran, même si la conversation se poursuit au-dessus.
+    // Message composé d'un à trois emojis seulement : rendu en grand, sans bulle.
+    // ⚠️ Exclut ce qui porte un média, une citation ou une réponse à une story : ces
+    // bulles-là ont une structure à rendre, l'emoji n'en est qu'une partie.
+    const bigEmoji =
+      !item.deletedAt && !item.mediaUrl && !item.replyTo && !isStoryReply && !album
+        ? (() => {
+            const n = emojiCount(item.content);
+            return n >= 1 && n <= 3 ? n : 0;
+          })()
+        : 0;
     const prevMsg = displayRows[index + 1]?.messages[0];
     const newDay =
       !prevMsg ||
@@ -2829,19 +3105,27 @@ export default function ChatScreen() {
         // mettre en favori s'adresserait à un message que le serveur ne connaît pas.
         // Aucun geste non plus sur l'aperçu du menu : c'est une COPIE, agir dessus
         // rouvrirait un menu par-dessus celui qui est déjà ouvert.
+        // ⚠️ En mode sélection, l'appui long n'ouvre plus le menu : un seul geste doit
+        // gouverner à la fois, sinon on obtient un menu contextuel par-dessus une barre
+        // d'actions groupées qui parle des mêmes messages.
         onLongPress={
-          sending || mode === 'preview'
+          sending || mode === 'preview' || selection
             ? undefined
             : (anchor) => openMessageMenu(item.id, anchor)
         }
+        onTap={selection && mode === 'list' ? () => toggleSelected(item.id) : undefined}
         onSwipeReply={
-          sending || mode === 'preview' ? undefined : () => setReplyTo(toQuote(item))
+          sending || mode === 'preview' || selection
+            ? undefined
+            : () => setReplyTo(toQuote(item))
         }
         // Même basculement que la rangée rapide : re-liker retire le like, et liker un
         // message déjà marqué d'un autre emoji le remplace — une réaction par personne,
         // quel que soit le chemin emprunté.
         onDoubleTap={
-          sending || mode === 'preview' ? undefined : () => react(item.id, LIKE_EMOJI)
+          sending || mode === 'preview' || selection
+            ? undefined
+            : () => react(item.id, LIKE_EMOJI)
         }
         className={`max-w-[80%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
         style={[
@@ -2861,6 +3145,25 @@ export default function ChatScreen() {
         highlighted={highlighted}
         accent={bubbleColor}
       >
+        {/* Coche de sélection. Posée au-dessus de la bulle plutôt qu'à côté : à côté, elle
+            décalerait toutes les bulles à l'entrée du mode et le fil sauterait. */}
+        {mode === 'list' && selection && (
+          <View
+            className={`flex-row items-center mb-0.5 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
+          >
+            <View
+              className={`w-5 h-5 rounded-full items-center justify-center border-2 ${
+                selection.includes(item.id)
+                  ? 'bg-nexa border-nexa'
+                  : 'border-gray-300 dark:border-zinc-600'
+              }`}
+            >
+              {selection.includes(item.id) && (
+                <Ionicons name="checkmark" size={12} color="white" />
+              )}
+            </View>
+          </View>
+        )}
         {(isPinned || isStarred) && (
           <View
             className={`flex-row items-center gap-1 mb-0.5 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
@@ -2869,7 +3172,28 @@ export default function ChatScreen() {
             {isStarred && <Ionicons name="star" size={12} color="#F59E0B" />}
           </View>
         )}
-        {album ? (
+        {/*
+          Message supprimé pour tout le monde.
+          ⚠️ Testé AVANT tous les autres types : un message supprimé peut avoir été un média,
+          un album ou une position, et le serveur a vidé ses champs — sans cette priorité on
+          rendrait une bulle média sans média.
+        */}
+        {item.deletedAt ? (
+          <View
+            style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+            className={`flex-row items-center px-3.5 py-2.5 ${
+              isMe ? 'bg-gray-200 dark:bg-zinc-800' : 'bg-white dark:bg-zinc-900'
+            }`}
+          >
+            <Ionicons name="ban-outline" size={15} color="#9CA3AF" />
+            <Text className="text-base italic text-gray-400 dark:text-zinc-500 ml-1.5">
+              {isMe ? t('chat.deleted_by_you') : t('chat.deleted_message')}
+            </Text>
+            {lastOfGroup && (
+              <BubbleTail isMe={isMe} color={isMe ? '#e5e7eb' : theirBubble} />
+            )}
+          </View>
+        ) : album ? (
           <>
             {!isMe && firstOfGroup && (
               <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">
@@ -2945,7 +3269,7 @@ export default function ChatScreen() {
                 }
               />
             </View>
-            <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
+            <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
           </>
         ) : isStoryReply ? (
           <>
@@ -2990,7 +3314,7 @@ export default function ChatScreen() {
                 >
                   {item.content}
                 </Text>
-                <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
+                <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
               </View>
             )}
           </>
@@ -3021,7 +3345,7 @@ export default function ChatScreen() {
                     >
                       {item.content}
                     </Text>
-                    <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
+                    <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
                   </View>
                 ) : (
                   <BubbleTime iso={item.createdAt} isMe={isMe} overlay status={sendStatus} />
@@ -3051,35 +3375,65 @@ export default function ChatScreen() {
                     onOpenVideo={() => {}}
                   />
                 </View>
-                <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
+                <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
                 {lastOfGroup && (
                   <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />
                 )}
               </View>
             )}
           </>
+        ) : bigEmoji ? (
+          <>
+            {!isMe && firstOfGroup && (
+              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">
+                {item.sender?.name}
+              </Text>
+            )}
+            {/* Hors bulle : un emoji agrandi dans une bulle donnerait une boîte presque
+                vide autour de lui, et c'est la bulle qu'on regarderait. */}
+            <View className={isMe ? 'items-end' : 'items-start'}>
+              <Text
+                style={{ fontSize: BIG_EMOJI_SIZE[bigEmoji], lineHeight: BIG_EMOJI_SIZE[bigEmoji] * 1.2 }}
+                className="px-1"
+              >
+                {item.content}
+              </Text>
+              <BubbleTime
+                iso={item.createdAt}
+                isMe={false /* pas de bulle colorée : l'heure doit rester grise */}
+                status={sendStatus}
+                edited={!!item.editedAt}
+              />
+            </View>
+          </>
         ) : (
           <>
             {!isMe && firstOfGroup && (
               <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
             )}
-            <Pressable
-              onPress={
-                firstUrl(item.content) ? () => Linking.openURL(firstUrl(item.content)!) : undefined
-              }
+            <View
               style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
               className={`px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
             >
               {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
               {quoteBlock}
-              <Text
-                className={`text-lg ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'} ${firstUrl(item.content) ? 'underline' : ''}`}
-              >
-                {item.content}
-              </Text>
-              <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} />
+              {item.linkPreview && (
+                <LinkPreviewCard preview={item.linkPreview} onColored={isMe} />
+              )}
+              {/*
+                ⚠️ Plus de `Pressable` sur la bulle entière pour ouvrir « le » lien : chaque
+                URL est désormais cliquable individuellement, dans le texte. L'ancienne
+                version n'ouvrait que la PREMIÈRE, où qu'on appuie — y compris en appuyant
+                sur une autre.
+              */}
+              <MessageText
+                content={item.content}
+                className={`text-lg ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
+                linkColor={isMe ? '#FFFFFF' : bubbleColor}
+              />
+              <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
               {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
-            </Pressable>
+            </View>
           </>
         )}
 
@@ -3318,6 +3672,98 @@ export default function ChatScreen() {
         </Animated.View>
       )}
 
+      {/*
+        Mode multi-sélection : la barre REMPLACE l'en-tête.
+        ⚠️ Même géométrie que lui (position, hauteur, arrondi) : une barre d'une autre
+        taille ferait sauter tout le fil à l'entrée comme à la sortie du mode.
+      */}
+      {selection && (
+        <Animated.View
+          entering={FadeInDown.duration(160)}
+          exiting={FadeOutUp.duration(140)}
+          className="absolute bg-white dark:bg-zinc-900"
+          style={{
+            ...ROUND.surface,
+            top: insets.top + 4,
+            left: 10,
+            right: 10,
+            height: HEADER_H,
+            zIndex: 11,
+            ...HEADER_SHADOW,
+          }}
+        >
+          <View className="flex-row items-center h-full px-2">
+            <Pressable hitSlop={8} className="px-2 py-2" onPress={() => setSelection(null)}>
+              <Ionicons name="close" size={22} color={scheme === 'dark' ? '#e4e4e7' : '#111827'} />
+            </Pressable>
+            <Text className="flex-1 ml-1 text-lg font-semibold text-gray-900 dark:text-zinc-100">
+              {selection.length}
+            </Text>
+            <Pressable
+              hitSlop={6}
+              className="px-2.5 py-2"
+              onPress={() => {
+                // On transfère le PREMIER sélectionné : le transfert multiple demanderait de
+                // réémettre N messages vers M conversations, à cadrer séparément.
+                const first = messages.find((m) => m.id === selection[0]);
+                if (first) setForwarding(first);
+                setSelection(null);
+              }}
+            >
+              <Ionicons name="arrow-redo" size={21} color={NEXA} />
+            </Pressable>
+            <Pressable
+              hitSlop={6}
+              className="px-2.5 py-2"
+              onPress={() => {
+                const texts = selection
+                  .map((sid) => messages.find((m) => m.id === sid)?.content)
+                  .filter(Boolean);
+                // Une ligne par message : c'est ce qu'on attend d'un collage de plusieurs
+                // messages, et ça préserve leur ordre.
+                Clipboard.setStringAsync(texts.join('\n')).catch(() => {});
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+                  () => {},
+                );
+                setSelection(null);
+              }}
+            >
+              <Ionicons name="copy-outline" size={20} color={NEXA} />
+            </Pressable>
+            <Pressable
+              hitSlop={6}
+              className="px-2.5 py-2"
+              onPress={() => {
+                const ids = selection;
+                setSelection(null);
+                Alert.alert(t('chat.delete_confirm'), '', [
+                  { text: t('cancel'), style: 'cancel' },
+                  {
+                    text: t('chat.delete_for_me'),
+                    style: 'destructive',
+                    onPress: () => {
+                      // Une requête par message : l'endpoint travaille sur un identifiant.
+                      // Un lot demanderait une route dédiée, à ajouter si l'usage le montre.
+                      Promise.all(
+                        ids.map((mid) =>
+                          apiRequest(`/conversations/${id}/messages/${mid}?scope=me`, {
+                            method: 'DELETE',
+                          }).catch(() => {}),
+                        ),
+                      ).then(() =>
+                        setMessages((prev) => prev.filter((m) => !ids.includes(m.id))),
+                      );
+                    },
+                  },
+                ]);
+              }}
+            >
+              <Ionicons name="trash-outline" size={20} color="#EF4444" />
+            </Pressable>
+          </View>
+        </Animated.View>
+      )}
+
       {/* Messages */}
       <KeyboardAvoidingView className="flex-1" behavior="padding">
         <View style={{ flex: 1, marginBottom: -composerOverlap }}>
@@ -3500,7 +3946,35 @@ export default function ChatScreen() {
           <>
             {/* Citation en cours de rédaction. Posée AU-DESSUS des vignettes de médias :
                 elle vaut pour l'envoi entier, pas pour une pièce jointe en particulier. */}
-            {replyTo && (
+            {/* Modification en cours : le même emplacement que la citation, et pour la même
+                raison — c'est le contexte de ce qu'on s'apprête à envoyer. */}
+            {editing && (
+              <Animated.View
+                entering={FadeInDown.duration(160)}
+                exiting={FadeOutUp.duration(140)}
+                className="px-3 pb-1"
+              >
+                <GlassSurface radius={RADIUS.inner} style={{ padding: 4 }}>
+                  <View className="flex-row items-center px-2.5 py-1.5">
+                    <Ionicons name="create-outline" size={16} color={NEXA} />
+                    <Text className="flex-1 ml-2 text-sm font-semibold text-nexa dark:text-blue-300">
+                      {t('chat.editing')}
+                    </Text>
+                    <Pressable
+                      hitSlop={10}
+                      onPress={() => {
+                        // Annuler restaure ce qu'on écrivait AVANT d'entrer en édition.
+                        setText(editing.original);
+                        setEditing(null);
+                      }}
+                    >
+                      <Ionicons name="close" size={18} color="#9CA3AF" />
+                    </Pressable>
+                  </View>
+                </GlassSurface>
+              </Animated.View>
+            )}
+            {replyTo && !editing && (
               <Animated.View
                 entering={FadeInDown.duration(160)}
                 exiting={FadeOutUp.duration(140)}
@@ -3646,6 +4120,16 @@ export default function ChatScreen() {
                 isMine ||
                 (convType === 'group' && (myRole === 'admin' || myRole === 'moderator')),
               ephemeral: !!msg.expiresAt,
+              // ⚠️ Les trois conditions du serveur, rejouées ici pour ne pas proposer une
+              // action qui sera refusée. Le serveur reste seul juge — l'horloge du téléphone
+              // peut être décalée, et une action masquée n'est pas une action interdite.
+              canEdit:
+                isMine &&
+                (msg.type ?? 'text') === 'text' &&
+                !msg.mediaUrl &&
+                Date.now() - new Date(msg.createdAt).getTime() < EDIT_WINDOW_MS,
+              isMine,
+              deleted: !!msg.deletedAt,
             })}
             preview={(() => {
               // La ligne à recopier, avec son index : c'est lui qui porte le regroupement
@@ -3685,6 +4169,15 @@ export default function ChatScreen() {
           if (owner && mine) react(owner.id, mine.emoji);
           setReactionsOf(null);
         }}
+      />
+
+      {/* Statuts détaillés d'un de mes messages */}
+      <MessageInfoSheet
+        visible={!!infoOf}
+        onClose={() => setInfoOf(null)}
+        sentAt={messages.find((m) => m.id === infoOf)?.createdAt ?? null}
+        members={members.filter((m) => m.id !== currentUserId)}
+        receipts={receipts}
       />
 
       {/* Transférer vers d'autres conversations */}
