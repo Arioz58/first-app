@@ -22,7 +22,7 @@ export const resolveBubbleColor = (color?: string | null): string =>
 
 // Éclaircit (`amount` > 0) ou assombrit (< 0) une couleur, en la mélangeant vers le blanc
 // ou le noir. Travailler par mélange plutôt qu'en jouant sur chaque canal garde la teinte.
-const shade = (hex: string, amount: number): string => {
+export const shade = (hex: string, amount: number): string => {
   const n = parseInt(hex.replace('#', ''), 16);
   const mix = (c: number) => Math.round(amount > 0 ? c + (255 - c) * amount : c * (1 + amount));
   const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(mix);

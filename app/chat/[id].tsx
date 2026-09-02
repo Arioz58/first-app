@@ -12,6 +12,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, {
   FadeInDown,
   FadeOutUp,
+  interpolateColor,
   runOnJS,
   withRepeat,
   withSequence,
@@ -62,9 +63,10 @@ import {
   type ConversationCustomization,
 } from '../../lib/storage';
 import type { ChatWallpaper } from '../../lib/chatWallpapers';
-import { bubbleGradient, resolveBubbleColor } from '../../lib/bubbleColors';
+import { bubbleGradient, resolveBubbleColor, shade } from '../../lib/bubbleColors';
 import { consumeScrollTarget } from '../../lib/chatNav';
 import { setActiveConversation } from '../../lib/unreadMessages';
+import { stopVoice, voiceSnapshot } from '../../lib/voicePlayback';
 // ⚠️ Ce KeyboardAvoidingView n'est PAS celui de React Native : il suit la position
 // réelle du clavier, mesurée nativement à chaque image. Celui de RN applique son
 // décalage d'un bloc, et le piloter depuis l'événement JS laisse un décalage dans le
@@ -853,55 +855,6 @@ function EphemeralBadge({ expiresAt, tone }: { expiresAt: string; tone: string }
   );
 }
 
-/**
- * Fil en cours de chargement : silhouettes de bulles.
- *
- * ⚠️ Il comble un vrai trou, pas une coquetterie : l'écran rend sa mise en page finale tout
- * de suite (décision du 6 août, contre le flash blanc) et se remplit ensuite. Entre les
- * deux, le fil était VIDE — et `ListEmptyComponent` y annonçait « Dites bonjour ! », un
- * message faux pour une conversation qui a de l'historique.
- *
- * ⚠️ Largeurs FIGÉES et non aléatoires : tirées à chaque rendu, elles changeraient à chaque
- * frappe ou message reçu, et le squelette frétillerait.
- */
-const SKELETON_ROWS: { mine: boolean; width: number }[] = [
-  { mine: false, width: 0.55 },
-  { mine: true, width: 0.4 },
-  { mine: false, width: 0.7 },
-  { mine: true, width: 0.6 },
-  { mine: false, width: 0.35 },
-  { mine: true, width: 0.5 },
-];
-
-function ThreadSkeleton() {
-  const pulse = useSharedValue(0.5);
-  useEffect(() => {
-    // Va-et-vient doux : `withRepeat(reverse)` évite le saut d'un cycle qui reboucle.
-    pulse.value = withRepeat(withTiming(1, { duration: 850 }), -1, true);
-  }, [pulse]);
-  const style = useAnimatedStyle(() => ({ opacity: pulse.value }));
-
-  return (
-    <View className="flex-1 justify-end px-3 pb-4" pointerEvents="none">
-      {SKELETON_ROWS.map((row, i) => (
-        <Animated.View
-          key={i}
-          style={[
-            style,
-            ROUND.bubble,
-            {
-              width: `${row.width * 100}%`,
-              height: 42,
-              marginTop: 8,
-              alignSelf: row.mine ? 'flex-end' : 'flex-start',
-            },
-          ]}
-          className="bg-black/[0.06] dark:bg-white/[0.07]"
-        />
-      ))}
-    </View>
-  );
-}
 
 /** Pastille de date, posée dans le fil avant le premier message d'une journée. */
 function DateSeparator({ label }: { label: string }) {
@@ -1112,6 +1065,139 @@ const bubbleRadius = (isMe: boolean, first: boolean, last: boolean) => ({
       : { borderBottomLeftRadius: GROUP_RADIUS }),
 });
 
+/**
+ * Fil en cours de chargement : silhouettes de bulles.
+ *
+ * ⚠️ Il comble un vrai trou, pas une coquetterie : l'écran rend sa mise en page finale tout
+ * de suite (décision du 6 août, contre le flash blanc) et se remplit ensuite. Entre les
+ * deux, le fil était VIDE — et `ListEmptyComponent` y annonçait « Dites bonjour ! », un
+ * message faux pour une conversation qui a de l'historique.
+ *
+ * ⚠️ Il réutilise la géométrie RÉELLE des bulles (`RADIUS.bubble`, `bubbleRadius`, `TAIL_W`,
+ * `GROUP_GAP`) plutôt que des rectangles approximatifs : c'est ce qui fait que le fil ne
+ * bouge pas quand les vraies bulles prennent leur place — une silhouette d'une autre forme
+ * transformerait le chargement en petit saut de mise en page.
+ *
+ * ⚠️ La composition est FIGÉE et non tirée au hasard : recalculée à chaque rendu, elle
+ * changerait à la moindre frappe et le squelette frétillerait.
+ */
+type SkelRow = {
+  mine: boolean;
+  /** Largeur en fraction de l'écran — une bulle ne dépasse jamais 80 %. */
+  width: number;
+  /** Nombre de lignes de texte simulées : c'est ce qui donne la hauteur. */
+  lines: number;
+  /** Première et dernière d'une série : pilotent les coins et la queue, comme les vraies. */
+  first: boolean;
+  last: boolean;
+};
+
+// Une conversation plausible : séries de 1 à 3 bulles, alternées, de longueurs variées.
+const SKELETON_ROWS: SkelRow[] = [
+  { mine: false, width: 0.52, lines: 1, first: true, last: true },
+  { mine: true, width: 0.38, lines: 1, first: true, last: false },
+  { mine: true, width: 0.62, lines: 2, first: false, last: true },
+  { mine: false, width: 0.7, lines: 2, first: true, last: false },
+  { mine: false, width: 0.34, lines: 1, first: false, last: true },
+  { mine: true, width: 0.46, lines: 1, first: true, last: true },
+];
+
+/** Hauteur d'une ligne de texte dans une bulle, padding vertical compris. */
+const SKEL_LINE_H = 19;
+const SKEL_PAD_V = 20;
+
+function ThreadSkeleton({ accent }: { accent: string }) {
+  const scheme = useColorScheme();
+
+  /**
+   * ⚠️ C'est la TEINTE qui pulse, pas l'opacité.
+   *
+   * Animer `opacity` rendait les silhouettes translucides sur la moitié du cycle : le fond
+   * de conversation transparaissait au travers et elles disparaissaient presque. En
+   * interpolant entre deux couleurs PLEINES, elles restent opaques en permanence et
+   * respirent quand même.
+   *
+   * `interpolateColor` travaille sur le thread UI, au même titre qu'une opacité — aucun
+   * rendu React, aucune mise en page recalculée.
+   *
+   * ⚠️ Déclaré AVANT les `useAnimatedStyle` qui le lisent : un worklet capture la valeur au
+   * moment où il est créé, et une shared value déclarée plus bas y arrive `undefined`.
+   */
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    // `withRepeat(reverse)` : va-et-vient continu, sans le saut d'un cycle qui reboucle.
+    pulse.value = withRepeat(withTiming(1, { duration: 900 }), -1, true);
+  }, [pulse]);
+
+  /**
+   * ⚠️ Silhouettes TEINTÉES aux couleurs réelles des bulles, et non en gris translucide :
+   * sur un fond de conversation clair — le défaut — un voile à 7 % était à peine visible.
+   *
+   * « Moi » reprend la couleur d'accent choisie, adoucie (à pleine saturation, une
+   * silhouette se ferait passer pour un vrai message) ; les reçues reprennent la surface
+   * des bulles blanches. Deux teintes PLEINES par camp : la pulsation va de l'une à l'autre.
+   */
+  const mine =
+    scheme === 'dark'
+      ? [shade(accent, -0.45), shade(accent, -0.2)]
+      : [shade(accent, 0.62), shade(accent, 0.46)];
+  const theirs = scheme === 'dark' ? ['#26262b', '#313138'] : ['#ffffff', '#eceef2'];
+
+  const mineStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(pulse.value, [0, 1], mine),
+  }));
+  const theirStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(pulse.value, [0, 1], theirs),
+  }));
+
+  return (
+    <View className="flex-1 justify-end px-3.5 pb-3" pointerEvents="none">
+      {SKELETON_ROWS.map((row, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            {
+              maxWidth: '80%',
+              width: `${row.width * 100}%`,
+              alignSelf: row.mine ? 'flex-end' : 'flex-start',
+              // Écarts identiques à ceux des vraies séries.
+              marginTop: i === 0 ? 0 : row.first ? GROUP_GAP : GROUP_GAP_TIGHT,
+            },
+          ]}
+        >
+          <Animated.View
+            style={[
+              ROUND.bubble,
+              bubbleRadius(row.mine, row.first, row.last),
+              BUBBLE_SHADOW,
+              { height: row.lines * SKEL_LINE_H + SKEL_PAD_V },
+              row.mine ? mineStyle : theirStyle,
+            ]}
+          />
+          {/* Queue de bulle, comme sur la dernière d'une série. Un triangle grossier
+              suffit : c'est une silhouette, pas la vraie pointe dessinée par `BubbleTail`. */}
+          {row.last && (
+            <Animated.View
+              style={[
+                {
+                  position: 'absolute',
+                  bottom: 0,
+                  width: TAIL_W,
+                  height: TAIL_H,
+                  ...(row.mine ? { right: -TAIL_W + 2 } : { left: -TAIL_W + 2 }),
+                  borderBottomLeftRadius: row.mine ? 0 : TAIL_W,
+                  borderBottomRightRadius: row.mine ? TAIL_W : 0,
+                },
+                row.mine ? mineStyle : theirStyle,
+              ]}
+            />
+          )}
+        </Animated.View>
+      ))}
+    </View>
+  );
+}
+
 type MediaPayload = {
   mediaUrl: string;
   mediaType: 'image' | 'video' | 'audio' | 'document' | 'gif';
@@ -1188,8 +1274,10 @@ type ChatRowProps = {
   selected: boolean;
   searchTerm: string;
   currentUserId: string | null;
-  /** Conversation courante — le mini-player doit savoir où ramener. */
+  /** Conversation courante — le mini-player doit savoir où ramener, et l'illustrer. */
   conversationId: string;
+  conversationPhoto: string | null;
+  isGroup: boolean;
   bubbleColor: string;
   theirBubble: string;
   myTailColor: string;
@@ -1226,6 +1314,8 @@ const ChatRow = React.memo(
     searchTerm,
     currentUserId,
     conversationId,
+    conversationPhoto,
+    isGroup,
     bubbleColor,
     theirBubble,
     myTailColor,
@@ -1630,6 +1720,8 @@ const ChatRow = React.memo(
                     message={item}
                     tint={bubbleColor}
                     conversationId={conversationId}
+                    conversationPhoto={conversationPhoto}
+                    isGroup={isGroup}
                     onOpenImage={() => {}}
                     onOpenVideo={() => {}}
                   />
@@ -1739,6 +1831,8 @@ const ChatRow = React.memo(
       a.searchTerm === b.searchTerm &&
       a.currentUserId === b.currentUserId &&
       a.conversationId === b.conversationId &&
+      a.conversationPhoto === b.conversationPhoto &&
+      a.isGroup === b.isGroup &&
       a.bubbleColor === b.bubbleColor &&
       a.theirBubble === b.theirBubble &&
       a.myTailColor === b.myTailColor
@@ -3799,6 +3893,19 @@ export default function ChatScreen() {
   }, [rows, unreadInfo]);
 
   /**
+   * Un vocal joué DANS UNE AUTRE conversation s'arrête quand on ouvre celle-ci.
+   *
+   * ⚠️ Le mini-player existe pour continuer d'écouter en naviguant DANS l'app — pas pour
+   * qu'une voix venue d'ailleurs se superpose à la conversation qu'on vient d'ouvrir. On
+   * n'arrête donc que ce qui vient d'une AUTRE conversation : revenir sur celle qui joue
+   * doit au contraire retrouver sa lecture en cours.
+   */
+  useEffect(() => {
+    const playing = voiceSnapshot();
+    if (playing && playing.track.conversationId !== id) stopVoice();
+  }, [id]);
+
+  /**
    * Où la conversation s'ouvre : sur le repère s'il reste des messages à lire, en bas sinon.
    *
    * ⚠️ Dans un effet et non pendant le rendu — `scroll.open` écrit dans l'état de
@@ -4024,6 +4131,8 @@ export default function ChatScreen() {
         searchTerm={search?.applied ?? ''}
         currentUserId={currentUserId}
         conversationId={id}
+        conversationPhoto={header?.photoUrl || photo || null}
+        isGroup={convType === 'group'}
         bubbleColor={bubbleColor}
         theirBubble={theirBubble}
         myTailColor={myTailColor}
@@ -4450,8 +4559,15 @@ export default function ChatScreen() {
           précisément pendant le chargement qu'il doit couvrir.
         */}
         {!historyLoaded && (
-          <View style={StyleSheet.absoluteFill}>
-            <ThreadSkeleton />
+          <View
+            // ⚠️ Le bas est REMONTÉ de `composerOverlap` : ce conteneur porte une marge
+            // négative de 240 px (qui fait passer le fil derrière la zone de saisie), et un
+            // `absoluteFill` s'étend donc jusque sous l'écran. Le squelette alignant son
+            // contenu vers le bas, ses silhouettes tombaient hors champ — d'où un squelette
+            // invisible alors qu'il était bien monté.
+            style={[StyleSheet.absoluteFill, { bottom: composerOverlap }]}
+          >
+            <ThreadSkeleton accent={bubbleColor} />
           </View>
         )}
         <Animated.View style={[{ flex: 1 }, scroll.revealStyle]}>

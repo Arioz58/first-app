@@ -1,36 +1,59 @@
+import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { useSyncExternalStore } from 'react';
+import { enterPlaybackMode } from './audioMode';
 
 /**
- * Vocal en cours de lecture, AU NIVEAU DE L'APPLICATION.
+ * Lecture des messages vocaux, AU NIVEAU DE L'APPLICATION.
  *
- * ⚠️ Un store externe et non un état d'écran : le lecteur doit survivre à la sortie de la
- * conversation — c'est tout l'objet du mini-player. Un état vivant dans `chat/[id].tsx`
- * serait démonté avec lui, et la lecture s'arrêterait au moment précis où l'on veut qu'elle
- * continue.
+ * ⚠️ Le lecteur natif est créé ICI, hors de tout composant — c'est la condition pour qu'un
+ * vocal survive à la sortie de sa conversation.
  *
- * ⚠️ Le store ne contient QUE de la description (qui joue, quoi, où) : le lecteur natif
- * reste dans le composant qui l'a créé. Déplacer le lecteur ici demanderait de le recréer
- * hors de tout composant, et de gérer sa destruction à la main — pour un gain nul, l'audio
- * d'`expo-audio` continuant de jouer tant que son composant est monté.
- *
- * Le mini-player est donc un RAPPEL affiché ailleurs dans l'app, qui ramène à la
- * conversation ; l'arrêt passe par le rappel `stop` déposé par le lecteur lui-même.
+ * Une première version laissait le lecteur dans la bulle (`useAudioPlayer`) et se contentait
+ * de publier « qui joue ». Elle ne pouvait pas marcher : ce hook s'appuie sur
+ * `useReleasingSharedObject`, qui LIBÈRE le lecteur natif au démontage du composant. Quitter
+ * l'écran démontait donc la bulle, et le son se coupait au moment précis où le mini-player
+ * devait prendre le relais. `createAudioPlayer` n'a pas ce cycle de vie : sa destruction est
+ * à notre charge, et c'est exactement ce qu'on veut.
  */
-export type VoiceNowPlaying = {
-  /** Identifiant du message, pour retrouver la bulle. */
+
+/** Cadence des mesures de progression. 500 ms par défaut = deux images par seconde. */
+const UPDATE_MS = 100;
+
+export type VoiceTrack = {
+  /** Identifiant du message : sert à retrouver la bulle et à éviter les doublons. */
   messageId: string;
   conversationId: string;
-  /** Nom de l'expéditeur, affiché dans le mini-player. */
+  uri: string;
   senderName: string;
-  /** Durée totale connue, en millisecondes. */
+  /** Photo affichée par le mini-player : celle du groupe, ou de l'interlocuteur. */
+  photoUrl?: string | null;
+  /** Conversation de groupe : l'avatar par défaut change (deux silhouettes). */
+  isGroup?: boolean;
   durationMs?: number | null;
-  /** Arrête la lecture. Fourni par le lecteur, seul détenteur du player natif. */
-  stop: () => void;
 };
 
-let current: VoiceNowPlaying | null = null;
-const listeners = new Set<() => void>();
+export type VoiceState = {
+  track: VoiceTrack;
+  playing: boolean;
+  /**
+   * La piste est allée jusqu'au bout.
+   *
+   * ⚠️ Drapeau explicite, et non déduit de `currentTime >= duration` : à la fin on remet la
+   * position à zéro pour que la bulle reparte propre, ce qui effaçait justement l'indice
+   * dont la reprise avait besoin — le vocal devenait alors impossible à réécouter.
+   */
+  finished: boolean;
+  /** Secondes écoulées et durée réelle, telles que le lecteur les rapporte. */
+  currentTime: number;
+  duration: number;
+  rate: number;
+  /** Appui donné, son pas encore sorti — l'attente du premier chargement. */
+  loading: boolean;
+};
 
+let player: AudioPlayer | null = null;
+let state: VoiceState | null = null;
+const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
 const subscribe = (l: () => void) => {
@@ -39,34 +62,140 @@ const subscribe = (l: () => void) => {
     listeners.delete(l);
   };
 };
-
-const snapshot = () => current;
+const snapshot = () => state;
 
 /**
- * Déclare le vocal qui démarre.
+ * Détruit le lecteur courant.
  *
- * ⚠️ Arrête le précédent : deux vocaux qui se superposent sont inaudibles, et c'est le
- * comportement attendu partout ailleurs (une seule piste à la fois).
+ * ⚠️ `remove()` est obligatoire : `createAudioPlayer` ne libère rien tout seul, et un lecteur
+ * abandonné garderait sa ressource native jusqu'à la fermeture de l'app.
  */
-export const setNowPlaying = (next: VoiceNowPlaying) => {
-  if (current && current.messageId !== next.messageId) current.stop();
-  current = next;
+const dispose = () => {
+  if (!player) return;
+  try {
+    player.pause();
+    player.remove();
+  } catch {
+    // Lecteur déjà libéré : rien à faire.
+  }
+  player = null;
+};
+
+/**
+ * Lance un vocal. Reprend au début s'il était terminé.
+ *
+ * ⚠️ Un seul vocal à la fois : démarrer en arrête un autre. Deux pistes simultanées sont
+ * inaudibles, et c'est le comportement attendu partout ailleurs.
+ */
+export const playVoice = (track: VoiceTrack, rate = 1) => {
+  if (state?.track.messageId === track.messageId && player) {
+    // Même message : reprise là où on s'était arrêté, ou depuis le début si la piste est
+    // allée au bout.
+    enterPlaybackMode();
+    if (state.finished) player.seekTo(0);
+    player.play();
+    state = {
+      ...state,
+      playing: true,
+      loading: true,
+      finished: false,
+      currentTime: state.finished ? 0 : state.currentTime,
+    };
+    emit();
+    return;
+  }
+
+  dispose();
+  // ⚠️ Sortie sur le haut-parleur garantie : sur iOS, une session restée en capture
+  // (enregistrement interrompu) ferait jouer le vocal dans l'écouteur téléphonique.
+  enterPlaybackMode();
+  player = createAudioPlayer({ uri: track.uri }, { updateInterval: UPDATE_MS });
+  if (rate !== 1) player.setPlaybackRate(rate);
+
+  player.addListener('playbackStatusUpdate', (status: any) => {
+    if (!state) return;
+    const playing = !!status.playing;
+    /**
+     * ⚠️ Fin de piste traitée EN PREMIER et de façon exclusive.
+     *
+     * Le lecteur continue d'émettre des mises à jour après la fin, avec une position qui
+     * peut valoir la durée ou zéro selon la plateforme. Écrire `currentTime` depuis ces
+     * relevés effacerait le rembobinage — ou pire, `finished` lui-même — et le vocal
+     * redeviendrait impossible à réécouter.
+     */
+    if (status.didJustFinish) {
+      state = { ...state, playing: false, loading: false, finished: true, currentTime: 0 };
+      emit();
+      return;
+    }
+    // Une piste terminée ne bouge plus tant qu'on ne l'a pas relancée : on ignore les
+    // relevés qui suivent, ils ne portent rien de neuf.
+    if (state.finished && !playing) return;
+
+    state = {
+      ...state,
+      playing,
+      currentTime: status.currentTime ?? state.currentTime,
+      duration: status.duration || state.duration,
+      // Le son sort : l'attente est finie.
+      loading: state.loading && !playing,
+    };
+    emit();
+  });
+
+  state = {
+    track,
+    playing: true,
+    finished: false,
+    currentTime: 0,
+    duration: (track.durationMs ?? 0) / 1000,
+    rate,
+    loading: true,
+  };
+  player.play();
+  emit();
+};
+
+export const pauseVoice = () => {
+  if (!player || !state) return;
+  player.pause();
+  state = { ...state, playing: false, loading: false };
+  emit();
+};
+
+/** Déplacement dans la piste, en fraction de la durée totale. */
+export const seekVoice = (ratio: number) => {
+  if (!player || !state?.duration) return;
+  player.seekTo(ratio * state.duration);
+  // Se déplacer dans une piste terminée la remet en jeu : le prochain appui doit lire à
+  // partir de là, pas rembobiner.
+  state = { ...state, currentTime: ratio * state.duration, finished: false };
+  emit();
+};
+
+export const setVoiceRate = (rate: number) => {
+  if (!player || !state) return;
+  // `pitchCorrectionQuality` par défaut : la voix reste naturelle en accéléré.
+  player.setPlaybackRate(rate);
+  state = { ...state, rate };
+  emit();
+};
+
+/** Arrête et oublie la lecture — le mini-player disparaît. */
+export const stopVoice = () => {
+  dispose();
+  state = null;
   emit();
 };
 
 /**
- * Signale la fin d'une lecture.
+ * Lecture en cours, lue HORS rendu (effet, écouteur).
  *
- * ⚠️ Ne fait rien si un AUTRE vocal a pris la main entre-temps : le lecteur qu'on vient
- * d'arrêter émet lui aussi cet événement, et sans cette garde il effacerait la lecture qui
- * démarre à peine.
+ * ⚠️ Ne pas s'en servir dans un composant pour afficher quoi que ce soit : rien ne le
+ * rendrait à nouveau au changement d'état. C'est `useVoicePlayback` qui sert à l'affichage.
  */
-export const clearNowPlaying = (messageId: string) => {
-  if (current?.messageId !== messageId) return;
-  current = null;
-  emit();
-};
+export const voiceSnapshot = (): VoiceState | null => state;
 
-/** Le vocal en cours, ou `null`. ⚠️ Le hook RENVOIE la valeur qu'il observe (cf. CLAUDE.md). */
-export const useNowPlaying = (): VoiceNowPlaying | null =>
+/** ⚠️ Le hook RENVOIE la valeur qu'il observe (cf. la note `useMyLiveShare` du CLAUDE.md). */
+export const useVoicePlayback = (): VoiceState | null =>
   useSyncExternalStore(subscribe, snapshot, snapshot);

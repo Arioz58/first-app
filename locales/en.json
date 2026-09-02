@@ -156,8 +156,7 @@
     "forward_n_to_one": "Forward {{count}} message to",
     "forward_n_to_other": "Forward {{count}} messages to",
     "nothing_to_forward": "None of these messages can be forwarded.",
-    "forwarded": "Forwarded",
-    "playing_tap_to_open": "Playing — tap to open"
+    "forwarded": "Forwarded"
   },
   "details": {
     "title": "Details",

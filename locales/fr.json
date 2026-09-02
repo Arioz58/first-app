@@ -156,8 +156,7 @@
     "forward_n_to_one": "Transférer {{count}} message à",
     "forward_n_to_other": "Transférer {{count}} messages à",
     "nothing_to_forward": "Aucun de ces messages ne peut être transféré.",
-    "forwarded": "Transféré",
-    "playing_tap_to_open": "Lecture en cours — appuyez pour ouvrir"
+    "forwarded": "Transféré"
   },
   "details": {
     "title": "Détails",

@@ -24,13 +24,17 @@ export function MessageMedia({
   message,
   tint,
   conversationId,
+  conversationPhoto,
+  isGroup,
   onOpenImage,
   onOpenVideo,
 }: {
   message: MediaMessage;
   tint: string;
-  /** Sert au mini-player : savoir vers quelle conversation ramener. */
+  /** Sert au mini-player : savoir vers quelle conversation ramener, et l'illustrer. */
   conversationId?: string;
+  conversationPhoto?: string | null;
+  isGroup?: boolean;
   onOpenImage: (url: string) => void;
   onOpenVideo: (url: string) => void;
 }) {
@@ -70,22 +74,21 @@ export function MessageMedia({
   }
 
   if (mediaType === 'audio') {
-    // ⚠️ `key` d'identité : sous FlashList, un support recyclé garde son état interne — un
-    // lecteur « armé » (donc natif, en cours de lecture) suivrait le support jusqu'à un
-    // AUTRE vocal. La clé force le remontage quand l'uri change.
+    // La bulle vocale n'a plus d'état interne — le lecteur vit dans `lib/voicePlayback` —
+    // donc plus besoin de clé d'identité contre le recyclage de FlashList.
     return (
       <AudioMessage
-        key={mediaUrl}
         uri={mediaUrl}
         tint={tint}
         durationMs={message.durationMs}
-        nowPlaying={
+        track={
           message.id && conversationId
             ? {
                 messageId: message.id,
                 conversationId,
                 senderName: message.sender?.name ?? '',
-                durationMs: message.durationMs,
+                photoUrl: conversationPhoto,
+                isGroup,
               }
             : undefined
         }

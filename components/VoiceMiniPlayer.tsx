@@ -1,40 +1,69 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useSegments } from 'expo-router';
-import { useTranslation } from 'react-i18next';
+import { useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import Animated, {
+  FadeInDown,
+  FadeOutDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ROUND } from '../lib/radius';
-import { useNowPlaying } from '../lib/voicePlayback';
+import { pauseVoice, playVoice, stopVoice, useVoicePlayback } from '../lib/voicePlayback';
 import { FLOATING_SHADOW } from './GlassSurface';
+import { UserAvatar } from './UserAvatar';
+
+const NEXA = '#1E40AF';
+
+const fmt = (s: number) => {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, '0')}`;
+};
 
 /**
  * Rappel du vocal en cours, affiché quand on a quitté la conversation où il joue.
  *
  * ⚠️ Monté au niveau de l'APPLICATION (`app/_layout.tsx`) et non dans un écran : c'est
- * précisément parce qu'on quitte l'écran qu'il doit exister. Le son, lui, continue tout
- * seul — `expo-audio` ne s'arrête pas quand une vue disparaît de l'affichage.
+ * précisément parce qu'on quitte l'écran qu'il doit exister. Le son survit lui aussi parce
+ * que le lecteur natif vit dans `lib/voicePlayback`, hors de l'arbre React — un lecteur créé
+ * par `useAudioPlayer` serait libéré au démontage de la bulle.
  *
- * ⚠️ Masqué tant qu'on EST dans la conversation qui joue : la bulle y montre déjà sa
- * progression, et doubler l'information encombrerait le fil pour rien.
+ * ⚠️ Masqué sur l'écran de chat : la bulle y montre déjà sa progression, et doubler
+ * l'information encombrerait le fil. Ouvrir une AUTRE conversation arrête la lecture (voir
+ * `chat/[id].tsx`) — une voix venue d'ailleurs n'a pas à se superposer à celle qu'on ouvre.
  */
 export function VoiceMiniPlayer() {
-  const { t } = useTranslation();
   const router = useRouter();
   const segments = useSegments();
   const insets = useSafeAreaInsets();
-  const playing = useNowPlaying();
+  const playback = useVoicePlayback();
 
-  if (!playing) return null;
+  const ratio =
+    playback && playback.duration ? Math.min(1, playback.currentTime / playback.duration) : 0;
 
-  // `segments` vaut par exemple ['chat', '[id]'] : on ne sait pas quel id est ouvert. Le
-  // relais passe donc par le paramètre, lu depuis l'URL courante côté router.
-  const onChatScreen = segments[0] === 'chat';
-  // ⚠️ On ne masque QUE sur l'écran de chat : ailleurs (liste, profil, réglages) le rappel
-  // a tout son sens. Comparer l'identifiant exact demanderait de lire les paramètres de
-  // route, qui ne sont pas exposés ici — et rester visible sur une AUTRE conversation est
-  // le comportement voulu de toute façon.
-  if (onChatScreen) return null;
+  /**
+   * Barre de progression animée.
+   *
+   * ⚠️ Les hooks sont appelés AVANT toute sortie anticipée : les règles des hooks
+   * l'imposent, et un `return null` placé plus haut les rendrait conditionnels.
+   */
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    // Durée calée sur la cadence des relevés (100 ms) : la barre glisse d'un point à
+    // l'autre au lieu de sauter, sans courir après la mesure suivante.
+    progress.value = withTiming(ratio, { duration: 120 });
+  }, [ratio, progress]);
+  const progressStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
+
+  if (!playback) return null;
+  // On ne masque QUE sur l'écran de chat : ailleurs (liste, profil, réglages) le rappel a
+  // tout son sens.
+  if (segments[0] === 'chat') return null;
+
+  const { track, playing, duration, currentTime } = playback;
 
   return (
     <Animated.View
@@ -51,34 +80,58 @@ export function VoiceMiniPlayer() {
     >
       <Pressable
         onPress={() =>
-          router.push({
-            pathname: '/chat/[id]' as any,
-            params: { id: playing.conversationId },
-          })
+          router.push({ pathname: '/chat/[id]' as any, params: { id: track.conversationId } })
         }
         style={[ROUND.bubble, FLOATING_SHADOW]}
-        className="flex-row items-center bg-white dark:bg-zinc-800 px-3 py-2.5"
+        className="bg-white dark:bg-zinc-800 overflow-hidden"
       >
-        <View className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/40 items-center justify-center">
-          <Ionicons name="volume-medium" size={17} color="#1E40AF" />
+        <View className="flex-row items-center px-2.5 py-2">
+          <UserAvatar
+            name={track.senderName}
+            photoUrl={track.photoUrl}
+            size={38}
+            group={track.isGroup}
+          />
+
+          <View className="flex-1 ml-2.5 mr-1">
+            <Text
+              numberOfLines={1}
+              className="text-sm font-semibold text-gray-900 dark:text-zinc-100"
+            >
+              {track.senderName}
+            </Text>
+            {/* ⚠️ Chiffres tabulaires : sans eux, la largeur du compteur change à chaque
+                seconde et le texte tressaute. */}
+            <Text
+              style={{ fontVariant: ['tabular-nums'] }}
+              className="text-xs text-gray-400 dark:text-zinc-500"
+            >
+              {fmt(currentTime)} / {fmt(duration)}
+            </Text>
+          </View>
+
+          {/* ⚠️ `hitSlop` généreux : ces deux boutons vivent DANS un Pressable qui ouvre la
+              conversation, et un appui légèrement décalé ouvrirait le chat au lieu d'agir. */}
+          <Pressable
+            hitSlop={12}
+            onPress={() => (playing ? pauseVoice() : playVoice(track, playback.rate))}
+            className="w-10 h-10 items-center justify-center"
+          >
+            <Ionicons name={playing ? 'pause' : 'play'} size={20} color={NEXA} />
+          </Pressable>
+          <Pressable
+            hitSlop={12}
+            onPress={stopVoice}
+            className="w-9 h-9 items-center justify-center"
+          >
+            <Ionicons name="close" size={19} color="#9CA3AF" />
+          </Pressable>
         </View>
-        <View className="flex-1 ml-2.5">
-          <Text numberOfLines={1} className="text-sm font-semibold text-gray-900 dark:text-zinc-100">
-            {playing.senderName || t('chat.quote_audio')}
-          </Text>
-          <Text className="text-xs text-gray-400 dark:text-zinc-500">
-            {t('chat.playing_tap_to_open')}
-          </Text>
+
+        {/* Progression collée au bord bas : elle informe sans occuper de hauteur propre. */}
+        <View className="h-[3px] bg-black/5 dark:bg-white/10">
+          <Animated.View style={[progressStyle, { height: 3, backgroundColor: NEXA }]} />
         </View>
-        {/* ⚠️ `stop` vient du lecteur lui-même : c'est lui qui détient le player natif, le
-            store ne transporte que le rappel. */}
-        <Pressable
-          hitSlop={10}
-          onPress={playing.stop}
-          className="w-9 h-9 items-center justify-center"
-        >
-          <Ionicons name="pause" size={19} color="#6B7280" />
-        </Pressable>
       </Pressable>
     </Animated.View>
   );
