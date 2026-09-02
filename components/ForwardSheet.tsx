@@ -5,6 +5,7 @@ import { ActivityIndicator, Dimensions, FlatList, Pressable, Text, TextInput, Vi
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiRequest } from '../lib/api';
+import { getUserId } from '../lib/storage';
 import { ROUND } from '../lib/radius';
 import { useThemeColors } from '../lib/theme';
 import BottomSheet from './BottomSheet';
@@ -19,7 +20,7 @@ type ConvItem = {
   type: 'direct' | 'group';
   name?: string | null;
   photoUrl?: string | null;
-  members?: { user: { id: string; name: string; photoUrl?: string | null } }[];
+  members?: { userId: string; user: { id: string; name: string; photoUrl?: string | null } }[];
 };
 
 /**
@@ -47,6 +48,7 @@ export function ForwardSheet({
   // ⚠️ `BottomSheet` ne retire pas la zone sûre : son contenu descend jusqu'au bord de
   // l'écran, donc sous le *home indicator*. C'est au contenu de s'en occuper.
   const insets = useSafeAreaInsets();
+  const [meId, setMeId] = useState<string | null>(null);
   const [items, setItems] = useState<ConvItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -60,15 +62,26 @@ export function ForwardSheet({
     setPicked([]);
     setQuery('');
     setLoading(true);
+    // L'identité est lue depuis le stockage local, comme partout ailleurs : elle sert à
+    // écarter l'utilisateur courant des participants (voir `other`).
+    getUserId().then(setMeId).catch(() => {});
     apiRequest<ConvItem[]>('/conversations')
       .then(setItems)
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
   }, [visible]);
 
-  const label = (c: ConvItem) =>
-    c.type === 'group' ? c.name ?? '' : c.members?.[0]?.user?.name ?? '';
-  const photo = (c: ConvItem) => (c.type === 'group' ? c.photoUrl : c.members?.[0]?.user?.photoUrl);
+  /**
+   * ⚠️ L'AUTRE participant, pas `members[0]`.
+   *
+   * `members` contient TOUS les participants, moi compris, et rien ne garantit mon rang :
+   * prendre le premier affichait des lignes vides ou à mon propre nom, et la recherche ne
+   * trouvait alors rien. C'est la règle suivie partout ailleurs dans le projet
+   * (`members.find(m => m.userId !== currentUserId)`).
+   */
+  const other = (c: ConvItem) => c.members?.find((m) => m.user?.id !== meId)?.user ?? null;
+  const label = (c: ConvItem) => (c.type === 'group' ? c.name ?? '' : other(c)?.name ?? '');
+  const photo = (c: ConvItem) => (c.type === 'group' ? c.photoUrl : other(c)?.photoUrl);
 
   const filtered = query.trim()
     ? items.filter((c) => label(c).toLowerCase().includes(query.trim().toLowerCase()))
@@ -109,6 +122,10 @@ export function ForwardSheet({
       ) : (
         <FlatList
           data={filtered}
+          // ⚠️ `meId` arrive de façon asynchrone et `picked` change à chaque appui : sans
+          // `extraData`, la FlatList ne re-rendrait pas ses lignes — les noms resteraient
+          // vides et les coches ne bougeraient pas.
+          extraData={`${meId}-${picked.join(',')}`}
           keyExtractor={(c) => c.id}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
