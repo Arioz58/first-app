@@ -347,6 +347,14 @@ const HALO_SPREAD = 5;
  * sans effet visible, mais deux durées indépendantes finissent toujours par diverger.
  */
 const HIGHLIGHT_MS = 1700;
+/**
+ * Délai entre la fermeture d'un `Modal` et l'ouverture d'un autre.
+ *
+ * ⚠️ iOS refuse silencieusement de présenter un modal tant que le précédent n'a pas fini de
+ * se retirer : la feuille demandée n'apparaît alors jamais, sans erreur ni avertissement.
+ * 350 ms couvrent l'animation de présentation avec une marge.
+ */
+const MODAL_SWAP_MS = 350;
 
 /**
  * FENÊTRES DE SAUT.
@@ -3454,19 +3462,24 @@ export default function ChatScreen() {
   /**
    * Enchaînement après fermeture du menu.
    *
-   * ⚠️ `requestAnimationFrame` en plus de l'effet : l'effet s'exécute dès le commit, mais le
-   * Modal n'est réellement retiré qu'à l'image suivante. Ouvrir une feuille entre les deux
-   * retombe exactement sur le problème qu'on évite.
+   * ⚠️ Un DÉLAI, pas un `requestAnimationFrame`. C'était une image (~16 ms) et ça ne
+   * suffisait pas : sur iOS, retirer un `Modal` prend une animation de présentation
+   * entière. La feuille de transfert — qui monte son PROPRE `Modal` via `BottomSheet` —
+   * arrivait pendant ce retrait et n'apparaissait jamais, sans la moindre erreur. Les
+   * actions sans modal (répondre, copier, épingler) ne le montraient pas, d'où un défaut
+   * qui semblait propre au transfert.
+   *
+   * `MODAL_SWAP_MS` couvre la présentation d'iOS ; c'est un délai de sécurité, pas une
+   * mesure — il n'y a pas d'événement « ce Modal est parti » à écouter.
    */
   useEffect(() => {
     if (menu || !pendingActionRef.current) return;
     const pending = pendingActionRef.current;
     pendingActionRef.current = null;
-    // ⚠️ AUCUN nettoyage qui annulerait l'image demandée : la file vient d'être vidée, et un
-    // rendu survenant entre-temps — un message qui arrive, une frappe — emporterait l'action
-    // avec lui. Un rappel orphelin après démontage est sans conséquence ; une action perdue,
-    // non.
-    requestAnimationFrame(() => onMessageAction(pending.messageId, pending.action));
+    // ⚠️ AUCUN nettoyage qui annulerait l'action : la file vient d'être vidée, et un rendu
+    // survenant entre-temps — un message qui arrive, une frappe — l'emporterait avec lui.
+    // Un rappel orphelin après démontage est sans conséquence ; une action perdue, non.
+    setTimeout(() => onMessageAction(pending.messageId, pending.action), MODAL_SWAP_MS);
   }, [menu, onMessageAction]);
 
   /**
