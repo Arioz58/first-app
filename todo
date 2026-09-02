@@ -326,6 +326,18 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
     - lister et REVOQUER les sessions web depuis le mobile (WhatsApp le fait) — rejoint la revocation du refresh token deja notee au Mois 5 ;
     - le QR doit se RAFRAICHIR a l'expiration, sinon l'ecran devient muet sans rien dire.
 
+[FAIT 02/09 - CORS DU BUCKET S3] Aucun televersement depuis le NAVIGATEUR ne fonctionnait — images, documents, vocaux.
+  ⚠️ Le bucket n'avait AUCUNE configuration CORS : le navigateur envoie un preflight `OPTIONS` avant tout `PUT` vers une URL signee, S3 repondait 403, et la requete etait bloquee AVANT d'etre envoyee.
+  ⚠️ Pourquoi ca n'etait jamais apparu : l'app MOBILE n'est pas un navigateur et n'applique pas la politique CORS. Le bucket a vecu sans depuis le debut du projet ; le client web est le premier a en avoir besoin.
+  → `infra/s3-cors.json` + `infra/README.md` dans le repo backend (procedure + verification). Applique le 02/09.
+  ⚠️ AVANT LA PROD : `AllowedOrigins` ne doit contenir QUE les domaines reels du site, jamais `*` — une origine ouverte laisserait n'importe quel site televerser dans le bucket avec une URL signee volee. Retirer `localhost` et ajouter le domaine de production au deploiement.
+  → symptome trompeur : l'erreur remontait comme « Echec de l'envoi du message vocal », ce qui faisait chercher du cote du format audio. Les messages d'erreur d'upload remontent desormais le code S3 (`SignatureDoesNotMatch`, `AccessDenied`…), qui est la seule information exploitable.
+
+[A FAIRE - Mois 5, FORMAT DES VOCAUX WEB] Un vocal enregistre depuis Chrome/Firefox arrive en WebM/Opus — lisible par les navigateurs et par Android, mais PAS par le lecteur natif d'iOS.
+  ⚠️ Constate le 02/09 en livrant l'enregistrement web : ces navigateurs ne savent pas encoder en MP4, et `MediaRecorder` n'offre pas le choix. Le client tente d'abord `audio/mp4` (Safari l'accepte) et ne retombe sur WebM que contraint.
+  → REFUSER le WebM reviendrait a priver Chrome et Firefox — la majorite des postes — de messages vocaux. L'accepter laisse un cas ou un vocal envoye depuis Chrome ne s'ecoute pas sur iPhone. On a choisi de l'accepter.
+  → issues possibles : transcodage cote serveur (ffmpeg a l'upload, ou a la volee), ou lecteur JS sur iOS. A trancher avec le client selon la repartition reelle des navigateurs.
+
 [A FAIRE - Mois 5, SECURITE WEB] Durcissement du client Next.js. Decide le 02/09 en creant le repo.
   ⚠️ Les jetons vivent en `localStorage` : lisible par TOUT script de la page (XSS) et par les extensions de navigateur. Immunise en revanche contre le CSRF, rien n'etant envoye automatiquement.
   → CHOIX ASSUME pour la V1 (celui de WhatsApp Web / Slack / Discord). L'alternative — cookies `httpOnly` + SameSite — est la « bonne » reponse academique mais demanderait au backend une SECONDE mecanique d'authentification a maintenir a cote de celle du mobile (pose et rafraichissement des cookies, protection CSRF, CORS avec credentials). Non retenu pour la V1.
