@@ -80,6 +80,7 @@ import { useThreadScroll } from '../../lib/threadScroll';
 import { ProgressiveBlur } from '../../components/ProgressiveBlur';
 import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
 import { UserAvatar } from '../../components/UserAvatar';
+import { BubbleGestureContext } from '../../lib/bubbleGesture';
 import { MessageText } from '../../components/MessageText';
 import { LinkPreviewCard, type LinkPreview } from '../../components/LinkPreviewCard';
 import { QuotedMessage, quoteSummary, type Quote } from '../../components/QuotedMessage';
@@ -340,6 +341,20 @@ const SPRING_THEIRS = {
  * traverser l'écran, et le retour ne dirait plus si le seuil a été franchi. La résistance
  * au-delà du seuil est ce qui fait sentir qu'il est atteint, avant même l'haptique.
  */
+/**
+ * Geste de glissement de la bulle courante, exposé à ses enfants.
+ *
+ * ⚠️ Un contexte plutôt qu'une chaîne de props : l'onde d'un vocal est à quatre niveaux de
+ * la bulle (`MessageEnter` → bulle → `MessageMedia` → `AudioMessage` → `VoiceWaveform`), et
+ * faire descendre une référence de geste à travers tout ça pour un seul usage encombrerait
+ * quatre signatures.
+ *
+ * Sert à `blocksExternalGesture` : sans lui, le glissement horizontal de l'onde et celui de
+ * la bulle se disputent le doigt, et le parent l'emporte — glisser pour se déplacer dans un
+ * vocal déclenchait la réponse.
+ */
+const EMPTY_GESTURES: any[] = [];
+
 /** Débord du halo de surlignage autour de la bulle. */
 const HALO_SPREAD = 5;
 /**
@@ -664,6 +679,9 @@ function MessageEnter({
     [pan, longPress, doubleTap, tap],
   );
 
+  // Exposé aux enfants pour qu'un geste concurrent puisse l'emporter (voir le contexte).
+  const blockable = useMemo(() => [pan], [pan]);
+
   const bubble = (
     <Animated.View
       ref={bubbleRef}
@@ -707,10 +725,15 @@ function MessageEnter({
 
   // Aucun geste à monter (brouillon d'envoi) : on laisse la bulle nue plutôt que d'installer
   // un détecteur inerte qui gênerait quand même les appuis de ses enfants.
-  if (!onSwipeReply && !onLongPress && !onDoubleTap && !onTap) return bubble;
+  if (!onSwipeReply && !onLongPress && !onDoubleTap && !onTap) {
+    // ⚠️ Contexte VIDE fourni explicitement : sans lui, les enfants liraient celui d'une
+    // bulle englobante (l'aperçu du menu, par exemple) et bloqueraient un geste étranger.
+    return <BubbleGestureContext.Provider value={EMPTY_GESTURES}>{bubble}</BubbleGestureContext.Provider>;
+  }
 
 
   return (
+    <BubbleGestureContext.Provider value={blockable}>
     <GestureDetector gesture={gesture}>
       {/* Enveloppe pleine largeur et IMMOBILE. L'alignement (`self-end`) vit sur la bulle. */}
       <View>
@@ -736,6 +759,7 @@ function MessageEnter({
         <Animated.View style={dragStyle}>{bubble}</Animated.View>
       </View>
     </GestureDetector>
+    </BubbleGestureContext.Provider>
   );
 }
 

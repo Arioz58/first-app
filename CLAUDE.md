@@ -523,6 +523,7 @@ Le défilement était piloté par **9 refs** lues et écrites depuis **16 endroi
 - ⚠️ Pendant `opening` et `jumping`, `onScroll` **ne déduit rien** : lire un défilement qu'on a soi-même provoqué pour en tirer une intention est la faute d'origine.
 - Les handlers de la liste ne décident plus, ils **demandent** ; l'état accepte ou refuse.
 - Disparaît au passage la « fenêtre de suivi » de 2,5 s, remplacée par une transition explicite : envoyer un message est une **intention**, pas un intervalle de temps.
+- ⚠️ **Aucun `PanResponder` ni `Pressable` sous le `GestureDetector` d'une bulle** : le responder JS de React Native et les gestes natifs de RNGH **ne s'arbitrent pas entre eux**, et le natif du parent gagne toujours. C'est ce qui faisait déclencher « répondre » quand on glissait dans l'onde d'un vocal, et empêchait l'appui long. Un geste concurrent doit être en RNGH **et** déclarer `blocksExternalGesture` sur celui de la bulle, transmis par `lib/bubbleGesture.ts`.
 - ⚠️ **Ne pas remettre de `Pressable` sous le `GestureDetector` d'une bulle** : le responder JS de React Native est court-circuité par les gestes natifs de RNGH, et `onLongPress` ne se déclenche plus jamais (le swipe, lui, continue — symptôme trompeur). Appui long et glissement vivent tous deux dans RNGH, composés en `Race`.
 
 ### Aperçu de liens — `src/lib/unfurl.ts` (1er sept. 2026)

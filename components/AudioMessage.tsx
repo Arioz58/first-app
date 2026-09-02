@@ -9,6 +9,7 @@ import {
   useVoicePlayback,
   type VoiceTrack,
 } from '../lib/voicePlayback';
+import { useBubbleGestures } from '../lib/bubbleGesture';
 import { VoiceWaveform, waveformFor } from './VoiceWaveform';
 
 const BARS = 28;
@@ -52,6 +53,8 @@ export function AudioMessage({
 }) {
   const scheme = useColorScheme();
   const playback = useVoicePlayback();
+  // Le glissement dans l'onde doit l'emporter sur celui de la bulle (« répondre »).
+  const bubbleGestures = useBubbleGestures();
   const levels = useMemo(() => waveformFor(uri, BARS), [uri]);
 
   // Est-ce CE message que le lecteur applicatif tient ?
@@ -103,6 +106,7 @@ export function AudioMessage({
           idleColor={scheme === 'dark' ? '#52525b' : '#d4d4d8'}
           smoothMs={SMOOTH_MS}
           showCursor={active}
+          blockGestures={bubbleGestures}
           // Chercher dans un vocal qu'on n'écoute pas encore = vouloir l'écouter.
           onSeek={(ratio) => {
             if (active) seekVoice(ratio);

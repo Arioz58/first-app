@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { PanResponder, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -108,6 +110,7 @@ export function VoiceWaveform({
   smoothMs = 0,
   showCursor = false,
   onSeek,
+  blockGestures,
 }: {
   levels: number[];
   progress: number; // 0 → 1
@@ -118,6 +121,11 @@ export function VoiceWaveform({
   smoothMs?: number;
   showCursor?: boolean;
   onSeek?: (ratio: number) => void;
+  /**
+   * Gestes de l'entourage que ce glissement doit emporter — celui de la bulle, typiquement.
+   * Voir la note sur `blocksExternalGesture`.
+   */
+  blockGestures?: any[];
 }) {
   // Largeur déterministe (barres + espaces) : inutile de mesurer la vue pour convertir
   // une position tactile en ratio, ni pour découper la couche colorée.
@@ -143,45 +151,80 @@ export function VoiceWaveform({
     }
   }, [progress, smoothMs, scrub, p]);
 
-  const pan = useMemo(() => {
-    const ratioAt = (pageX: number) =>
-      Math.min(1, Math.max(0, (pageX - originXRef.current) / totalWidth));
+  /**
+   * Déplacement au doigt dans la piste.
+   *
+   * ⚠️ Geste RNGH, et NON un `PanResponder`. C'était un PanResponder (système de *responder*
+   * JS de React Native) alors que la bulle qui l'entoure est pilotée par des gestes NATIFS
+   * (RNGH, pour le glissement « répondre » et l'appui long). Les deux systèmes ne
+   * s'arbitrent PAS entre eux : le geste natif du parent gagnait, et glisser sur l'onde
+   * déclenchait la réponse au lieu de déplacer la lecture. Même famille de conflit que
+   * l'appui long réglé plus tôt — dès qu'un geste natif est en jeu, tout doit l'être.
+   *
+   * ⚠️ Il ne suffit PAS d'être en RNGH : les deux gestes sont des `Pan` horizontaux, et
+   * celui du parent est déclaré plus haut dans l'arbre. La bulle marque donc le sien
+   * `.withRef()` et cette onde le bloque explicitement (voir `MessageEnter`) — sans quoi
+   * les deux se disputent le doigt et le résultat dépend de l'ordre de montage.
+   */
+  const applyRef = useRef<(ratio: number, force: boolean) => void>(() => {});
+  applyRef.current = (ratio: number, force: boolean) => {
+    scrubRef.current = ratio;
+    setScrub(ratio);
+    p.value = ratio; // suit le doigt sans interpolation
+    const now = Date.now();
+    if (force || now - lastSeekRef.current > SEEK_THROTTLE_MS) {
+      lastSeekRef.current = now;
+      onSeekRef.current?.(ratio);
+    }
+  };
 
-    const apply = (ratio: number, force: boolean) => {
-      scrubRef.current = ratio;
-      setScrub(ratio);
-      p.value = ratio; // suit le doigt sans interpolation
-      const now = Date.now();
-      if (force || now - lastSeekRef.current > SEEK_THROTTLE_MS) {
-        lastSeekRef.current = now;
-        onSeekRef.current?.(ratio);
-      }
-    };
+  const endRef = useRef<() => void>(() => {});
+  endRef.current = () => {
+    if (scrubRef.current !== null) onSeekRef.current?.(scrubRef.current);
+    scrubRef.current = null;
+    setScrub(null);
+  };
 
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => !!onSeekRef.current,
-      // Seuls les gestes franchement horizontaux nous appartiennent : sinon on volerait
-      // le défilement vertical du fil de discussion.
-      onMoveShouldSetPanResponder: (_, g) =>
-        !!onSeekRef.current && Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 2,
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: (e) => {
-        // pageX - locationX = abscisse d'origine de la vue, sans avoir à la mesurer.
-        originXRef.current = e.nativeEvent.pageX - e.nativeEvent.locationX;
-        apply(ratioAt(e.nativeEvent.pageX), true);
-      },
-      onPanResponderMove: (e) => apply(ratioAt(e.nativeEvent.pageX), false),
-      onPanResponderRelease: () => {
-        if (scrubRef.current !== null) onSeekRef.current?.(scrubRef.current);
-        scrubRef.current = null;
-        setScrub(null);
-      },
-      onPanResponderTerminate: () => {
-        scrubRef.current = null;
-        setScrub(null);
-      },
-    });
-  }, [totalWidth, p]);
+  const applyJS = useCallback((ratio: number, force: boolean) => {
+    applyRef.current(ratio, force);
+  }, []);
+  const endJS = useCallback(() => {
+    endRef.current();
+  }, []);
+
+  const pan = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(!!onSeek)
+        // ⚠️ Le glissement de l'onde PRIME sur celui de la bulle. `blocksExternalGesture`
+        // vise le geste du parent, transmis en prop : sans cette déclaration, les deux
+        // gestes horizontaux se disputent le doigt et le parent l'emporte.
+        .blocksExternalGesture(...(blockGestures ?? []))
+        // Seuls les gestes franchement horizontaux nous appartiennent : le fil défile
+        // verticalement, et le lui voler rendrait la conversation impraticable.
+        .activeOffsetX([-4, 4])
+        .failOffsetY([-10, 10])
+        // Un simple appui déplace aussi la lecture (`minDistance(0)` via activeOffset) :
+        // c'est le geste attendu sur une barre de progression.
+        .onBegin((e) => {
+          'worklet';
+          const ratio = Math.min(1, Math.max(0, e.x / totalWidth));
+          runOnJS(applyJS)(ratio, true);
+        })
+        .onUpdate((e) => {
+          'worklet';
+          const ratio = Math.min(1, Math.max(0, e.x / totalWidth));
+          runOnJS(applyJS)(ratio, false);
+        })
+        // ⚠️ `onFinalize` et pas seulement `onEnd` : un geste ANNULÉ (la liste reprend la
+        // main, un second doigt) ne passe jamais par `onEnd`, et le curseur resterait
+        // bloqué sous le doigt pour toujours.
+        .onFinalize(() => {
+          'worklet';
+          runOnJS(endJS)();
+        }),
+    [onSeek, totalWidth, applyJS, endJS, blockGestures],
+  );
 
   const fillStyle = useAnimatedStyle(() => ({ width: p.value * totalWidth }));
   const cursorStyle = useAnimatedStyle(() => ({ left: p.value * totalWidth - CURSOR / 2 }));
@@ -202,7 +245,7 @@ export function VoiceWaveform({
     </View>
   );
 
-  return (
+  const content = (
     <View
       // Bande tactile plus haute que le tracé : 26 px de haut, c'est trop fin pour
       // attraper le curseur du premier coup.
@@ -211,7 +254,6 @@ export function VoiceWaveform({
         paddingVertical: onSeek ? TOUCH_PAD : 0,
         justifyContent: 'center',
       }}
-      {...(onSeek ? pan.panHandlers : {})}
     >
       <View style={{ width: totalWidth, height, justifyContent: 'center' }}>
         {bars(idleColor)}
@@ -246,4 +288,10 @@ export function VoiceWaveform({
       </View>
     </View>
   );
+
+  // Sans `onSeek` (aperçu, enregistrement en cours) : aucun détecteur monté, donc rien qui
+  // puisse interférer avec les gestes de la bulle.
+  if (!onSeek) return content;
+
+  return <GestureDetector gesture={pan}>{content}</GestureDetector>;
 }
