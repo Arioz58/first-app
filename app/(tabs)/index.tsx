@@ -91,6 +91,8 @@ type Message = {
   mediaType: string | null;
   createdAt: string;
   conversationId?: string;
+  /** Médias d'un même envoi : plusieurs messages, une seule bulle chez le destinataire. */
+  batchId?: string | null;
 };
 type Member = { userId: string; user: { id: string; name: string; photoUrl: string | null } };
 type Conversation = {
@@ -138,6 +140,8 @@ export default function ConversationsScreen() {
   const searchReq = useRef(0);
   // L'écouteur socket est monté une seule fois : il lit l'id via une ref, pas via le state.
   const currentUserIdRef = useRef<string | null>(null);
+  /** Albums déjà comptés — voir le handler `conversation_updated`. */
+  const seenBatchesRef = useRef<Set<string>>(new Set());
 
   const fetchConversations = async () => {
     try {
@@ -181,6 +185,18 @@ export default function ConversationsScreen() {
     socket.on(
       'conversation_updated',
       ({ conversationId, message }: { conversationId: string; message: Message }) => {
+        /**
+         * ⚠️ Un ALBUM ne compte qu'UNE fois. L'envoi de N médias émet N événements (un
+         * message ne porte qu'une pièce jointe) alors que le destinataire ne verra qu'une
+         * bulle : la pastille montait à N et la liste se réordonnait N fois. On retient le
+         * `batchId` déjà vu — même jeton, même unité.
+         *
+         * Le `Set` n'est jamais purgé : un `batchId` porte l'horodatage de son envoi, il
+         * n'est jamais réémis, et l'écran est démonté bien avant que sa taille compte.
+         */
+        const known = message.batchId && seenBatchesRef.current.has(message.batchId);
+        if (message.batchId) seenBatchesRef.current.add(message.batchId);
+
         setConversations((prev) => {
           const idx = prev.findIndex((c) => c.id === conversationId);
           // Conversation inconnue (créée à l'instant) : on recharge la liste.
@@ -189,7 +205,7 @@ export default function ConversationsScreen() {
             return prev;
           }
           const fromMe = message.senderId === currentUserIdRef.current;
-          if (!fromMe) bumpUnread(conversationId);
+          if (!fromMe && !known) bumpUnread(conversationId);
           const updated = [...prev];
           updated[idx] = {
             ...updated[idx],
@@ -198,7 +214,8 @@ export default function ConversationsScreen() {
             // Mes propres messages ne comptent jamais comme non lus. Si la
             // conversation est ouverte, le chat la remarque lue et le refetch
             // au retour sur cet écran remettra le compteur à zéro.
-            unreadCount: fromMe ? updated[idx].unreadCount : updated[idx].unreadCount + 1,
+            unreadCount:
+              fromMe || known ? updated[idx].unreadCount : updated[idx].unreadCount + 1,
           };
           return sortConversations(updated);
         });

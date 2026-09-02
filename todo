@@ -152,7 +152,12 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
     → on pousse sur le PREMIER message de l'album, pas le dernier : ils sont espaces par la duree de chaque televersement, attendre le dernier ferait arriver la notification longtemps apres le message.
     → le nombre annonce vient du `batchId` (`#<n>`), qui le transportait deja pour le rassemblement cote reception. ⚠️ C'est le nombre VOULU par l'expediteur : si un televersement echoue il en arrivera un de moins. Ecart rare, et la seule alternative serait d'attendre le dernier message.
     ⚠️ Les messages SUIVANTS ne sont pas supprimes du push : ils basculent en push SILENCIEUX. Les couper priverait un destinataire hors ligne de leur accuse de reception, qui voyage justement dans le push.
-    [A FAIRE] Consequences non traitees, a juger a l'usage : un album compte N messages NON LUS (pastille a N) et emet N `conversation_updated`, donc la liste se rafraichit N fois. Corriger demanderait de compter les batchs comme une unite dans `countUnreadMessages` (SQL) et dans la liste.
+    [FAIT 02/09] Un album compte desormais pour UN non lu, partout.
+      ⚠️ TROIS compteurs devaient s'accorder, sinon trois nombres differents pour la meme chose : `lib/unread.ts` (pastille de l'icone), `getUserConversations` (badge de l'onglet + liste), et `getConversationDetails` (libelle « X nouveaux messages » du repere de reprise). Meme regle dans les trois : `COUNT(DISTINCT COALESCE("batchId", "id"))` — un message sans album reste compte pour lui-meme, son id etant unique.
+      ⚠️ SQL brut oblige dans la liste : `prisma.message.count` ne sait pas exprimer un DISTINCT sur une expression. Effet de bord bienvenu — on passe de N requetes (une par conversation) a UNE seule.
+      → l'IDENTIFIANT du premier non lu reste celui du premier MESSAGE : c'est une position dans le fil, et le premier media d'un album est bien la ou le repere se pose.
+      → cote liste (app), le serveur transmet desormais `batchId` dans `conversation_updated` : il emet toujours N evenements (chacun porte un accuse de reception, les couper priverait un destinataire hors ligne du sien) mais l'app retient les batchs deja vus et n'incremente qu'une fois.
+      → verifie par les donnees : 3 photos d'un album + 1 texte = 2 partout (liste, repere, pastille) ; en temps reel, 3 events emis, 1 seul batchId distinct.
 
   [FAIT 07/08] Ouverture depuis une NOTIFICATION : en-tete vide et avatar « ? ».
     ⚠️ Cause : `displayName` ne venait QUE du parametre de route. Ca tenait tant qu'on arrivait d'un ecran qui connaissait le nom — une notification n'en passe aucun, et l'en-tete restait vide MEME une fois la conversation chargee. L'ecran ne savait pas se nommer lui-meme.
