@@ -333,6 +333,30 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 [A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
   → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.
 
+[FAIT 01-02/09 - LOT 5 + REFONTE PERF] Recherche dans la conversation, puis migration FlashList.
+  LOT 5 — recherche dans la conversation (`GET /conversations/:id/search`) :
+    → barre qui REMPLACE l'en-tete (geometrie identique, sinon le fil saute), compteur n/m, fleches cycliques, surlignage des occurrences, saut immediat sur le resultat le plus recent.
+    ⚠️ terme SAISI ≠ terme APPLIQUE (sinon le surlignage clignote a chaque frappe) ; anti-race par jeton ; surlignage SANS regex construite depuis la saisie (un `[` la casserait) — index de chaine.
+    → ITEM B2 regle au passage : un resultat de la recherche GLOBALE ouvre la conversation SUR le message (relais `chatNav` + fenetre centree).
+  SAISON DES SAUTS — chronologie des causes, chacune reelle, aucune suffisante :
+    1. fenetres symetriques → cible a l'index 25 = premiere cellule non rendue → tatonnement de `onScrollToIndexFailed` (fenetres asymetriques posees) ;
+    2. `scrollToIndex` ANIME sur un fil frais remplace → atterrissage fige sur des hauteurs ESTIMEES → se pose a cote SANS erreur (d'ou `jumpSettle` : visee non animee rejouee, masquee) ;
+    3. `maintainVisibleContentPosition` retire le 7 aout (« on n'insere plus au-dessus du regard » — vrai UN jour, `loadNewer` est arrive le lendemain) → pages inserees cote offset zero sans compensation ;
+    4. bouton retour = defilement vers le bas du contenu CHARGE → cascade page par page (→ teleportation quand `hasNewer`) ;
+    5. insertion PENDANT le geste → mVCP compense avec une image de retard → tampon `pendingNewer` vide aux instants de repos ; ⚠️ le curseur de `loadNewer` part du TAMPON sinon la meme page est redemandee (cles dupliquees — `mergeMessages` dedoublonne desormais AUSSI l'arrivage lui-meme).
+    ⚠️ CAUSE RACINE COMMUNE : les hauteurs ESTIMEES de FlatList. Tout le reste etait compensation.
+  ETAPE 1 — MEMOISATION (`ChatRow`, React.memo + comparateur manuel) :
+    → donnees comparees par REFERENCE de message (les setState ne recreent que le message modifie → une reaction re-rend UNE ligne) ; environnement par primitives ; HANDLERS ignores volontairement → ils doivent etre STABLES (regle documentee ; `react` lisait `messages` et se recreait a chaque message → lit la ref).
+    → vocaux : `useAudioPlayer` allouait un lecteur NATIF par bulle montee. Scinde en coquille inerte (zero natif, duree via `durationMs`) + lecteur cree au premier appui, qui reste ensuite monte (rebasculer perdrait la position). La vitesse se regle AVANT l'ecoute → vit dans la coquille.
+  ETAPE 2 — FLASHLIST v2 (2.0.2, pur JS, new arch deja active) :
+    ⚠️ v2 N'A PAS de prop `inverted` → DE-INVERSION complete : ordre chronologique, `startRenderingFromBottom`, mVCP actif par defaut absorbe les insertions en tete. Chaque point des notes du 7 aout re-echange (voisins ±1, ListHeader/Footer, scrollToEnd, distance au bas, ecran vide de-retourne, viewPosition/viewOffset normaux).
+    ⚠️ RECYCLAGE : une cellule recyclee GARDE son etat interne en changeant de message → cles d'identite sur MessageText (« Voir plus »), MessageMedia (visionneuse), et surtout AudioMessage (un lecteur arme aurait suivi son support vers un AUTRE vocal) ; `MessageEnter` re-decide son animation sur changement de `messageId` (un effet de montage ne rejoue pas sous recyclage) ; `getItemType` pour recycler dans le bon type de support.
+    → plus de seuil « cible trop lointaine », plus d'`onScrollToIndexFailed` (n'existe plus), plus de declencheur manuel de `loadNewer` dans onScroll.
+    ⚠️ `autoscrollToBottomThreshold` volontairement PAS active : le suivi du bas appartient a la machine a etats — deux pilotes du meme mouvement se contredisent, c'est la lecon de la saison.
+  CLAVIER — translation au lieu de redimensionnement :
+    ⚠️ le KAV (padding) REDIMENSIONNAIT la liste a chaque frame → FlashList recalcule sa mise en page, cout ∝ nombre de lignes, 60×/s — d'ou « plus il y a de messages, plus ca saccade ». Remplace par `useReanimatedKeyboardAnimation` : bloc entier translate sur le thread UI, zero layout. Compensation de la zone sure au prorata de `progress` (sinon composeur ~34 px trop haut, et une marche pendant la fermeture interactive). Recollage au bas sur VRAI redimensionnement conserve (rotation).
+    ⚠️ la liste inversee donnait « clavier ouvre = bas suivi » GRATUITEMENT (bas = offset zero) ; en chronologique il faut recoller explicitement (fait, mode following seul).
+
 [FAIT 05/08] Archivage des conversations (facon WhatsApp) + gestes de glissement sur la liste.
   Glisser vers la GAUCHE : Archiver + « … » (rouvre le menu d'actions existant). Vers la DROITE : Non lu + Epingler. Les gestes doublent l'appui long, ils ne le remplacent pas.
   Decisions : un nouveau message NE desarchive PAS (sinon ranger une conversation active n'a aucun effet durable) ; les archives sont exclues des pastilles onglet+icone (sinon un nombre que rien ne fait retomber dans la liste visible) ; archiver retire l'epinglage.

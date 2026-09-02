@@ -1,5 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { FlatList, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+
+/**
+ * Ce que la machine attend de la liste — découplé de l'implémentation.
+ *
+ * ⚠️ La liste est désormais une FlashList NON inversée (ordre chronologique) : v2 n'a plus
+ * de prop `inverted`, et n'en a plus besoin — `maintainVisibleContentPosition` y est actif
+ * par défaut et `startRenderingFromBottom` rend le fil depuis le bas. Le bas du fil est
+ * donc la FIN du contenu, plus l'offset zéro.
+ */
+export type ScrollableList = {
+  scrollToOffset: (p: { offset: number; animated?: boolean }) => void;
+  scrollToIndex: (p: {
+    index: number;
+    animated?: boolean;
+    viewPosition?: number;
+    viewOffset?: number;
+  }) => void;
+  scrollToEnd: (p?: { animated?: boolean }) => void;
+};
 import { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 /**
@@ -72,7 +91,7 @@ export function useThreadScroll({
    */
   bottomIsLive,
 }: {
-  listRef: React.RefObject<FlatList<any> | null>;
+  listRef: React.RefObject<ScrollableList | null>;
   rowsRef: React.RefObject<{ key: string }[]>;
   anchorOffset: number;
   bottomIsLive: () => boolean;
@@ -138,17 +157,17 @@ export function useThreadScroll({
 
   // --- Primitives de déplacement ---
 
-  /** Bas du fil. ⚠️ Liste INVERSÉE : le message le plus récent est à l'offset ZÉRO. */
+  /** Bas du fil. ⚠️ Liste NON inversée (FlashList) : le bas est la FIN du contenu. */
   const toBottom = useCallback(
     (animated: boolean) => {
       if (draggingRef.current || smoothingRef.current) return;
-      listRef.current?.scrollToOffset({ offset: 0, animated });
+      listRef.current?.scrollToEnd({ animated });
       if (!animated) {
-        // Le contenu grandit encore (cellules montées par lots, média qui charge) : on
-        // repasse, en re-testant à chaque fois que personne n'a repris la main.
+        // Le contenu grandit encore (cellules montées, média qui charge) : on repasse,
+        // en re-testant à chaque fois que personne n'a repris la main.
         const settle = () => {
           if (draggingRef.current || modeRef.current !== 'following') return;
-          listRef.current?.scrollToOffset({ offset: 0, animated: false });
+          listRef.current?.scrollToEnd({ animated: false });
         };
         requestAnimationFrame(settle);
         setTimeout(settle, RETRY_MS);
@@ -156,13 +175,12 @@ export function useThreadScroll({
       }
       // Animé : on laisse le mouvement se dérouler, puis UNE passe finale, animée elle aussi.
       // ⚠️ Sans condition de distance : la mesure disponible date d'avant que la nouvelle
-      // bulle soit mesurée, et vaut ~0 alors qu'il reste sa hauteur à parcourir. S'y fier
-      // laissait le message envoyé sous la zone de saisie.
+      // bulle soit mesurée, et vaut ~0 alors qu'il reste sa hauteur à parcourir.
       smoothingRef.current = true;
       setTimeout(() => {
         smoothingRef.current = false;
         if (draggingRef.current || modeRef.current !== 'following') return;
-        listRef.current?.scrollToOffset({ offset: 0, animated: true });
+        listRef.current?.scrollToEnd({ animated: true });
       }, SMOOTH_MS);
     },
     [listRef],
@@ -210,14 +228,10 @@ export function useThreadScroll({
       revealedRef.current = false;
       reveal.value = 0;
       targetRef.current = key
-        ? // ⚠️ `viewPosition: 1` : la liste étant inversée, la FIN de la fenêtre visible
-          // correspond au HAUT de l'écran — c'est là qu'on veut le repère, pour lire vers
-          // le bas à partir de lui.
-          //
-          // ⚠️ Décalage NÉGATIF, contre l'intuition : React Native calcule
-          // `offset = position - viewOffset`, donc un décalage positif remonterait la ligne
-          // sous la carte d'en-tête flottante. Le signe opposé l'en dégage.
-          { key, viewPosition: 1, viewOffset: -anchorOffset, animated: false, tries: 0 }
+        ? // Liste non inversée : `viewPosition: 0` = haut de l'écran, là où l'on veut le
+          // repère pour lire vers le bas. Le décalage positif le dégage de la carte
+          // d'en-tête flottante.
+          { key, viewPosition: 0, viewOffset: anchorOffset, animated: false, tries: 0 }
         : null;
       if (capTimerRef.current) clearTimeout(capTimerRef.current);
       // Plafond dur : un écran resté vide serait bien pire que le saut qu'on corrige.
@@ -245,12 +259,45 @@ export function useThreadScroll({
     finishOpening();
   }, [finishOpening]);
 
+  /**
+   * Saut vers une ligne d'un fil qui vient d'être REMPLACÉ (fenêtre centrée).
+   *
+   * ⚠️ Pas un `scrollToIndex` animé. Sur des lignes neuves, aucune n'est mesurée :
+   * l'animation fige son point d'arrivée sur des hauteurs ESTIMÉES, et pendant le trajet
+   * les mesures réelles déplacent la cible — on atterrit à côté, proprement, sans le
+   * moindre événement d'échec. C'est le défaut que deux correctifs de visée n'ont pas
+   * attrapé : ils corrigeaient où l'on VISE, pas où l'on SE POSE.
+   *
+   * On reprend donc la mécanique de l'ouverture, la seule qui atterrit juste sur du
+   * non-mesuré : fil masqué, visée NON animée rejouée à chaque mesure jusqu'à
+   * stabilisation, puis dévoilement en fondu — l'arrivée paraît instantanée, comme
+   * WhatsApp sur un épinglé ancien, au lieu d'un défilement qui se trompe.
+   */
+  const jumpSettle = useCallback(
+    (key: string) => {
+      modeRef.current = 'opening';
+      revealedRef.current = false;
+      reveal.value = 0;
+      setAtBottom(false);
+      // Centré (0.5), là où l'ouverture vise le haut : on REJOINT un message, on ne
+      // reprend pas une lecture — le contexte doit être visible des deux côtés.
+      targetRef.current = { key, viewPosition: 0.5, viewOffset: 0, animated: false, tries: 0 };
+      if (capTimerRef.current) clearTimeout(capTimerRef.current);
+      capTimerRef.current = setTimeout(finishOpening, REVEAL_CAP_MS);
+      focusRow(key, 0.5, 0, false);
+      scheduleReveal();
+    },
+    [finishOpening, focusRow, reveal, scheduleReveal],
+  );
+
   /** Saut vers un message (épinglé, favori, citation, résultat de recherche). */
   const jumpTo = useCallback(
     (key: string) => {
       modeRef.current = 'jumping';
       setAtBottom(false);
-      if (!focusRow(key, 0.5, 0, true)) modeRef.current = 'anchored';
+      if (!focusRow(key, 0.5, 0, true)) {
+        modeRef.current = 'anchored';
+      }
     },
     [focusRow],
   );
@@ -285,8 +332,12 @@ export function useThreadScroll({
 
   const onScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      // ⚠️ Liste inversée : la distance au bas EST l'offset.
-      distanceRef.current = e.nativeEvent.contentOffset.y;
+      // Liste non inversée : distance au bas = contenu − offset − hauteur visible.
+      const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+      distanceRef.current = Math.max(
+        0,
+        contentSize.height - contentOffset.y - layoutMeasurement.height,
+      );
       // ⚠️ Pendant `opening` et `jumping`, le défilement est le NÔTRE : le lire pour en
       // déduire une intention reviendrait à réagir à notre propre mouvement. C'est
       // exactement ce qui annulait l'ouverture sur le repère.
@@ -319,9 +370,38 @@ export function useThreadScroll({
     // `anchored` / `jumping` : on ne touche à rien. Le fil grandit, la position tient.
   }, [focusRow, scheduleReveal, toBottom]);
 
-  const onLayout = useCallback(() => {
-    if (modeRef.current === 'opening' && !targetRef.current) toBottom(false);
-  }, [toBottom]);
+  /** Hauteur du viewport au dernier layout — pour détecter le clavier. */
+  const viewportHRef = useRef<number | null>(null);
+
+  const onLayout = useCallback(
+    (e?: { nativeEvent?: { layout?: { height?: number } } }) => {
+      const h = e?.nativeEvent?.layout?.height;
+      if (h != null) {
+        /**
+         * ⚠️ Viewport redimensionné (clavier qui s'ouvre ou se ferme) : en mode suivi, on
+         * recolle au bas. La liste inversée l'offrait gratuitement — son bas était l'offset
+         * zéro, invariant au redimensionnement ; en liste chronologique, le bas est la FIN
+         * du contenu, et un viewport qui rétrécit le fait passer sous le pli. Sans ceci,
+         * ouvrir le clavier depuis le bas du fil masquait les derniers messages.
+         *
+         * Non animé : le clavier est déjà l'animation — `KeyboardAvoidingView` (mesure
+         * native image par image) redimensionne en continu, et ce recollage est rejoué à
+         * chacune de ses frames, suivant le mouvement au lieu d'en ajouter un.
+         */
+        if (
+          viewportHRef.current != null &&
+          h !== viewportHRef.current &&
+          modeRef.current === 'following' &&
+          !draggingRef.current
+        ) {
+          listRef.current?.scrollToEnd({ animated: false });
+        }
+        viewportHRef.current = h;
+      }
+      if (modeRef.current === 'opening' && !targetRef.current) toBottom(false);
+    },
+    [listRef, toBottom],
+  );
 
   const onScrollBeginDrag = useCallback(() => {
     draggingRef.current = true;
@@ -337,7 +417,9 @@ export function useThreadScroll({
   const onMomentumScrollEnd = useCallback(() => {
     draggingRef.current = false;
     // Le trajet d'un saut est terminé : on tient désormais la position atteinte.
-    if (modeRef.current === 'jumping') modeRef.current = 'anchored';
+    if (modeRef.current === 'jumping') {
+      modeRef.current = 'anchored';
+    }
   }, []);
 
   const onScrollToIndexFailed = useCallback(
@@ -392,6 +474,7 @@ export function useThreadScroll({
     open,
     revealNow,
     jumpTo,
+    jumpSettle,
     follow,
     // handlers à poser sur la liste
     onScroll,

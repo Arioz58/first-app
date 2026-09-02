@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../../lib/api';
+import { requestScrollToMessage } from '../../lib/chatNav';
 import { ROUND } from '../../lib/radius';
 import { getSocket } from '../../lib/socket';
 import {
@@ -474,12 +475,23 @@ export default function ConversationsScreen() {
           searchConvAvatar={searchConvAvatar}
           formatDate={formatDate}
           onOpenConv={openChat}
-          onOpenMessage={(m) =>
+          onOpenMessage={(m) => {
+            /**
+             * Ouvre la conversation SUR le message trouvé (item B2).
+             *
+             * ⚠️ Le relais passe par la mémoire (`chatNav`) et non par un paramètre de route :
+             * un paramètre identique ne redéclencherait rien au deuxième passage sur le même
+             * message, et c'est justement ce qu'on fait en parcourant des résultats.
+             *
+             * Le fil sait désormais atteindre une cible absente de sa mémoire — il charge une
+             * fenêtre centrée dessus. C'est ce qui manquait pour livrer cet item.
+             */
+            requestScrollToMessage(m.conversationId, m.id);
             router.push({
               pathname: '/chat/[id]' as any,
               params: { id: m.conversationId, name: searchConvName(m.conversation) },
-            })
-          }
+            });
+          }}
           onOpenFriend={openFriendChat}
           t={t}
         />

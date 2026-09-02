@@ -150,7 +150,9 @@
     "info_read": "Lu",
     "info_pending": "En attente",
     "show_more": "Voir plus",
-    "show_less": "Voir moins"
+    "show_less": "Voir moins",
+    "search_placeholder": "Rechercher dans la conversation",
+    "no_results": "Aucun résultat"
   },
   "details": {
     "title": "Détails",

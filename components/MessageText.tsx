@@ -50,17 +50,57 @@ function parseMarks(text: string, key: string, inherited: TextStyle[]): React.Re
   return [text];
 }
 
+/**
+ * Découpe un fragment sur le terme recherché et surligne les occurrences.
+ *
+ * ⚠️ Recherche insensible à la casse ET sans expression régulière construite depuis la
+ * saisie : un terme comme `a)` ou `[` casserait une regex compilée à la volée, et un terme
+ * choisi exprès pourrait la faire boucler. On travaille donc sur des index de chaîne.
+ */
+function withHighlight(
+  nodes: React.ReactNode[],
+  term: string,
+  key: string,
+): React.ReactNode[] {
+  if (!term) return nodes;
+  const needle = term.toLowerCase();
+  const out: React.ReactNode[] = [];
+  nodes.forEach((node, n) => {
+    if (typeof node !== 'string') {
+      out.push(node);
+      return;
+    }
+    const hay = node.toLowerCase();
+    let from = 0;
+    let i = 0;
+    for (let at = hay.indexOf(needle); at !== -1; at = hay.indexOf(needle, from)) {
+      if (at > from) out.push(node.slice(from, at));
+      out.push(
+        <Text key={`${key}h${n}-${i++}`} style={{ backgroundColor: 'rgba(250,204,21,0.55)' }}>
+          {node.slice(at, at + term.length)}
+        </Text>,
+      );
+      from = at + term.length;
+    }
+    out.push(from ? node.slice(from) : node);
+  });
+  return out;
+}
+
 export function MessageText({
   content,
   className,
   linkColor,
   /** Un aperçu (citation, bandeau épinglé) ne se replie pas : il est déjà tronqué. */
   collapsible = true,
+  /** Terme de recherche à surligner dans le texte. */
+  highlight,
 }: {
   content: string;
   className?: string;
   linkColor: string;
   collapsible?: boolean;
+  highlight?: string;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -106,7 +146,7 @@ export function MessageText({
             : undefined
         }
       >
-        {nodes}
+        {highlight ? withHighlight(nodes, highlight, 'hl') : nodes}
       </Text>
       {collapsible && overflows && (
         <Text

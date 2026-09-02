@@ -24,13 +24,31 @@ const fmt = (s: number) => {
   return `${m}:${sec.toString().padStart(2, '0')}`;
 };
 
-// Lecteur de message vocal : lecture, déplacement dans l'audio et vitesse.
-export function AudioMessage({ uri, tint }: { uri: string; tint: string }) {
+/**
+ * Lecteur de message vocal : lecture, déplacement dans l'audio et vitesse.
+ *
+ * ⚠️ Monté SEULEMENT après le premier appui (voir `AudioMessage` en bas de fichier).
+ * `useAudioPlayer` alloue un lecteur NATIF et un abonnement de statut périodique dès le
+ * montage — un par bulle vocale entrant dans la fenêtre de rendu, qu'on l'écoute ou non.
+ * C'était une source mesurable de lag au défilement d'un fil contenant des vocaux : le
+ * coût était payé au montage, là où la mémoïsation des lignes ne peut rien.
+ */
+function ActiveAudioMessage({
+  uri,
+  tint,
+  initialRate,
+  onCycleRate,
+}: {
+  uri: string;
+  tint: string;
+  initialRate: number;
+  onCycleRate: (r: number) => void;
+}) {
   // 500 ms par défaut : la progression n'avancerait que deux fois par seconde.
   const player = useAudioPlayer({ uri }, { updateInterval: STATUS_MS });
   const status = useAudioPlayerStatus(player);
   const scheme = useColorScheme();
-  const [rateIndex, setRateIndex] = useState(0);
+  const [rateIndex, setRateIndex] = useState(Math.max(0, RATES.indexOf(initialRate as any)));
 
   const playing = status.playing;
   const duration = status.duration || 0;
@@ -90,6 +108,21 @@ export function AudioMessage({ uri, tint }: { uri: string; tint: string }) {
     player.play();
   };
 
+  /**
+   * Lecture lancée AU MONTAGE : ce composant n'existe que parce que l'utilisateur vient
+   * d'appuyer sur lecture — le shell l'a monté pour ça. Une seule fois, jamais rejouée.
+   */
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    setAwaiting(true);
+    timeoutRef.current = setTimeout(stopAwaiting, LOADING_TIMEOUT_MS);
+    enterPlaybackMode();
+    if (initialRate !== 1) player.setPlaybackRate(initialRate);
+    player.play();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const seek = (ratio: number) => {
     if (duration) player.seekTo(ratio * duration);
   };
@@ -97,6 +130,7 @@ export function AudioMessage({ uri, tint }: { uri: string; tint: string }) {
   const cycleRate = () => {
     const next = (rateIndex + 1) % RATES.length;
     setRateIndex(next);
+    onCycleRate(RATES[next]);
     // `pitchCorrectionQuality` par défaut : la voix reste naturelle en accéléré.
     player.setPlaybackRate(RATES[next]);
   };
@@ -137,6 +171,76 @@ export function AudioMessage({ uri, tint }: { uri: string; tint: string }) {
               remarque mal. Pastille pleine en permanence — sur une carte claire, un fond
               teinté dilué se confond avec elle. */}
           <TouchableOpacity onPress={cycleRate} hitSlop={10} className="ml-auto">
+            <View className="px-2.5 py-1 rounded-full" style={{ backgroundColor: tint }}>
+              <Text className="text-xs font-bold text-white">{rate}×</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+
+/**
+ * Coquille inerte d'un vocal : même mise en page, ZÉRO ressource native.
+ *
+ * ⚠️ C'est elle que le fil monte pendant le défilement. Le lecteur natif
+ * (`ActiveAudioMessage`) n'est créé qu'au premier appui sur lecture — et une fois créé, il
+ * reste monté : re-basculer vers la coquille perdrait la position d'écoute.
+ */
+export function AudioMessage({
+  uri,
+  tint,
+  durationMs,
+}: {
+  uri: string;
+  tint: string;
+  /** Durée connue du message (colonne `durationMs`) : affichée avant tout chargement. */
+  durationMs?: number | null;
+}) {
+  const scheme = useColorScheme();
+  const [armed, setArmed] = useState(false);
+  // La vitesse se règle AVANT d'écouter (voir la note sur la pastille) : elle vit donc ici,
+  // survit au montage du lecteur, et lui est transmise.
+  const [rate, setRate] = useState<number>(RATES[0]);
+  const levels = useMemo(() => waveformFor(uri, BARS), [uri]);
+
+  if (armed) {
+    return <ActiveAudioMessage uri={uri} tint={tint} initialRate={rate} onCycleRate={setRate} />;
+  }
+
+  return (
+    <View className="flex-row items-center" style={{ minWidth: 210 }}>
+      <TouchableOpacity
+        onPress={() => setArmed(true)}
+        className="mr-2 items-center justify-center"
+        style={{ width: BUTTON, height: BUTTON }}
+        hitSlop={6}
+      >
+        <Ionicons name="play-circle" size={BUTTON} color={tint} />
+      </TouchableOpacity>
+
+      <View className="flex-1">
+        <VoiceWaveform
+          levels={levels}
+          progress={0}
+          tint={tint}
+          idleColor={scheme === 'dark' ? '#52525b' : '#d4d4d8'}
+          smoothMs={SMOOTH_MS}
+          showCursor={false}
+          // Chercher dans un vocal jamais chargé = vouloir l'écouter : on arme.
+          onSeek={() => setArmed(true)}
+        />
+        <View className="flex-row items-center mt-1">
+          <Text className="text-xs text-gray-500 dark:text-zinc-400">
+            {durationMs ? fmt(durationMs / 1000) : '0:00'}
+          </Text>
+          <TouchableOpacity
+            onPress={() => setRate(RATES[(RATES.indexOf(rate as any) + 1) % RATES.length])}
+            hitSlop={10}
+            className="ml-auto"
+          >
             <View className="px-2.5 py-1 rounded-full" style={{ backgroundColor: tint }}>
               <Text className="text-xs font-bold text-white">{rate}×</Text>
             </View>

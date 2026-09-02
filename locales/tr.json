@@ -150,7 +150,9 @@
     "info_read": "Okundu",
     "info_pending": "Bekliyor",
     "show_more": "Daha fazla göster",
-    "show_less": "Daha az göster"
+    "show_less": "Daha az göster",
+    "search_placeholder": "Sohbette ara",
+    "no_results": "Sonuç yok"
   },
   "details": {
     "title": "Ayrıntılar",

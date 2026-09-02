@@ -14,6 +14,7 @@ type MediaMessage = {
   mediaType?: string | null;
   fileName?: string | null;
   fileSize?: number | null;
+  durationMs?: number | null;
 };
 
 // Rendu de la pièce jointe d'un message dans la bulle, selon son type.
@@ -64,7 +65,10 @@ export function MessageMedia({
   }
 
   if (mediaType === 'audio') {
-    return <AudioMessage uri={mediaUrl} tint={tint} />;
+    // ⚠️ `key` d'identité : sous FlashList, un support recyclé garde son état interne — un
+    // lecteur « armé » (donc natif, en cours de lecture) suivrait le support jusqu'à un
+    // AUTRE vocal. La clé force le remontage quand l'uri change.
+    return <AudioMessage key={mediaUrl} uri={mediaUrl} tint={tint} durationMs={message.durationMs} />;
   }
 
   // Document

@@ -1,8 +1,9 @@
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
-  View, Text, FlatList, TextInput, TouchableOpacity, Pressable,
+  View, Text, TextInput, TouchableOpacity, Pressable,
   ActivityIndicator, Image, Alert, useColorScheme, StyleSheet,
 } from 'react-native';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -67,7 +68,7 @@ import { setActiveConversation } from '../../lib/unreadMessages';
 // réelle du clavier, mesurée nativement à chaque image. Celui de RN applique son
 // décalage d'un bloc, et le piloter depuis l'événement JS laisse un décalage dans le
 // temps — le temps que le callback soit traité, le clavier a déjà commencé à bouger.
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChatBackground } from '../../components/ChatBackground';
 import { GlassSurface, FLOATING_SHADOW } from '../../components/GlassSurface';
@@ -285,7 +286,16 @@ const batchExpected = (batchId?: string | null) => {
  */
 const mergeMessages = (prev: Message[], incoming: Message[], position: 'start' | 'end') => {
   const known = new Set(prev.map((m) => m.id));
-  const fresh = incoming.filter((m) => !known.has(m.id));
+  // ⚠️ `known` est ENRICHI en filtrant : l'arrivage lui-même peut contenir des doublons —
+  // le tampon des pages « vers le présent » peut recevoir deux fois la même page quand le
+  // curseur n'a pas avancé. Filtrer contre `prev` seul les laissait passer ensemble, et un
+  // doublon ne dégrade pas l'affichage, il le CASSE (clés dupliquées).
+  const fresh: Message[] = [];
+  for (const m of incoming) {
+    if (known.has(m.id)) continue;
+    known.add(m.id);
+    fresh.push(m);
+  }
   if (!fresh.length) return prev;
   return position === 'start' ? [...fresh, ...prev] : [...prev, ...fresh];
 };
@@ -337,6 +347,21 @@ const HALO_SPREAD = 5;
  * sans effet visible, mais deux durées indépendantes finissent toujours par diverger.
  */
 const HIGHLIGHT_MS = 1700;
+
+/**
+ * FENÊTRES DE SAUT.
+ *
+ * Sous FlatList, ces bornes compensaient les hauteurs ESTIMÉES (un `scrollToIndex` vers une
+ * cellule non montée tâtonnait) ; FlashList mesure, et son `scrollToIndex` est fiable. Les
+ * fenêtres restent COURTES pour une autre raison, toujours valable : une fenêtre est
+ * remplacée d'un bloc, et charger cent messages pour en viser un serait payé à chaque saut.
+ */
+const JUMP_BEFORE = 30;
+const JUMP_AFTER = 10;
+/** Ouverture sur le repère de reprise. Les non-lus suivants arrivent en défilant. */
+const UNREAD_BEFORE = 15;
+const UNREAD_AFTER = 12;
+
 /**
  * Fenêtre de suppression « pour tout le monde ».
  *
@@ -420,13 +445,27 @@ function MessageEnter({
   // 0 = état d'arrivée, 1 = en place. Le ressort de `sc` dépasse 1 → petit « pop » final.
   const pos = useSharedValue(animate ? 0 : 1); // déplacement + opacité
   const sc = useSharedValue(animate ? 0 : 1); // échelle
+  /**
+   * ⚠️ Dépendance sur `messageId`, plus un effet de montage : FlashList RECYCLE les
+   * cellules, donc ce composant change de message SANS être remonté. Un effet de montage ne
+   * rejouait l'entrée qu'une fois par support — un message neuf servi par un support recyclé
+   * apparaissait sec, et n'était jamais marqué « vu ». À chaque changement d'identité on
+   * décide à nouveau : déjà vu → valeurs posées à 1 sans animation ; neuf → entrée jouée.
+   */
   useEffect(() => {
+    const fresh = !seenIds.current.has(messageId);
     seenIds.current.add(messageId);
-    if (!animate) return;
+    if (!fresh) {
+      pos.value = 1;
+      sc.value = 1;
+      return;
+    }
+    pos.value = 0;
+    sc.value = 0;
     const spring = isMe ? SPRING_MINE : SPRING_THEIRS;
     pos.value = withSpring(1, spring.pos);
     sc.value = withSpring(1, spring.scale);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [messageId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const anim = useAnimatedStyle(() => ({
     // Fade plus rapide que le déplacement : la bulle est lisible avant d'être posée.
@@ -1008,6 +1047,574 @@ const isEmojiOnly = (raw?: string | null): boolean => {
  */
 const BIG_EMOJI_SIZE = [0, 52, 44, 38];
 
+/**
+ * Une ligne du fil, MÉMOÏSÉE.
+ *
+ * ⚠️ C'est la correction du lag au défilement (dette notée au todo depuis le 7 août) :
+ * `renderItem` était une closure recréée à chaque rendu du parent, donc CHAQUE changement
+ * d'état de l'écran — un message, une frappe, un accusé — re-rendait toutes les cellules
+ * visibles. Le `memo` bloque désormais tout re-rendu dont les props n'ont pas changé.
+ *
+ * ⚠️ RÈGLES pour que la mémoïsation tienne :
+ * - les HANDLERS passés en props doivent être STABLES (useCallback sans dépendance
+ *   volatile) : le comparateur les ignore volontairement, une identité qui change ne
+ *   re-rend donc PAS la ligne — un handler instable serait un handler PÉRIMÉ ;
+ * - les objets `Message` gardent leur RÉFÉRENCE tant qu'ils ne changent pas (les setState
+ *   ne recréent que le message modifié) : le comparateur s'appuie dessus.
+ */
+type ChatRowProps = {
+  row: Row;
+  mode: 'list' | 'preview';
+  prevLastMsg?: Message;
+  nextFirstMsg?: Message;
+  isOldest: boolean;
+  dividerLabel: string | null;
+  daySeparator: string | null;
+  sendStatus?: SendStatus;
+  isPinned: boolean;
+  isStarred: boolean;
+  highlighted: boolean;
+  selMode: boolean;
+  selected: boolean;
+  searchTerm: string;
+  currentUserId: string | null;
+  bubbleColor: string;
+  theirBubble: string;
+  myTailColor: string;
+  t: (k: string, o?: any) => string;
+  systemText: (raw?: string | null) => string;
+  seenIdsRef: { current: Set<string> };
+  openMessageMenu: (messageId: string, anchor: Anchor | null) => void;
+  setReplyTo: (q: Quote | null) => void;
+  toQuote: (m: Message) => Quote;
+  react: (messageId: string, emoji: string) => void;
+  setViewer: (v: { type: 'image' | 'video'; url: string } | null) => void;
+  setAlbumView: (v: { items: AlbumItem[]; index: number } | null) => void;
+  setViewLocation: (v: { latitude: number; longitude: number; address?: string | null } | null) => void;
+  setReactionsOf: (ids: string[] | null) => void;
+  setScrollTarget: (id: string | null) => void;
+  toggleSelected: (id: string) => void;
+};
+
+const ChatRow = React.memo(
+  function ChatRow({
+    row,
+    mode,
+    prevLastMsg,
+    nextFirstMsg,
+    isOldest,
+    dividerLabel,
+    daySeparator,
+    sendStatus,
+    isPinned,
+    isStarred,
+    highlighted,
+    selMode,
+    selected,
+    searchTerm,
+    currentUserId,
+    bubbleColor,
+    theirBubble,
+    myTailColor,
+    t,
+    systemText,
+    seenIdsRef,
+    openMessageMenu,
+    setReplyTo,
+    toQuote,
+    react,
+    setViewer,
+    setAlbumView,
+    setViewLocation,
+    setReactionsOf,
+    setScrollTarget,
+    toggleSelected,
+  }: ChatRowProps) {
+    // ⚠️ Lu ICI et pas en prop : le comparateur du memo l'ignorerait, mais `theirBubble`
+    // change avec le thème et force déjà le re-rendu — le hook relit alors la bonne valeur.
+    const scheme = useColorScheme();
+    const album = row.messages.length > 1 ? row.messages : null;
+    // Un album reste « en envoi » tant qu'un seul de ses médias l'est : il ne doit
+    // pas s'éclaircir par morceaux au fil des téléversements.
+    const sending = row.messages.some((m) => m.pendingLocal);
+    const item = row.messages[0];
+
+    // Bandeau système centré (rejoint le groupe, éphémères, etc.)
+    if (item.type === 'system') {
+      return (
+        <View className="items-center my-2 px-6">
+          <Text className="text-sm text-gray-500 dark:text-zinc-400 bg-gray-100 dark:bg-zinc-800 rounded-full px-3.5 py-1.5 text-center">
+            {systemText(item.content)}
+          </Text>
+        </View>
+      );
+    }
+    const isMe = item.sender?.id === currentUserId;
+    const isStoryReply = isStoryReplyMsg(item);
+    const reaction = isStoryReply && isEmojiOnly(item.content);
+    // Position dans la série : pilote le nom, l'écart au précédent et les coins.
+    // On compare de ligne à ligne, en prenant les messages qui se font face.
+    //
+    // ⚠️ Voisins fournis par le PARENT (`prevLastMsg` = dernier message de la ligne
+    // chronologiquement précédente, `nextFirstMsg` = premier de la suivante) : c'est lui
+    // qui connaît l'ordre inversé de la liste. Les intervertir ne casse rien de visible
+    // immédiatement — les séries se regroupent à l'envers, nom en pied de série et queue
+    // de bulle sur le mauvais message.
+    
+    
+    const firstOfGroup = !sameGroup(prevLastMsg, item);
+    const lastOfGroup = !sameGroup(row.messages[row.messages.length - 1], nextFirstMsg);
+    const radius = bubbleRadius(isMe, firstOfGroup, lastOfGroup);
+    // Message composé d'un à trois emojis seulement : rendu en grand, sans bulle.
+    // ⚠️ Exclut ce qui porte un média, une citation ou une réponse à une story : ces
+    // bulles-là ont une structure à rendre, l'emoji n'en est qu'une partie.
+    const bigEmoji =
+      !item.deletedAt && !item.mediaUrl && !item.replyTo && !isStoryReply && !album
+        ? (() => {
+            const n = emojiCount(item.content);
+            return n >= 1 && n <= 3 ? n : 0;
+          })()
+        : 0;
+    // On n'accuse que ses propres envois — d'où l'absence de statut sur les
+    // messages reçus.
+// (sendStatus fourni en prop, calculé par le parent)
+    // Sur un album, ces marqueurs valent pour la ligne entière : un seul média
+    // épinglé suffit à la signaler.
+    
+    
+    
+    // La légende d'un album est portée par le dernier média qui en a une.
+    const albumCaption = album
+      ? [...album].reverse().find((m) => m.content)?.content ?? ''
+      : '';
+    /**
+     * Citation, construite UNE fois puis posée dans la bulle du type concerné.
+     *
+     * ⚠️ Sur un album elle est portée par le PREMIER média (c'est ainsi qu'elle est
+     * envoyée) : la chercher sur `item` seul la perdrait dès que l'ordre d'arrivée
+     * des médias diffère de l'ordre d'envoi.
+     */
+    const quoted = album ? album.find((m) => m.replyTo)?.replyTo : item.replyTo;
+    const quoteBlock = quoted ? (
+      <QuotedMessage
+        quote={quoted}
+        currentUserId={currentUserId ?? ''}
+        accent={isMe ? '#FFFFFF' : bubbleColor}
+        onColored={isMe}
+        // Le saut passe par le même chemin que les épinglés : il sait charger une
+        // fenêtre autour d'un message absent de la mémoire.
+        onPress={() => setScrollTarget(quoted.id)}
+      />
+    ) : null;
+
+    return (
+      <>
+      {/*
+        Séparateur de date, avant le premier message d'une journée.
+        ⚠️ Rendu AVANT la bulle dans le JSX, donc au-dessus d'elle : l'inversion retourne
+        l'ordre des CELLULES, pas le contenu de chacune. Le message chronologiquement
+        précédent est à `index + 1`.
+      */}
+      {mode === 'list' && !!daySeparator && <DateSeparator label={daySeparator} />}
+      {/* Repère de reprise de lecture, posé juste avant le premier message non lu. */}
+      {mode === 'list' && !!dividerLabel && <UnreadDivider label={dividerLabel} />}
+      <MessageEnter
+        messageId={item.id}
+        seenIds={seenIdsRef}
+        isMe={isMe}
+        // Pas de menu sur un brouillon : son identifiant est local, épingler ou
+        // mettre en favori s'adresserait à un message que le serveur ne connaît pas.
+        // Aucun geste non plus sur l'aperçu du menu : c'est une COPIE, agir dessus
+        // rouvrirait un menu par-dessus celui qui est déjà ouvert.
+        // ⚠️ En mode sélection, l'appui long n'ouvre plus le menu : un seul geste doit
+        // gouverner à la fois, sinon on obtient un menu contextuel par-dessus une barre
+        // d'actions groupées qui parle des mêmes messages.
+        onLongPress={
+          sending || mode === 'preview' || selMode
+            ? undefined
+            : (anchor) => openMessageMenu(item.id, anchor)
+        }
+        onTap={selMode && mode === 'list' ? () => toggleSelected(item.id) : undefined}
+        onSwipeReply={
+          sending || mode === 'preview' || selMode
+            ? undefined
+            : () => setReplyTo(toQuote(item))
+        }
+        // Même basculement que la rangée rapide : re-liker retire le like, et liker un
+        // message déjà marqué d'un autre emoji le remplace — une réaction par personne,
+        // quel que soit le chemin emprunté.
+        onDoubleTap={
+          sending || mode === 'preview' || selMode
+            ? undefined
+            : () => react(item.id, LIKE_EMOJI)
+        }
+        className={`max-w-[80%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
+        style={[
+          {
+            // ⚠️ Pas d'écart au-dessus du message le plus ANCIEN, qui ouvre le fil.
+            // Avec l'inversion il est en dernière position, plus en première.
+            // Aucun non plus pour l'aperçu du menu : il est posé à une position
+            // absolue, un écart le décalerait de la bulle qu'il recouvre.
+            marginTop:
+              mode === 'preview' || isOldest
+                ? 0
+                : firstOfGroup
+                  ? GROUP_GAP
+                  : GROUP_GAP_TIGHT,
+          },
+        ]}
+        highlighted={highlighted}
+        accent={bubbleColor}
+      >
+        {/* Coche de sélection. Posée au-dessus de la bulle plutôt qu'à côté : à côté, elle
+            décalerait toutes les bulles à l'entrée du mode et le fil sauterait. */}
+        {mode === 'list' && selMode && (
+          <View
+            className={`flex-row items-center mb-0.5 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
+          >
+            <View
+              className={`w-5 h-5 rounded-full items-center justify-center border-2 ${
+                selected
+                  ? 'bg-nexa border-nexa'
+                  : 'border-gray-300 dark:border-zinc-600'
+              }`}
+            >
+              {selected && (
+                <Ionicons name="checkmark" size={12} color="white" />
+              )}
+            </View>
+          </View>
+        )}
+        {(isPinned || isStarred) && (
+          <View
+            className={`flex-row items-center gap-1 mb-0.5 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
+          >
+            {isPinned && <Ionicons name="pin" size={12} color="#9CA3AF" />}
+            {isStarred && <Ionicons name="star" size={12} color="#F59E0B" />}
+          </View>
+        )}
+        {/*
+          Message supprimé pour tout le monde.
+          ⚠️ Testé AVANT tous les autres types : un message supprimé peut avoir été un média,
+          un album ou une position, et le serveur a vidé ses champs — sans cette priorité on
+          rendrait une bulle média sans média.
+        */}
+        {item.deletedAt ? (
+          <View
+            style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+            className={`flex-row items-center px-3.5 py-2.5 ${
+              isMe ? 'bg-gray-200 dark:bg-zinc-800' : 'bg-white dark:bg-zinc-900'
+            }`}
+          >
+            <Ionicons name="ban-outline" size={15} color="#9CA3AF" />
+            <Text className="text-base italic text-gray-400 dark:text-zinc-500 ml-1.5">
+              {isMe ? t('chat.deleted_by_you') : t('chat.deleted_message')}
+            </Text>
+            {lastOfGroup && (
+              <BubbleTail
+                isMe={isMe}
+                // ⚠️ Suit le fond de la bulle « supprimé » (gray-200 clair / zinc-800
+                // sombre) : la valeur claire en dur laissait un triangle BLANC en mode
+                // sombre, seul vestige visible du message.
+                color={isMe ? (scheme === 'dark' ? '#27272a' : '#e5e7eb') : theirBubble}
+              />
+            )}
+          </View>
+        ) : album ? (
+          <>
+            {!isMe && firstOfGroup && (
+              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">
+                {item.sender?.name}
+              </Text>
+            )}
+            <View
+              style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+              className={`p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+            >
+              {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
+              {quoteBlock && <View className="px-1 pt-1">{quoteBlock}</View>}
+              <MediaGrid
+                items={album.map((m) => ({
+                  id: m.id,
+                  mediaUrl: m.mediaUrl as string,
+                  mediaType: m.mediaType,
+                }))}
+                onOpen={(i) =>
+                  setAlbumView({
+                    items: album.map((m) => ({
+                      id: m.id,
+                      mediaUrl: m.mediaUrl as string,
+                      mediaType: m.mediaType,
+                    })),
+                    index: i,
+                  })
+                }
+                // ⚠️ Ancre NULLE : la grille ne mesure pas ses tuiles, le menu se
+                // centre alors de lui-même. Le média visé reste le bon — c'est son
+                // identifiant qui voyage, pas sa position.
+                onLongPressItem={
+                  sending ? () => {} : (mid: string) => openMessageMenu(mid, null)
+                }
+              />
+              {albumCaption ? (
+                <View className="px-2 pt-1.5 pb-0.5">
+                  <Text
+                    className={`text-base ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
+                  >
+                    {albumCaption}
+                  </Text>
+                  <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} status={sendStatus} />
+                </View>
+              ) : (
+                <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} overlay status={sendStatus} />
+              )}
+              {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
+              {sending && <SendingVeil />}
+            </View>
+          </>
+        ) : item.type === 'location' &&
+          item.latitude != null &&
+          item.longitude != null ? (
+          <>
+            {!isMe && firstOfGroup && (
+              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">
+                {item.sender?.name}
+              </Text>
+            )}
+            {/* Aperçu hors bulle, comme les médias : la carte se suffit à elle-même. */}
+            <View style={[BUBBLE_SHADOW, ROUND.bubble]} className="overflow-hidden">
+              <LocationBubble
+                latitude={item.latitude}
+                longitude={item.longitude}
+                address={item.content}
+                onPress={() =>
+                  setViewLocation({
+                    latitude: item.latitude!,
+                    longitude: item.longitude!,
+                    address: item.content,
+                  })
+                }
+              />
+            </View>
+            <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
+          </>
+        ) : isStoryReply ? (
+          <>
+            {/* Libellé contextuel : répondu / réagi */}
+            <View
+              className={`flex-row items-center gap-1 mb-1 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
+            >
+              <Ionicons name="arrow-undo" size={13} color="#9CA3AF" />
+              <Text className="text-xs text-gray-400 dark:text-zinc-500">
+                {reaction
+                  ? isMe
+                    ? t('chat.you_reacted')
+                    : t('chat.reacted', { name: item.sender?.name })
+                  : isMe
+                    ? t('chat.you_replied')
+                    : t('chat.replied', { name: item.sender?.name })}
+              </Text>
+            </View>
+
+            {/* Vignette verticale de la story */}
+            {item.storyMediaUrl && (
+              <Image
+                source={{ uri: item.storyMediaUrl }}
+                className="border border-gray-200 dark:border-zinc-800 bg-gray-100 dark:bg-zinc-800 mb-1"
+                style={{ ...ROUND.inner, width: 56, height: 94 }}
+              />
+            )}
+
+            {/* Réaction emoji en grand, ou bulle de texte */}
+            {reaction ? (
+              <Text style={{ fontSize: 56, lineHeight: 64 }} className="px-1">
+                {item.content}
+              </Text>
+            ) : (
+              <View
+                style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+                className={`px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+              >
+                {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
+                <Text
+                  className={`text-lg ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
+                >
+                  {item.content}
+                </Text>
+                <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
+              </View>
+            )}
+          </>
+        ) : item.mediaUrl ? (
+          <>
+            {!isMe && firstOfGroup && (
+              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
+            )}
+            {isImageLike(item.mediaType) ? (
+              // Image/vidéo/GIF en bulle : le média affleure les bords (padding
+              // fin) et la légende vit DANS la bulle, sous le média.
+              <View
+                style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+                className={`p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+              >
+                {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
+                {quoteBlock && <View className="px-1 pt-1">{quoteBlock}</View>}
+                <MessageMedia
+                  key={item.id}
+                  message={item}
+                  tint={bubbleColor}
+                  onOpenImage={(url) => setViewer({ type: 'image', url })}
+                  onOpenVideo={(url) => setViewer({ type: 'video', url })}
+                />
+                {item.content ? (
+                  <View className="px-2 pt-1.5 pb-0.5">
+                    <Text
+                      className={`text-base ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
+                    >
+                      {item.content}
+                    </Text>
+                    <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
+                  </View>
+                ) : (
+                  <BubbleTime iso={item.createdAt} isMe={isMe} overlay status={sendStatus} />
+                )}
+                {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
+                {sending && <SendingVeil />}
+              </View>
+            ) : (
+              // Audio/document : bulle aux couleurs de l'expéditeur, avec la carte
+              // du fichier posée dessus dans un ton contrasté. Le nom de fichier
+              // et l'icône teintée gardent ainsi un fond clair sur lequel se lire,
+              // sans que la bulle ait à renoncer à sa couleur.
+              <View
+                style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+                className={`p-1.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+              >
+                {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
+                {quoteBlock}
+                <View
+                  style={ROUND.inner}
+                  className={`px-3 py-2 ${isMe ? 'bg-white dark:bg-zinc-800' : 'bg-gray-100 dark:bg-zinc-800'}`}
+                >
+                  <MessageMedia
+                    key={item.id}
+                    message={item}
+                    tint={bubbleColor}
+                    onOpenImage={() => {}}
+                    onOpenVideo={() => {}}
+                  />
+                </View>
+                <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
+                {lastOfGroup && (
+                  <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />
+                )}
+              </View>
+            )}
+          </>
+        ) : bigEmoji ? (
+          <>
+            {!isMe && firstOfGroup && (
+              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">
+                {item.sender?.name}
+              </Text>
+            )}
+            {/* Hors bulle : un emoji agrandi dans une bulle donnerait une boîte presque
+                vide autour de lui, et c'est la bulle qu'on regarderait. */}
+            <View className={isMe ? 'items-end' : 'items-start'}>
+              <Text
+                style={{ fontSize: BIG_EMOJI_SIZE[bigEmoji], lineHeight: BIG_EMOJI_SIZE[bigEmoji] * 1.2 }}
+                className="px-1"
+              >
+                {item.content}
+              </Text>
+              <BubbleTime
+                iso={item.createdAt}
+                isMe={false /* pas de bulle colorée : l'heure doit rester grise */}
+                status={sendStatus}
+                edited={!!item.editedAt}
+              />
+            </View>
+          </>
+        ) : (
+          <>
+            {!isMe && firstOfGroup && (
+              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
+            )}
+            <View
+              style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
+              className={`px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
+            >
+              {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
+              {quoteBlock}
+              {item.linkPreview && (
+                <LinkPreviewCard preview={item.linkPreview} onColored={isMe} />
+              )}
+              {/*
+                ⚠️ Plus de `Pressable` sur la bulle entière pour ouvrir « le » lien : chaque
+                URL est désormais cliquable individuellement, dans le texte. L'ancienne
+                version n'ouvrait que la PREMIÈRE, où qu'on appuie — y compris en appuyant
+                sur une autre.
+              */}
+              {/* ⚠️ `key` d'identité : FlashList RECYCLE les cellules, et sans clé l'état
+                  interne (« Voir plus » déplié, mesure de débordement) suivrait le support
+                  recyclé et s'appliquerait à un AUTRE message. */}
+              <MessageText
+                key={item.id}
+                content={item.content}
+                className={`text-lg ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
+                linkColor={isMe ? '#FFFFFF' : bubbleColor}
+                // ⚠️ Le terme APPLIQUÉ, pas celui en cours de saisie : sinon le surlignage
+                // des bulles clignoterait à chaque frappe, avant même d'avoir des résultats.
+                highlight={searchTerm || undefined}
+              />
+              <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
+              {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
+            </View>
+          </>
+        )}
+
+        {/* Réactions : posées sous la bulle, dans le même conteneur — elles
+            appartiennent au message, elles ne forment pas une ligne à part. */}
+        <MessageReactions
+          reactions={row.messages.flatMap((m) => m.reactions ?? [])}
+          currentUserId={currentUserId ?? ''}
+          isMe={isMe}
+          onPress={() => setReactionsOf(row.messages.map((m) => m.id))}
+        />
+      </MessageEnter>
+      </>
+    );
+  },
+  (a, b) => {
+    // Données : référence par message — un message modifié (réaction, édition, aperçu de
+    // lien) est un NOUVEL objet, c'est ce qui déclenche le re-rendu de sa seule ligne.
+    if (a.row.key !== b.row.key) return false;
+    if (a.row.messages.length !== b.row.messages.length) return false;
+    for (let i = 0; i < a.row.messages.length; i++) {
+      if (a.row.messages[i] !== b.row.messages[i]) return false;
+    }
+    if (a.prevLastMsg !== b.prevLastMsg || a.nextFirstMsg !== b.nextFirstMsg) return false;
+    // Environnement : primitives seulement. Les handlers sont IGNORÉS (voir l'en-tête).
+    return (
+      a.mode === b.mode &&
+      a.isOldest === b.isOldest &&
+      a.dividerLabel === b.dividerLabel &&
+      a.daySeparator === b.daySeparator &&
+      a.sendStatus === b.sendStatus &&
+      a.isPinned === b.isPinned &&
+      a.isStarred === b.isStarred &&
+      a.highlighted === b.highlighted &&
+      a.selMode === b.selMode &&
+      a.selected === b.selected &&
+      a.searchTerm === b.searchTerm &&
+      a.currentUserId === b.currentUserId &&
+      a.bubbleColor === b.bubbleColor &&
+      a.theirBubble === b.theirBubble &&
+      a.myTailColor === b.myTailColor
+    );
+  },
+);
+
 export default function ChatScreen() {
   const router = useRouter();
   const { t } = useTranslation();
@@ -1029,17 +1636,21 @@ export default function ChatScreen() {
   }>();
 
   // Traduit un message système (content JSON { k, by, ... }) selon la langue du lecteur.
-  const systemText = (raw?: string | null): string => {
-    if (!raw) return '';
-    try {
-      const { k, dur, ...params } = JSON.parse(raw);
-      if (dur) params.duration = t(`ephemeral.${dur}`) as string;
-      if (params.role) params.role = t(`roles.${params.role}`) as string;
-      return t(`system.${k}`, params) as string;
-    } catch {
-      return '';
-    }
-  };
+  // Stable : recréée à chaque rendu, elle invaliderait la mémoïsation de chaque ligne.
+  const systemText = useCallback(
+    (raw?: string | null): string => {
+      if (!raw) return '';
+      try {
+        const { k, dur, ...params } = JSON.parse(raw);
+        if (dur) params.duration = t(`ephemeral.${dur}`) as string;
+        if (params.role) params.role = t(`roles.${params.role}`) as string;
+        return t(`system.${k}`, params) as string;
+      } catch {
+        return '';
+      }
+    },
+    [t],
+  );
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   /**
@@ -1053,6 +1664,33 @@ export default function ChatScreen() {
    * L'indicateur reste monté en permanence, à hauteur fixe : seule son opacité change, sur
    * le thread UI. Aucun rendu React, aucune variation de mise en page.
    */
+  /**
+   * Clavier suivi par TRANSLATION, plus par redimensionnement.
+   *
+   * ⚠️ Le `KeyboardAvoidingView` (padding) REDIMENSIONNAIT la liste à chaque frame du
+   * clavier — et FlashList recalcule sa mise en page à chaque redimensionnement, un travail
+   * proportionnel au nombre de lignes payé 60 fois par seconde : d'où « plus il y a de
+   * messages, plus ça saccade ». Une translation est une transformation pure : aucun
+   * layout, coût constant, entièrement sur le thread UI.
+   *
+   * Le vide laissé en bas par la remontée du bloc est exactement couvert par le clavier ;
+   * en haut, les lignes glissent sous la carte d'en-tête flottante — visuellement identique
+   * à un défilement.
+   */
+  const { height: kbHeight, progress: kbProgress } = useReanimatedKeyboardAnimation();
+  const kbInsetBottom = insets.bottom;
+  const keyboardShift = useAnimatedStyle(() => ({
+    // ⚠️ `height` est déjà NÉGATIF pendant l'ouverture dans cette bibliothèque (pensé pour
+    // servir de translateY tel quel) : pas de signe à inverser.
+    //
+    // ⚠️ La zone sûre du bas est RENDUE pendant l'ouverture : le bloc porte le padding du
+    // home indicator dans sa mise en page, et translaté par-dessus le clavier ce padding
+    // n'a plus d'objet — il laissait le composeur flotter ~34 px trop haut. Compensé au
+    // prorata de `progress` : à zéro clavier fermé, plein une fois ouvert, et continu
+    // pendant le glissement de fermeture interactif.
+    transform: [{ translateY: kbHeight.value + kbProgress.value * kbInsetBottom }],
+  }));
+
   const olderOpacity = useSharedValue(0);
   const olderStyle = useAnimatedStyle(() => ({ opacity: olderOpacity.value }));
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -1192,6 +1830,20 @@ export default function ChatScreen() {
   const [infoOf, setInfoOf] = useState<string | null>(null);
   /** Mode multi-sélection : identifiants retenus. Vide = mode inactif. */
   const [selection, setSelection] = useState<string[] | null>(null);
+  /**
+   * Recherche dans la conversation.
+   *
+   * ⚠️ `term` est le texte SAISI, `applied` celui des résultats affichés. Les séparer évite
+   * que le surlignage des bulles clignote à chaque frappe pendant que la requête est en vol.
+   */
+  const [search, setSearch] = useState<{
+    term: string;
+    applied: string;
+    results: { id: string; createdAt: string }[];
+    index: number;
+    loading: boolean;
+  } | null>(null);
+  const searchReqRef = useRef(0);
   const [pinIndex, setPinIndex] = useState(0);
   const [pinBarHidden, setPinBarHidden] = useState(false);
   /**
@@ -1204,7 +1856,7 @@ export default function ChatScreen() {
   const [members, setMembers] = useState<{ id: string; name: string; photoUrl?: string | null }[]>(
     [],
   );
-  const listRef = useRef<FlatList>(null);
+  const listRef = useRef<FlashListRef<Row>>(null);
   /**
    * Lignes d'affichage, lisibles depuis les reprises différées du défilement.
    *
@@ -1401,7 +2053,26 @@ export default function ChatScreen() {
    *
    * Toute substitution du fil doit donc passer par ici, jamais par `setMessages` seul.
    */
+  /**
+   * Pages « vers le présent » EN ATTENTE, retenues tant que le doigt bouge.
+   *
+   * ⚠️ C'est la pièce qui manquait aux sauts résiduels : `maintainVisibleContentPosition`
+   * compense les insertions, mais AVEC UNE IMAGE DE RETARD (documenté ici depuis le 7 août —
+   * c'était même la raison de l'inversion, aujourd'hui retirée). Insérer 30 lignes PENDANT le
+   * défilement garantissait donc une image fausse par insertion, plus une par correction de
+   * hauteur estimée→mesurée. On n'insère plus JAMAIS sous un doigt en mouvement : les pages
+   * attendent ici et se posent aux instants de repos, où la compensation d'une image ne se
+   * voit pas.
+   */
+  const pendingNewerRef = useRef<Message[]>([]);
+  /** Vrai du début du geste à la fin de l'inertie (drag OU momentum). */
+  const scrollActiveRef = useRef(false);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const replaceMessages = useCallback((next: Message[]) => {
+    // Un remplacement du fil (saut, retour au présent) périme ce qui attendait : ces pages
+    // prolongeaient un contenu qui n'existe plus.
+    pendingNewerRef.current = [];
     messagesRef.current = next;
     setMessages(next);
   }, []);
@@ -1436,12 +2107,21 @@ export default function ChatScreen() {
   /**
    * Charge les messages plus RÉCENTS, quand le fil a été ouvert au milieu de l'historique.
    *
-   * ⚠️ Liste inversée : le présent est au DÉBUT de la liste, d'où `onStartReached`. C'est le
-   * pendant exact de `loadOlder`, et il n'a de sens que si `hasNewerRef` est vrai.
+   * Branché sur `onEndReached` (liste chronologique : le présent est la FIN du contenu).
+   * Pendant exact de `loadOlder`, et sans objet tant que `hasNewerRef` est faux.
    */
   const loadNewer = useCallback(async () => {
     if (loadingNewerRef.current || !hasNewerRef.current) return;
-    const newest = messagesRef.current[messagesRef.current.length - 1];
+    /**
+     * ⚠️ Le curseur part du TAMPON s'il n'est pas vide. `messagesRef` ne connaît que les
+     * messages réellement insérés : une page en attente n'y figure pas, et repartir du fil
+     * seul redemanderait la MÊME page à chaque événement de défilement — c'est ce qui
+     * remplissait le tampon de doublons (clés dupliquées au vidage).
+     */
+    const held = pendingNewerRef.current;
+    const newest = held.length
+      ? held[held.length - 1]
+      : messagesRef.current[messagesRef.current.length - 1];
     if (!newest) return;
 
     loadingNewerRef.current = true;
@@ -1452,7 +2132,13 @@ export default function ChatScreen() {
       if (page.length < MESSAGES_PAGE) hasNewerRef.current = false;
       if (page.length) {
         for (const m of page) seenIdsRef.current.add(m.id);
-        setMessages((prev) => mergeMessages(prev, page.slice().reverse(), 'end'));
+        const chrono = page.slice().reverse();
+        if (scrollActiveRef.current) {
+          // Doigt en mouvement : la page attend le repos. `mergeMessages` dédoublonnera.
+          pendingNewerRef.current = [...pendingNewerRef.current, ...chrono];
+        } else {
+          setMessages((prev) => mergeMessages(prev, chrono, 'end'));
+        }
       }
     } catch {
       // Réseau : on garde `hasNewerRef` à vrai, le prochain passage réessaiera.
@@ -1460,6 +2146,15 @@ export default function ChatScreen() {
       loadingNewerRef.current = false;
     }
   }, [id]);
+
+  /** Pose les pages retenues pendant le geste. Appelé aux instants de repos. */
+  const flushPendingNewer = useCallback(() => {
+    scrollActiveRef.current = false;
+    const held = pendingNewerRef.current;
+    if (!held.length) return;
+    pendingNewerRef.current = [];
+    setMessages((prev) => mergeMessages(prev, held, 'end'));
+  }, []);
 
   const loadFlags = useCallback(() => {
     apiRequest<Flags>(`/conversations/${id}/flags`).then(setFlags).catch(() => {});
@@ -1568,7 +2263,7 @@ export default function ChatScreen() {
         const history = meta.firstUnreadId
           ? await (async () => {
               const page = await apiRequest<AroundPage>(
-                `/conversations/${id}/messages/around/${meta.firstUnreadId}?before=15&after=150`,
+                `/conversations/${id}/messages/around/${meta.firstUnreadId}?before=${UNREAD_BEFORE}&after=${UNREAD_AFTER}`,
               );
               hasOlderRef.current = page.hasOlder;
               hasNewerRef.current = page.hasNewer;
@@ -1895,7 +2590,7 @@ export default function ChatScreen() {
             const history = fresh.firstUnreadId
               ? await (async () => {
                   const page = await apiRequest<AroundPage>(
-                    `/conversations/${id}/messages/around/${fresh.firstUnreadId}?before=15&after=150`,
+                    `/conversations/${id}/messages/around/${fresh.firstUnreadId}?before=${UNREAD_BEFORE}&after=${UNREAD_AFTER}`,
                   );
                   hasOlderRef.current = page.hasOlder;
                   hasNewerRef.current = page.hasNewer;
@@ -2506,7 +3201,9 @@ export default function ChatScreen() {
     (messageId: string, emoji: string) => {
       if (!currentUserId) return;
       // État à restaurer si le serveur refuse.
-      const before = messages.find((m) => m.id === messageId)?.reactions ?? [];
+      // ⚠️ Lu via la REF, pas l'état : garder `messages` en dépendance recréerait ce
+      // callback à chaque message, et chaque ligne mémoïsée qui le reçoit avec.
+      const before = messagesRef.current.find((m) => m.id === messageId)?.reactions ?? [];
       setMessages((prev) =>
         prev.map((m) => {
           if (m.id !== messageId) return m;
@@ -2537,7 +3234,7 @@ export default function ChatScreen() {
           ),
         );
     },
-    [currentUserId, id, messages],
+    [currentUserId, id],
   );
 
   /**
@@ -2585,6 +3282,91 @@ export default function ChatScreen() {
         ? prev.filter((x) => x !== messageId)
         : [...prev, messageId];
       return next.length ? next : null;
+    });
+  }, []);
+
+  /**
+   * Recherche débouncée.
+   *
+   * ⚠️ Anti-race par jeton (`searchReqRef`) : les réponses ne reviennent pas forcément dans
+   * l'ordre où les requêtes sont parties, et une réponse périmée écraserait des résultats
+   * plus récents — l'utilisateur verrait alors les résultats d'un terme qu'il a fini de
+   * corriger.
+   */
+  useEffect(() => {
+    if (!search) return;
+    const term = search.term.trim();
+    if (term.length < 2) {
+      if (search.applied) {
+        setSearch((prev) => (prev ? { ...prev, applied: '', results: [], index: 0 } : prev));
+      }
+      return;
+    }
+    if (term === search.applied) return;
+    const token = ++searchReqRef.current;
+    setSearch((prev) => (prev ? { ...prev, loading: true } : prev));
+    const to = setTimeout(() => {
+      apiRequest<{ id: string; createdAt: string }[]>(
+        `/conversations/${id}/search?q=${encodeURIComponent(term)}`,
+      )
+        .then((res) => {
+          if (token !== searchReqRef.current) return;
+          setSearch((prev) =>
+            prev ? { ...prev, applied: term, results: res, index: 0, loading: false } : prev,
+          );
+          // On saute d'emblée sur le résultat le plus récent : sans cela, il faudrait
+          // appuyer sur une flèche pour que la recherche serve à quelque chose.
+          if (res[0]) setScrollTarget(res[0].id);
+        })
+        .catch(() => {
+          if (token === searchReqRef.current) {
+            setSearch((prev) => (prev ? { ...prev, loading: false } : prev));
+          }
+        });
+    }, 300);
+    return () => clearTimeout(to);
+  }, [search?.term, search?.applied, id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Retour au présent (bouton « revenir en bas », pastille de nouveau message).
+   *
+   * ⚠️ Deux cas très différents. Près du bas RÉEL de la conversation : un défilement animé,
+   * agréable et court. Au MILIEU de l'historique (`hasNewer`) : on ne défile PAS — l'offset
+   * zéro n'est que le bas du contenu CHARGÉ, et s'y rendre déclenchait `loadNewer`, qui
+   * insérait 30 lignes dessous, décalait tout, re-défilait… le fil « passait par tous les
+   * messages » en cascadant page par page jusqu'au présent. On TÉLÉPORTE : dernière page
+   * rechargée, calage en bas par la mécanique d'ouverture (masqué → dévoilé). C'est le
+   * comportement WhatsApp/Telegram sur ce même bouton.
+   */
+  const goToPresent = useCallback(async () => {
+    if (!hasNewerRef.current) {
+      scroll.follow(true);
+      return;
+    }
+    try {
+      const page = await apiRequest<Message[]>(`/conversations/${id}/messages`);
+      hasOlderRef.current = page.length >= MESSAGES_PAGE;
+      hasNewerRef.current = false;
+      for (const m of page) seenIdsRef.current.add(m.id);
+      replaceMessages(page.reverse());
+      // Le fil vient d'être remplacé : lignes non mesurées → calage masqué, comme à
+      // l'ouverture. `open(null)` vise le bas et ressort en mode `following`.
+      scroll.open(null);
+    } catch {
+      // Réseau : le défilement page par page reste un chemin qui finit par aboutir.
+      scroll.follow(true);
+    }
+  }, [id, replaceMessages, scroll]);
+
+  /** Navigue dans les résultats. `+1` = plus ancien (vers le haut du fil), `-1` = plus récent. */
+  const stepSearch = useCallback((delta: number) => {
+    setSearch((prev) => {
+      if (!prev || !prev.results.length) return prev;
+      // Cyclique : arrivé au bout, on repart de l'autre extrémité plutôt que de bloquer
+      // sur une flèche qui ne répond plus.
+      const next = (prev.index + delta + prev.results.length) % prev.results.length;
+      setScrollTarget(prev.results[next].id);
+      return { ...prev, index: next };
     });
   }, []);
 
@@ -2768,13 +3550,15 @@ export default function ChatScreen() {
   }, [visibleMessages]);
 
   /**
-   * Lignes dans l'ordre d'AFFICHAGE de la liste inversée : le plus récent en premier.
+   * Lignes d'affichage = lignes CHRONOLOGIQUES, directement.
    *
-   * ⚠️ `rows` reste chronologique — c'est lui qui porte le regroupement des séries, la
-   * détection du premier non-lu, tout ce qui raisonne « avant / après ». Seule la liste
-   * consomme cet ordre retourné, et tout `scrollToIndex` doit chercher son index ICI.
+   * ⚠️ Plus de retournement : FlashList v2 n'a pas de prop `inverted` et n'en a pas
+   * besoin — `maintainVisibleContentPosition` (actif par défaut) absorbe les insertions en
+   * tête, qui étaient la raison d'être de l'inversion, et `startRenderingFromBottom` rend
+   * le fil depuis le bas. Le message le plus ancien est à l'index 0, le plus récent en
+   * dernier ; le bas du fil est la FIN du contenu.
    */
-  const displayRows = useMemo(() => [...rows].reverse(), [rows]);
+  const displayRows = rows;
   // Alimente la ref lue par les reprises différées du défilement (voir sa déclaration).
   displayRowsRef.current = displayRows;
 
@@ -2783,10 +3567,12 @@ export default function ChatScreen() {
   useEffect(() => {
     const id = pendingJumpRef.current;
     if (!id) return;
-    const row = displayRows.find((r) => r.messages.some((m) => m.id === id));
-    if (!row) return;
+    const at = displayRows.findIndex((r) => r.messages.some((m) => m.id === id));
+    if (at < 0) return;
     pendingJumpRef.current = null;
-    scroll.jumpTo(row.key);
+    // ⚠️ `jumpSettle`, pas `jumpTo` : le fil vient d'être remplacé, toutes ses lignes sont
+    // NON MESURÉES, et un défilement animé s'y pose à côté (voir threadScroll).
+    scroll.jumpSettle(displayRows[at].key);
     const to = setTimeout(() => setHighlightId(null), HIGHLIGHT_MS);
     return () => clearTimeout(to);
   }, [displayRows, scroll]);
@@ -2863,10 +3649,11 @@ export default function ChatScreen() {
       highlightTimerRef.current = setTimeout(() => setHighlightId(null), HIGHLIGHT_MS);
     };
 
-    // Le message est déjà en mémoire : rien à charger.
-    const row = displayRows.find((r) => r.messages.some((m) => m.id === targetId));
-    if (row) {
-      scroll.jumpTo(row.key);
+    // Cible en mémoire : on défile. Plus de seuil de distance — le `scrollToIndex` de
+    // FlashList est fiable vers n'importe quel index, les cellules étant mesurées.
+    const at = displayRows.findIndex((r) => r.messages.some((m) => m.id === targetId));
+    if (at >= 0) {
+      scroll.jumpTo(displayRows[at].key);
       highlight();
       return;
     }
@@ -2881,7 +3668,7 @@ export default function ChatScreen() {
      * pour redescendre vers le présent.
      */
     apiRequest<AroundPage>(
-      `/conversations/${id}/messages/around/${targetId}?before=25&after=25`,
+      `/conversations/${id}/messages/around/${targetId}?before=${JUMP_BEFORE}&after=${JUMP_AFTER}`,
     )
       .then((page) => {
         if (jumpRequestRef.current !== targetId) return; // un autre saut a été demandé depuis
@@ -2954,12 +3741,15 @@ export default function ChatScreen() {
     ]);
   };
 
-  const comingSoon = () => Alert.alert('', t('details.coming_soon'));
 
   const openMenu = () => {
     const direct = convType === 'direct' && !!otherUserId;
     Alert.alert(displayName, undefined, [
-      { text: t('details.search'), onPress: comingSoon },
+      {
+        text: t('details.search'),
+        onPress: () =>
+          setSearch({ term: '', applied: '', results: [], index: 0, loading: false }),
+      },
       { text: t('details.mute'), onPress: muteMenu },
       { text: t('details.ephemeral'), onPress: ephemeralMenu },
       { text: t('chat.wallpaper'), onPress: () => setPickerOpen(true) },
@@ -2984,469 +3774,62 @@ export default function ChatScreen() {
   // donc sa mise en page finale tout de suite — fond, en-tête, zone de saisie — et se
   // remplit. En cas d'échec de chargement, `init` renvoie à l'accueil.
   /**
-   * Rendu d'une ligne du fil.
-   *
-   * ⚠️ Sorti de `renderItem` pour être appelé DEUX fois : par la liste, et par l'aperçu du
-   * menu contextuel, qui redessine la bulle par-dessus le voile pour qu'elle reste nette.
-   * La découpe rectangulaire qu'on faisait avant laissait voir un cadre aux angles de la
-   * bulle, ses coins étant arrondis — seule une vraie copie donne le bon rendu.
-   *
-   * `mode: 'preview'` retire ce qui n'a pas de sens hors liste : le repère de reprise,
-   * l'animation d'entrée et les gestes.
+   * Une ligne du fil → `ChatRow` mémoïsé. Le parent ne fait plus que CALCULER les props ;
+   * le rendu lourd est bloqué par le `memo` tant qu'elles n'ont pas changé.
    */
   const renderRow = (row: Row, index: number, mode: 'list' | 'preview' = 'list') => {
-    const album = row.messages.length > 1 ? row.messages : null;
-    // Un album reste « en envoi » tant qu'un seul de ses médias l'est : il ne doit
-    // pas s'éclaircir par morceaux au fil des téléversements.
-    const sending = row.messages.some((m) => m.pendingLocal);
     const item = row.messages[0];
-
-    // Bandeau système centré (rejoint le groupe, éphémères, etc.)
-    if (item.type === 'system') {
-      return (
-        <View className="items-center my-2 px-6">
-          <Text className="text-sm text-gray-500 dark:text-zinc-400 bg-gray-100 dark:bg-zinc-800 rounded-full px-3.5 py-1.5 text-center">
-            {systemText(item.content)}
-          </Text>
-        </View>
-      );
-    }
     const isMe = item.sender?.id === currentUserId;
-    const isStoryReply = isStoryReplyMsg(item);
-    const reaction = isStoryReply && isEmojiOnly(item.content);
-    // Position dans la série : pilote le nom, l'écart au précédent et les coins.
-    // On compare de ligne à ligne, en prenant les messages qui se font face.
-    //
-    // ⚠️ `index` parcourt `displayRows`, retourné par l'inversion : le message
-    // chronologiquement PRÉCÉDENT est donc à `index + 1`, et le SUIVANT à
-    // `index - 1`. Les intervertir ne casse rien de visible immédiatement — les
-    // séries se regroupent simplement à l'envers, nom en pied de série et queue de
-    // bulle sur le mauvais message.
-    const prevRow = displayRows[index + 1];
-    const nextRow = displayRows[index - 1];
-    const firstOfGroup = !sameGroup(prevRow?.messages[prevRow.messages.length - 1], item);
-    const lastOfGroup = !sameGroup(row.messages[row.messages.length - 1], nextRow?.messages[0]);
-    const radius = bubbleRadius(isMe, firstOfGroup, lastOfGroup);
-    // On n'accuse que ses propres envois — d'où l'absence de statut sur les
-    // messages reçus.
-    const sendStatus: SendStatus | undefined = !isMe
-      ? undefined
-      : sending
-        ? 'sending'
-        : statusAt(item.createdAt);
-    // Sur un album, ces marqueurs valent pour la ligne entière : un seul média
-    // épinglé suffit à la signaler.
-    const isPinned = row.messages.some((m) => flags.pinned.includes(m.id));
-    const isStarred = row.messages.some((m) => flags.starred.includes(m.id));
-    const highlighted = row.messages.some((m) => m.id === highlightId);
-    // Dernière ligne de `displayRows` = message le plus ancien chargé : il ouvre forcément
-    // une journée à l'écran, même si la conversation se poursuit au-dessus.
-    // Message composé d'un à trois emojis seulement : rendu en grand, sans bulle.
-    // ⚠️ Exclut ce qui porte un média, une citation ou une réponse à une story : ces
-    // bulles-là ont une structure à rendre, l'emoji n'en est qu'une partie.
-    const bigEmoji =
-      !item.deletedAt && !item.mediaUrl && !item.replyTo && !isStoryReply && !album
-        ? (() => {
-            const n = emojiCount(item.content);
-            return n >= 1 && n <= 3 ? n : 0;
-          })()
-        : 0;
-    const prevMsg = displayRows[index + 1]?.messages[0];
-    const newDay =
-      !prevMsg ||
-      new Date(prevMsg.createdAt).toDateString() !== new Date(item.createdAt).toDateString();
-    // La légende d'un album est portée par le dernier média qui en a une.
-    const albumCaption = album
-      ? [...album].reverse().find((m) => m.content)?.content ?? ''
-      : '';
-    /**
-     * Citation, construite UNE fois puis posée dans la bulle du type concerné.
-     *
-     * ⚠️ Sur un album elle est portée par le PREMIER média (c'est ainsi qu'elle est
-     * envoyée) : la chercher sur `item` seul la perdrait dès que l'ordre d'arrivée
-     * des médias diffère de l'ordre d'envoi.
-     */
-    const quoted = album ? album.find((m) => m.replyTo)?.replyTo : item.replyTo;
-    const quoteBlock = quoted ? (
-      <QuotedMessage
-        quote={quoted}
-        currentUserId={currentUserId ?? ''}
-        accent={isMe ? '#FFFFFF' : bubbleColor}
-        onColored={isMe}
-        // Le saut passe par le même chemin que les épinglés : il sait charger une
-        // fenêtre autour d'un message absent de la mémoire.
-        onPress={() => setScrollTarget(quoted.id)}
-      />
-    ) : null;
-
+    const sending = row.messages.some((m) => m.pendingLocal);
+    // Ordre chronologique : le précédent est à `index - 1`, le suivant à `index + 1`.
+    const prevRow = displayRows[index - 1];
+    const prevFirstMsg = prevRow?.messages[0];
     return (
-      <>
-      {/*
-        Séparateur de date, avant le premier message d'une journée.
-        ⚠️ Rendu AVANT la bulle dans le JSX, donc au-dessus d'elle : l'inversion retourne
-        l'ordre des CELLULES, pas le contenu de chacune. Le message chronologiquement
-        précédent est à `index + 1`.
-      */}
-      {mode === 'list' && newDay && <DateSeparator label={dayLabel(item.createdAt, t)} />}
-      {/* Repère de reprise de lecture, posé juste avant le premier message non lu. */}
-      {mode === 'list' && divider?.key === row.key && (
-        <UnreadDivider
-          label={t(
-            divider.count === 1 ? 'chat.new_messages_one' : 'chat.new_messages_other',
-            { count: divider.count },
-          )}
-        />
-      )}
-      <MessageEnter
-        messageId={item.id}
-        seenIds={seenIdsRef}
-        isMe={isMe}
-        // Pas de menu sur un brouillon : son identifiant est local, épingler ou
-        // mettre en favori s'adresserait à un message que le serveur ne connaît pas.
-        // Aucun geste non plus sur l'aperçu du menu : c'est une COPIE, agir dessus
-        // rouvrirait un menu par-dessus celui qui est déjà ouvert.
-        // ⚠️ En mode sélection, l'appui long n'ouvre plus le menu : un seul geste doit
-        // gouverner à la fois, sinon on obtient un menu contextuel par-dessus une barre
-        // d'actions groupées qui parle des mêmes messages.
-        onLongPress={
-          sending || mode === 'preview' || selection
-            ? undefined
-            : (anchor) => openMessageMenu(item.id, anchor)
+      <ChatRow
+        row={row}
+        mode={mode}
+        prevLastMsg={prevRow?.messages[prevRow.messages.length - 1]}
+        nextFirstMsg={displayRows[index + 1]?.messages[0]}
+        isOldest={index === 0}
+        dividerLabel={
+          divider?.key === row.key
+            ? t(divider.count === 1 ? 'chat.new_messages_one' : 'chat.new_messages_other', {
+                count: divider.count,
+              })
+            : null
         }
-        onTap={selection && mode === 'list' ? () => toggleSelected(item.id) : undefined}
-        onSwipeReply={
-          sending || mode === 'preview' || selection
-            ? undefined
-            : () => setReplyTo(toQuote(item))
+        daySeparator={
+          !prevFirstMsg ||
+          new Date(prevFirstMsg.createdAt).toDateString() !==
+            new Date(item.createdAt).toDateString()
+            ? dayLabel(item.createdAt, t)
+            : null
         }
-        // Même basculement que la rangée rapide : re-liker retire le like, et liker un
-        // message déjà marqué d'un autre emoji le remplace — une réaction par personne,
-        // quel que soit le chemin emprunté.
-        onDoubleTap={
-          sending || mode === 'preview' || selection
-            ? undefined
-            : () => react(item.id, LIKE_EMOJI)
-        }
-        className={`max-w-[80%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
-        style={[
-          {
-            // ⚠️ Pas d'écart au-dessus du message le plus ANCIEN, qui ouvre le fil.
-            // Avec l'inversion il est en dernière position, plus en première.
-            // Aucun non plus pour l'aperçu du menu : il est posé à une position
-            // absolue, un écart le décalerait de la bulle qu'il recouvre.
-            marginTop:
-              mode === 'preview' || index === displayRows.length - 1
-                ? 0
-                : firstOfGroup
-                  ? GROUP_GAP
-                  : GROUP_GAP_TIGHT,
-          },
-        ]}
-        highlighted={highlighted}
-        accent={bubbleColor}
-      >
-        {/* Coche de sélection. Posée au-dessus de la bulle plutôt qu'à côté : à côté, elle
-            décalerait toutes les bulles à l'entrée du mode et le fil sauterait. */}
-        {mode === 'list' && selection && (
-          <View
-            className={`flex-row items-center mb-0.5 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
-          >
-            <View
-              className={`w-5 h-5 rounded-full items-center justify-center border-2 ${
-                selection.includes(item.id)
-                  ? 'bg-nexa border-nexa'
-                  : 'border-gray-300 dark:border-zinc-600'
-              }`}
-            >
-              {selection.includes(item.id) && (
-                <Ionicons name="checkmark" size={12} color="white" />
-              )}
-            </View>
-          </View>
-        )}
-        {(isPinned || isStarred) && (
-          <View
-            className={`flex-row items-center gap-1 mb-0.5 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
-          >
-            {isPinned && <Ionicons name="pin" size={12} color="#9CA3AF" />}
-            {isStarred && <Ionicons name="star" size={12} color="#F59E0B" />}
-          </View>
-        )}
-        {/*
-          Message supprimé pour tout le monde.
-          ⚠️ Testé AVANT tous les autres types : un message supprimé peut avoir été un média,
-          un album ou une position, et le serveur a vidé ses champs — sans cette priorité on
-          rendrait une bulle média sans média.
-        */}
-        {item.deletedAt ? (
-          <View
-            style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
-            className={`flex-row items-center px-3.5 py-2.5 ${
-              isMe ? 'bg-gray-200 dark:bg-zinc-800' : 'bg-white dark:bg-zinc-900'
-            }`}
-          >
-            <Ionicons name="ban-outline" size={15} color="#9CA3AF" />
-            <Text className="text-base italic text-gray-400 dark:text-zinc-500 ml-1.5">
-              {isMe ? t('chat.deleted_by_you') : t('chat.deleted_message')}
-            </Text>
-            {lastOfGroup && (
-              <BubbleTail isMe={isMe} color={isMe ? '#e5e7eb' : theirBubble} />
-            )}
-          </View>
-        ) : album ? (
-          <>
-            {!isMe && firstOfGroup && (
-              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">
-                {item.sender?.name}
-              </Text>
-            )}
-            <View
-              style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
-              className={`p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
-            >
-              {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
-              {quoteBlock && <View className="px-1 pt-1">{quoteBlock}</View>}
-              <MediaGrid
-                items={album.map((m) => ({
-                  id: m.id,
-                  mediaUrl: m.mediaUrl as string,
-                  mediaType: m.mediaType,
-                }))}
-                onOpen={(i) =>
-                  setAlbumView({
-                    items: album.map((m) => ({
-                      id: m.id,
-                      mediaUrl: m.mediaUrl as string,
-                      mediaType: m.mediaType,
-                    })),
-                    index: i,
-                  })
-                }
-                // ⚠️ Ancre NULLE : la grille ne mesure pas ses tuiles, le menu se
-                // centre alors de lui-même. Le média visé reste le bon — c'est son
-                // identifiant qui voyage, pas sa position.
-                onLongPressItem={
-                  sending ? () => {} : (mid: string) => openMessageMenu(mid, null)
-                }
-              />
-              {albumCaption ? (
-                <View className="px-2 pt-1.5 pb-0.5">
-                  <Text
-                    className={`text-base ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
-                  >
-                    {albumCaption}
-                  </Text>
-                  <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} status={sendStatus} />
-                </View>
-              ) : (
-                <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} overlay status={sendStatus} />
-              )}
-              {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
-              {sending && <SendingVeil />}
-            </View>
-          </>
-        ) : item.type === 'location' &&
-          item.latitude != null &&
-          item.longitude != null ? (
-          <>
-            {!isMe && firstOfGroup && (
-              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">
-                {item.sender?.name}
-              </Text>
-            )}
-            {/* Aperçu hors bulle, comme les médias : la carte se suffit à elle-même. */}
-            <View style={[BUBBLE_SHADOW, ROUND.bubble]} className="overflow-hidden">
-              <LocationBubble
-                latitude={item.latitude}
-                longitude={item.longitude}
-                address={item.content}
-                onPress={() =>
-                  setViewLocation({
-                    latitude: item.latitude!,
-                    longitude: item.longitude!,
-                    address: item.content,
-                  })
-                }
-              />
-            </View>
-            <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
-          </>
-        ) : isStoryReply ? (
-          <>
-            {/* Libellé contextuel : répondu / réagi */}
-            <View
-              className={`flex-row items-center gap-1 mb-1 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
-            >
-              <Ionicons name="arrow-undo" size={13} color="#9CA3AF" />
-              <Text className="text-xs text-gray-400 dark:text-zinc-500">
-                {reaction
-                  ? isMe
-                    ? t('chat.you_reacted')
-                    : t('chat.reacted', { name: item.sender?.name })
-                  : isMe
-                    ? t('chat.you_replied')
-                    : t('chat.replied', { name: item.sender?.name })}
-              </Text>
-            </View>
-
-            {/* Vignette verticale de la story */}
-            {item.storyMediaUrl && (
-              <Image
-                source={{ uri: item.storyMediaUrl }}
-                className="border border-gray-200 dark:border-zinc-800 bg-gray-100 dark:bg-zinc-800 mb-1"
-                style={{ ...ROUND.inner, width: 56, height: 94 }}
-              />
-            )}
-
-            {/* Réaction emoji en grand, ou bulle de texte */}
-            {reaction ? (
-              <Text style={{ fontSize: 56, lineHeight: 64 }} className="px-1">
-                {item.content}
-              </Text>
-            ) : (
-              <View
-                style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
-                className={`px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
-              >
-                {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
-                <Text
-                  className={`text-lg ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
-                >
-                  {item.content}
-                </Text>
-                <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
-              </View>
-            )}
-          </>
-        ) : item.mediaUrl ? (
-          <>
-            {!isMe && firstOfGroup && (
-              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
-            )}
-            {isImageLike(item.mediaType) ? (
-              // Image/vidéo/GIF en bulle : le média affleure les bords (padding
-              // fin) et la légende vit DANS la bulle, sous le média.
-              <View
-                style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
-                className={`p-1 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
-              >
-                {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
-                {quoteBlock && <View className="px-1 pt-1">{quoteBlock}</View>}
-                <MessageMedia
-                  message={item}
-                  tint={bubbleColor}
-                  onOpenImage={(url) => setViewer({ type: 'image', url })}
-                  onOpenVideo={(url) => setViewer({ type: 'video', url })}
-                />
-                {item.content ? (
-                  <View className="px-2 pt-1.5 pb-0.5">
-                    <Text
-                      className={`text-base ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
-                    >
-                      {item.content}
-                    </Text>
-                    <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
-                  </View>
-                ) : (
-                  <BubbleTime iso={item.createdAt} isMe={isMe} overlay status={sendStatus} />
-                )}
-                {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
-                {sending && <SendingVeil />}
-              </View>
-            ) : (
-              // Audio/document : bulle aux couleurs de l'expéditeur, avec la carte
-              // du fichier posée dessus dans un ton contrasté. Le nom de fichier
-              // et l'icône teintée gardent ainsi un fond clair sur lequel se lire,
-              // sans que la bulle ait à renoncer à sa couleur.
-              <View
-                style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
-                className={`p-1.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
-              >
-                {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
-                {quoteBlock}
-                <View
-                  style={ROUND.inner}
-                  className={`px-3 py-2 ${isMe ? 'bg-white dark:bg-zinc-800' : 'bg-gray-100 dark:bg-zinc-800'}`}
-                >
-                  <MessageMedia
-                    message={item}
-                    tint={bubbleColor}
-                    onOpenImage={() => {}}
-                    onOpenVideo={() => {}}
-                  />
-                </View>
-                <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
-                {lastOfGroup && (
-                  <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />
-                )}
-              </View>
-            )}
-          </>
-        ) : bigEmoji ? (
-          <>
-            {!isMe && firstOfGroup && (
-              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">
-                {item.sender?.name}
-              </Text>
-            )}
-            {/* Hors bulle : un emoji agrandi dans une bulle donnerait une boîte presque
-                vide autour de lui, et c'est la bulle qu'on regarderait. */}
-            <View className={isMe ? 'items-end' : 'items-start'}>
-              <Text
-                style={{ fontSize: BIG_EMOJI_SIZE[bigEmoji], lineHeight: BIG_EMOJI_SIZE[bigEmoji] * 1.2 }}
-                className="px-1"
-              >
-                {item.content}
-              </Text>
-              <BubbleTime
-                iso={item.createdAt}
-                isMe={false /* pas de bulle colorée : l'heure doit rester grise */}
-                status={sendStatus}
-                edited={!!item.editedAt}
-              />
-            </View>
-          </>
-        ) : (
-          <>
-            {!isMe && firstOfGroup && (
-              <Text className="text-base text-gray-400 dark:text-zinc-500 mb-1 ml-1">{item.sender?.name}</Text>
-            )}
-            <View
-              style={[BUBBLE_SHADOW, ROUND.bubble, radius]}
-              className={`px-4 py-2.5 ${isMe ? '' : 'bg-white dark:bg-zinc-900'}`}
-            >
-              {isMe && <BubbleFill color={bubbleColor} radius={radius} />}
-              {quoteBlock}
-              {item.linkPreview && (
-                <LinkPreviewCard preview={item.linkPreview} onColored={isMe} />
-              )}
-              {/*
-                ⚠️ Plus de `Pressable` sur la bulle entière pour ouvrir « le » lien : chaque
-                URL est désormais cliquable individuellement, dans le texte. L'ancienne
-                version n'ouvrait que la PREMIÈRE, où qu'on appuie — y compris en appuyant
-                sur une autre.
-              */}
-              <MessageText
-                content={item.content}
-                className={`text-lg ${isMe ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}
-                linkColor={isMe ? '#FFFFFF' : bubbleColor}
-              />
-              <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
-              {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
-            </View>
-          </>
-        )}
-
-        {/* Réactions : posées sous la bulle, dans le même conteneur — elles
-            appartiennent au message, elles ne forment pas une ligne à part. */}
-        <MessageReactions
-          reactions={row.messages.flatMap((m) => m.reactions ?? [])}
-          currentUserId={currentUserId ?? ''}
-          isMe={isMe}
-          onPress={() => setReactionsOf(row.messages.map((m) => m.id))}
-        />
-      </MessageEnter>
-      </>
+        sendStatus={!isMe ? undefined : sending ? 'sending' : statusAt(item.createdAt)}
+        isPinned={row.messages.some((m) => flags.pinned.includes(m.id))}
+        isStarred={row.messages.some((m) => flags.starred.includes(m.id))}
+        highlighted={row.messages.some((m) => m.id === highlightId)}
+        selMode={!!selection}
+        selected={!!selection && row.messages.some((m) => selection.includes(m.id))}
+        searchTerm={search?.applied ?? ''}
+        currentUserId={currentUserId}
+        bubbleColor={bubbleColor}
+        theirBubble={theirBubble}
+        myTailColor={myTailColor}
+        t={t}
+        systemText={systemText}
+        seenIdsRef={seenIdsRef}
+        openMessageMenu={openMessageMenu}
+        setReplyTo={setReplyTo}
+        toQuote={toQuote}
+        react={react}
+        setViewer={setViewer}
+        setAlbumView={setAlbumView}
+        setViewLocation={setViewLocation}
+        setReactionsOf={setReactionsOf}
+        setScrollTarget={setScrollTarget}
+        toggleSelected={toggleSelected}
+      />
     );
   };
 
@@ -3673,6 +4056,80 @@ export default function ChatScreen() {
       )}
 
       {/*
+        Recherche : la barre REMPLACE l'en-tête, avec sa géométrie exacte — même raison que
+        pour la multi-sélection, une barre d'une autre taille ferait sauter le fil.
+      */}
+      {search && (
+        <Animated.View
+          entering={FadeInDown.duration(160)}
+          exiting={FadeOutUp.duration(140)}
+          className="absolute bg-white dark:bg-zinc-900"
+          style={{
+            ...ROUND.surface,
+            top: insets.top + 4,
+            left: 10,
+            right: 10,
+            height: HEADER_H,
+            zIndex: 12,
+            ...HEADER_SHADOW,
+          }}
+        >
+          <View className="flex-row items-center h-full px-2">
+            <Pressable hitSlop={8} className="px-2 py-2" onPress={() => setSearch(null)}>
+              <Ionicons name="close" size={22} color={scheme === 'dark' ? '#e4e4e7' : '#111827'} />
+            </Pressable>
+            <TextInput
+              autoFocus
+              value={search.term}
+              onChangeText={(v) => setSearch((prev) => (prev ? { ...prev, term: v } : prev))}
+              placeholder={t('chat.search_placeholder')}
+              placeholderTextColor={scheme === 'dark' ? '#71717a' : '#9ca3af'}
+              className="flex-1 text-base text-gray-900 dark:text-zinc-100 px-1"
+              returnKeyType="search"
+            />
+            {search.loading ? (
+              <ActivityIndicator size="small" color={NEXA} style={{ marginHorizontal: 8 }} />
+            ) : search.applied ? (
+              <>
+                <Text className="text-sm text-gray-500 dark:text-zinc-400 mr-1">
+                  {search.results.length
+                    ? `${search.index + 1}/${search.results.length}`
+                    : t('chat.no_results')}
+                </Text>
+                {/* ⚠️ La flèche HAUT va vers le plus ANCIEN : les résultats sont ordonnés du
+                    plus récent au plus ancien, comme le fil. L'inverse irait à rebours de
+                    ce que l'utilisateur voit en défilant. */}
+                <Pressable
+                  hitSlop={6}
+                  disabled={!search.results.length}
+                  className="px-1.5 py-2"
+                  onPress={() => stepSearch(1)}
+                >
+                  <Ionicons
+                    name="chevron-up"
+                    size={20}
+                    color={search.results.length ? NEXA : '#D1D5DB'}
+                  />
+                </Pressable>
+                <Pressable
+                  hitSlop={6}
+                  disabled={!search.results.length}
+                  className="px-1.5 py-2"
+                  onPress={() => stepSearch(-1)}
+                >
+                  <Ionicons
+                    name="chevron-down"
+                    size={20}
+                    color={search.results.length ? NEXA : '#D1D5DB'}
+                  />
+                </Pressable>
+              </>
+            ) : null}
+          </View>
+        </Animated.View>
+      )}
+
+      {/*
         Mode multi-sélection : la barre REMPLACE l'en-tête.
         ⚠️ Même géométrie que lui (position, hauteur, arrondi) : une barre d'une autre
         taille ferait sauter tout le fil à l'entrée comme à la sortie du mode.
@@ -3764,90 +4221,96 @@ export default function ChatScreen() {
         </Animated.View>
       )}
 
-      {/* Messages */}
-      <KeyboardAvoidingView className="flex-1" behavior="padding">
+      {/* Messages — bloc entier (liste + composeur) translaté avec le clavier. */}
+      <Animated.View style={[{ flex: 1 }, keyboardShift]}>
         <View style={{ flex: 1, marginBottom: -composerOverlap }}>
         {/* Enveloppe porteuse du fondu d'ouverture. Posée AUTOUR de la liste et non sur
             elle : la liste doit être montée et mesurée normalement — c'est ce qui lui
             permet de se caler en bas — elle ne doit simplement pas être vue avant. */}
         <Animated.View style={[{ flex: 1 }, scroll.revealStyle]}>
-        <FlatList
+        <FlashList
           ref={listRef}
           style={{ flex: 1 }}
-          // ⚠️ Liste INVERSÉE. Elle se rend depuis le bas, si bien que charger de
-          // l'historique devient un ajout À LA FIN — qui ne touche jamais ce qui se trouve
-          // au-dessus du regard. C'est ce qui supprime le sursaut : dans une liste normale,
-          // les messages insérés en tête sortent de la zone visible, y sont virtualisés avec
-          // une hauteur ESTIMÉE, et chaque cellule qui se monte remplace cette estimation —
-          // donc décale le point d'ancrage, une image après l'autre.
-          inverted
+          /**
+           * ⚠️ FlashList v2, NON inversée — l'inversion du 7 août est retirée avec sa raison
+           * d'être. Elle contournait les hauteurs ESTIMÉES de FlatList (insérer en tête
+           * décalait l'ancrage à chaque mesure) ; FlashList MESURE ses cellules, et son
+           * `maintainVisibleContentPosition`, actif par défaut, absorbe les insertions aux
+           * deux extrémités. Ordre chronologique : l'ancien à l'index 0, le récent en
+           * dernier, le bas du fil est la FIN du contenu.
+           */
           data={displayRows}
-          // ⚠️ 10 par défaut, ce qui ne mesurait que les 10 messages les plus récents : tout
-          // défilement ciblé plus haut échouait faute de cellule montée. 25 couvre
-          // largement un repère de reprise ou un épinglé récent, pour un coût de montage
-          // négligeable — ce sont des bulles, pas des écrans.
-          initialNumToRender={25}
           keyExtractor={(row) => row.key}
+          /**
+           * Type de cellule pour le RECYCLAGE : FlashList réutilise un support du même type
+           * au lieu d'en monter un neuf. Sans cela, une bulle texte recyclée en album
+           * paierait un remontage complet — précisément le coût qu'on migre pour éviter.
+           */
+          getItemType={(row) => {
+            const m = row.messages[0];
+            if (m.type === 'system') return 'system';
+            if (row.messages.length > 1) return 'album';
+            if (m.mediaType) return m.mediaType;
+            if (m.type === 'location') return 'location';
+            return 'text';
+          }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           // Pas de `gap` : l'écart est porté par chaque bulle, il varie selon le regroupement.
-          contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 14 }}
-          // ⚠️ Espaces d'extrémité en ÉLÉMENTS, pas en `padding` : le débordement de la
-          // liste (marginBottom négatif) place son bas sous la zone de saisie, et il faut
-          // rendre au fil exactement cette hauteur. Un en-tête ou un pied de liste est un
-          // enfant réel, donc mesuré et compté dans la taille du contenu — ce dont dépend
-          // le calage, alors qu'un padding de conteneur ne l'était pas ici.
-          // ⚠️ Les deux extrémités sont ÉCHANGÉES par l'inversion : l'en-tête de liste
-          // s'affiche en BAS de l'écran, le pied en HAUT. L'espace réservé à la carte
-          // d'en-tête flottante devient donc le PIED, et le débordement sous la zone de
-          // saisie devient l'EN-TÊTE. Les intervertir est l'erreur la plus facile à
-          // commettre ici, et elle ne se voit qu'aux extrémités du fil.
-          ListHeaderComponent={<View style={{ height: composerOverlap + 24 }} />}
-          ListFooterComponent={listHeader}
-          // L'historique est désormais à la FIN du contenu : c'est `onEndReached` qui le
-          // charge, et `maintainVisibleContentPosition` n'a plus lieu d'être — on n'insère
-          // plus rien au-dessus de ce qu'on regarde.
-          onEndReached={loadOlder}
-          onEndReachedThreshold={0.4}
-          // ⚠️ Liste inversée : le DÉBUT, c'est le présent. Sert quand le fil a été ouvert au
-          // milieu de l'historique (repère de reprise, saut vers un épinglé ancien) et qu'il
-          // faut pouvoir redescendre jusqu'au bas — sans quoi ce serait un cul-de-sac.
-          onStartReached={loadNewer}
+          contentContainerStyle={{ paddingHorizontal: 14 }}
+          // ⚠️ Espaces d'extrémité en ÉLÉMENTS, pas en `padding` : ils doivent être comptés
+          // dans la taille du contenu, dont dépend le calage. Sens NORMAL désormais :
+          // l'en-tête (haut) porte la place de la carte flottante, le pied (bas) le
+          // débordement sous la zone de saisie.
+          ListHeaderComponent={listHeader}
+          ListFooterComponent={<View style={{ height: composerOverlap + 24 }} />}
+          /**
+           * mVCP est actif par défaut dans FlashList v2 ; on ne règle que le démarrage en
+           * bas. ⚠️ PAS d'`autoscrollToBottomThreshold` : le suivi du bas appartient à la
+           * machine à états (`following`), et deux pilotes du même mouvement se
+           * contrediraient — c'est la leçon de toute cette saison.
+           */
+          maintainVisibleContentPosition={{
+            startRenderingFromBottom: true,
+            autoscrollToBottomThreshold: undefined,
+          }}
+          // Sens normal : le HAUT (début) est l'historique, le BAS (fin) est le présent.
+          onStartReached={loadOlder}
           onStartReachedThreshold={0.4}
+          onEndReached={loadNewer}
+          // En « écrans visibles » : la page part bien avant d'atteindre le bord chargé,
+          // et le tampon la pose au premier instant de repos.
+          onEndReachedThreshold={2}
           scrollEventThrottle={16}
           /**
            * ⚠️ Les handlers ci-dessous ne DÉCIDENT plus rien : ils transmettent l'événement à
            * la machine à états (`lib/threadScroll.ts`), qui seule sait si le fil peut bouger.
-           *
-           * Auparavant chacun entretenait ses propres drapeaux — et pendant un calage sur le
-           * repère de reprise, `onScroll` continuait de mettre à jour « suis-je en bas ? » en
-           * réaction à NOTRE PROPRE défilement, si bien que le mode « suivre le bas »
-           * reprenait la main et annulait le calage qui venait d'aboutir.
            */
-          onScroll={(e) => {
-            scroll.onScroll(e);
-            // ⚠️ Chargement des messages plus RÉCENTS déclenché ici, et pas seulement par
-            // `onStartReached` : celui-ci ne se déclenche pas de façon fiable sur une liste
-            // inversée, si bien qu'après un saut au milieu de l'historique on ne pouvait plus
-            // redescendre jusqu'au présent. `loadNewer` se garde lui-même contre les appels
-            // concurrents et sort tout de suite s'il n'y a rien de plus récent.
-            const { layoutMeasurement, contentOffset } = e.nativeEvent;
-            if (contentOffset.y < layoutMeasurement.height * 1.5) loadNewer();
+          onScroll={scroll.onScroll}
+          onScrollBeginDrag={() => {
+            scrollActiveRef.current = true;
+            if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+            scroll.onScrollBeginDrag();
           }}
-          onScrollBeginDrag={scroll.onScrollBeginDrag}
-          onScrollEndDrag={scroll.onScrollEndDrag}
-          onMomentumScrollEnd={scroll.onMomentumScrollEnd}
+          onScrollEndDrag={() => {
+            scroll.onScrollEndDrag();
+            // ⚠️ La fin du drag n'est PAS la fin du mouvement : l'inertie peut suivre. On ne
+            // pose le tampon qu'après un court délai — annulé si le momentum démarre.
+            if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+            settleTimerRef.current = setTimeout(flushPendingNewer, 150);
+          }}
+          onMomentumScrollBegin={() => {
+            if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+          }}
+          onMomentumScrollEnd={() => {
+            scroll.onMomentumScrollEnd();
+            flushPendingNewer();
+          }}
           onContentSizeChange={scroll.onContentSizeChange}
           onLayout={scroll.onLayout}
-          onScrollToIndexFailed={scroll.onScrollToIndexFailed}
           renderItem={({ item: row, index }) => renderRow(row, index)}
-          /**
-           * Conversation vide.
-           * ⚠️ Retourné (`scaleY: -1`) : dans une liste inversée, TOUT est retourné, y compris
-           * ce composant — sans quoi le texte s'afficherait à l'envers.
-           */
           ListEmptyComponent={
-            <View style={{ transform: [{ scaleY: -1 }] }} className="items-center px-10 pt-24">
+            <View className="items-center px-10 pt-24">
               <View className="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-900/30 items-center justify-center mb-4">
                 <Ionicons name="chatbubble-ellipses" size={30} color={NEXA} />
               </View>
@@ -3882,7 +4345,7 @@ export default function ChatScreen() {
               // `Pressable` d'une branche à l'autre et `PillEnter` ne serait jamais remonté.
               <PillEnter key="pill">
                 <Pressable
-                  onPress={() => scroll.follow(true)}
+                  onPress={goToPresent}
                   style={[FLOATING_SHADOW, ROUND.bubble]}
                   className="self-center flex-row items-center gap-2 bg-nexa px-3.5 py-2"
                 >
@@ -3897,7 +4360,7 @@ export default function ChatScreen() {
             ) : (
               <PillEnter key="fab">
                 <Pressable
-                  onPress={() => scroll.follow(true)}
+                  onPress={goToPresent}
                   accessibilityLabel={t('chat.jump_to_bottom')}
                   style={[FLOATING_SHADOW]}
                   className="self-end w-11 h-11 rounded-full bg-white dark:bg-zinc-800 items-center justify-center"
@@ -3921,7 +4384,7 @@ export default function ChatScreen() {
         </View>
 
         {/* Bloc de saisie, en flux : c'est ce qui lui permet de suivre le clavier — un
-            élément positionné en absolu ignorerait le padding du KeyboardAvoidingView. */}
+            élément positionné en absolu resterait derrière lors de la translation. */}
         <View>
         {uploading && (
           <Text className="text-sm text-gray-400 dark:text-zinc-500 px-4 pt-1">{t('media.uploading')}</Text>
@@ -4045,9 +4508,9 @@ export default function ChatScreen() {
           </>
         )}
         </View>
-      </KeyboardAvoidingView>
+      </Animated.View>
 
-      {/* ⚠️ HORS du KeyboardAvoidingView : ce dégradé ne bouge pas avec le clavier, et
+      {/* ⚠️ HORS du bloc translaté : ce dégradé ne bouge pas avec le clavier, et
           l'y laisser le faisait redessiner à chaque frame de l'animation — 6 couches de
           flou masquées, de quoi hacher l'ouverture. Rendu après la liste (donc au-dessus
           d'elle) et sous le header, qui porte un zIndex. */}
