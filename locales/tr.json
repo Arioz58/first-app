@@ -152,7 +152,11 @@
     "show_more": "Daha fazla göster",
     "show_less": "Daha az göster",
     "search_placeholder": "Sohbette ara",
-    "no_results": "Sonuç yok"
+    "no_results": "Sonuç yok",
+    "forward_n_to_one": "{{count}} mesajı şuraya ilet",
+    "forward_n_to_other": "{{count}} mesajı şuraya ilet",
+    "nothing_to_forward": "Bu mesajların hiçbiri iletilemez.",
+    "forwarded": "İletildi"
   },
   "details": {
     "title": "Ayrıntılar",

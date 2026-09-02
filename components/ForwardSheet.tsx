@@ -31,10 +31,13 @@ type ConvItem = {
  */
 export function ForwardSheet({
   visible,
+  count = 1,
   onClose,
   onConfirm,
 }: {
   visible: boolean;
+  /** Nombre de messages transférés — annoncé en titre quand il y en a plusieurs. */
+  count?: number;
   onClose: () => void;
   /** Reçoit les identifiants de conversation retenus. L'envoi lui-même reste à l'appelant. */
   onConfirm: (conversationIds: string[]) => void;
@@ -79,8 +82,10 @@ export function ForwardSheet({
   return (
     <BottomSheet visible={visible} onClose={onClose} height={SHEET_H}>
       <View className="px-5 pb-3">
+        {/* Le compte est annoncé : transférer 6 messages sans le dire exposerait à en
+            envoyer plus qu'on ne croit. */}
         <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100 mb-3">
-          {t('chat.forward_to')}
+          {count > 1 ? t('chat.forward_n_to', { count }) : t('chat.forward_to')}
         </Text>
         <View
           style={ROUND.inner}

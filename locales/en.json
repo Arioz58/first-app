@@ -152,7 +152,11 @@
     "show_more": "Show more",
     "show_less": "Show less",
     "search_placeholder": "Search in conversation",
-    "no_results": "No results"
+    "no_results": "No results",
+    "forward_n_to_one": "Forward {{count}} message to",
+    "forward_n_to_other": "Forward {{count}} messages to",
+    "nothing_to_forward": "None of these messages can be forwarded.",
+    "forwarded": "Forwarded"
   },
   "details": {
     "title": "Details",

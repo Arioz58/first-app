@@ -1285,6 +1285,22 @@ const ChatRow = React.memo(
             </View>
           </View>
         )}
+        {/*
+          Mention « Transféré ».
+          ⚠️ Ce n'est pas décoratif : elle dit que le contenu ne vient pas de l'expéditeur,
+          ce qui change la façon dont on le lit. C'est aussi la raison d'être du champ
+          `forwarded`, jusqu'ici stocké sans jamais être montré.
+        */}
+        {item.forwarded && !item.deletedAt && (
+          <View
+            className={`flex-row items-center gap-1 mb-0.5 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
+          >
+            <Ionicons name="arrow-redo" size={12} color="#9CA3AF" />
+            <Text className="text-xs italic text-gray-400 dark:text-zinc-500">
+              {t('chat.forwarded')}
+            </Text>
+          </View>
+        )}
         {(isPinned || isStarred) && (
           <View
             className={`flex-row items-center gap-1 mb-0.5 px-1 ${isMe ? 'flex-row-reverse' : ''}`}
@@ -1795,7 +1811,8 @@ export default function ChatScreen() {
    */
   const [reactionsOf, setReactionsOf] = useState<string[] | null>(null);
   /** Message à transférer, le temps que l'utilisateur choisisse les destinataires. */
-  const [forwarding, setForwarding] = useState<Message | null>(null);
+  /** Messages à transférer, le temps que l'utilisateur choisisse les destinataires. */
+  const [forwarding, setForwarding] = useState<Message[] | null>(null);
   /**
    * Action choisie dans le menu, exécutée APRÈS sa fermeture.
    *
@@ -3404,7 +3421,7 @@ export default function ChatScreen() {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           break;
         case 'forward':
-          setForwarding(msg);
+          setForwarding([msg]);
           break;
         case 'pin':
         case 'unpin':
@@ -3462,28 +3479,65 @@ export default function ChatScreen() {
    * n'est pas membre.
    */
   const forwardTo = useCallback(
-    (msg: Message, conversationIds: string[]) => {
+    (msgs: Message[], conversationIds: string[]) => {
       const socket = getSocket();
       if (!socket) return;
+      /**
+       * ⚠️ ORDRE : conversation par conversation, et messages du plus ANCIEN au plus récent.
+       *
+       * L'horodatage est posé par le SERVEUR à la réception : émettre dans le désordre
+       * remettrait les messages transférés dans le désordre chez le destinataire. On trie
+       * donc explicitement plutôt que de se fier à l'ordre de sélection, qui suit les
+       * appuis de l'utilisateur.
+       */
+      const ordered = [...msgs].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       for (const convId of conversationIds) {
-        socket.emit('send_message', {
-          conversationId: convId,
-          content: msg.content ?? '',
-          type: msg.type === 'story_reply' ? 'text' : msg.type,
-          mediaUrl: msg.mediaUrl ?? undefined,
-          mediaType: msg.mediaType ?? undefined,
-          fileName: msg.fileName ?? undefined,
-          fileSize: msg.fileSize ?? undefined,
-          mimeType: msg.mimeType ?? undefined,
-          durationMs: msg.durationMs ?? undefined,
-          latitude: msg.latitude ?? undefined,
-          longitude: msg.longitude ?? undefined,
-          forwarded: true,
-        });
+        /**
+         * ⚠️ Les albums sont re-groupés par un batchId NEUF, propre à ce transfert.
+         *
+         * Réutiliser celui d'origine ferait cohabiter deux albums de même identifiant dans
+         * des conversations différentes — or le destinataire s'en sert pour savoir combien
+         * de médias attendre (`#n`), et le compte serait faux dès qu'on ne transfère qu'une
+         * partie de l'album. Le nombre annoncé est donc celui des médias RÉELLEMENT
+         * transférés, regroupés par album d'origine.
+         */
+        const perBatch = new Map<string, Message[]>();
+        for (const m of ordered) {
+          if (!m.batchId) continue;
+          const list = perBatch.get(m.batchId) ?? [];
+          list.push(m);
+          perBatch.set(m.batchId, list);
+        }
+        const freshBatch = new Map<string, string>();
+        let seq = 0;
+        for (const [oldId, list] of perBatch) {
+          // Un album réduit à un seul média n'est plus un album : pas de batchId du tout.
+          if (list.length > 1) {
+            freshBatch.set(oldId, `${currentUserId}-${Date.now()}-${seq++}#${list.length}`);
+          }
+        }
+
+        for (const msg of ordered) {
+          socket.emit('send_message', {
+            conversationId: convId,
+            content: msg.content ?? '',
+            type: msg.type === 'story_reply' ? 'text' : msg.type,
+            mediaUrl: msg.mediaUrl ?? undefined,
+            mediaType: msg.mediaType ?? undefined,
+            fileName: msg.fileName ?? undefined,
+            fileSize: msg.fileSize ?? undefined,
+            mimeType: msg.mimeType ?? undefined,
+            durationMs: msg.durationMs ?? undefined,
+            latitude: msg.latitude ?? undefined,
+            longitude: msg.longitude ?? undefined,
+            batchId: msg.batchId ? freshBatch.get(msg.batchId) : undefined,
+            forwarded: true,
+          });
+        }
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     },
-    [],
+    [currentUserId],
   );
 
   // --- Valeurs dérivées ---
@@ -4160,11 +4214,17 @@ export default function ChatScreen() {
               hitSlop={6}
               className="px-2.5 py-2"
               onPress={() => {
-                // On transfère le PREMIER sélectionné : le transfert multiple demanderait de
-                // réémettre N messages vers M conversations, à cadrer séparément.
-                const first = messages.find((m) => m.id === selection[0]);
-                if (first) setForwarding(first);
-                setSelection(null);
+                // ⚠️ On ne garde que les messages RÉELLEMENT transférables : un message
+                // supprimé n'a plus de contenu, et un éphémère sorti de sa conversation
+                // perdrait sa durée de vie. Les filtrer ici évite d'envoyer des bulles vides.
+                const picked = messages.filter(
+                  (m) => selection.includes(m.id) && !m.deletedAt && !m.expiresAt,
+                );
+                if (!picked.length) {
+                  Alert.alert('', t('chat.nothing_to_forward'));
+                  return;
+                }
+                setForwarding(picked);
               }}
             >
               <Ionicons name="arrow-redo" size={21} color={NEXA} />
@@ -4646,10 +4706,12 @@ export default function ChatScreen() {
       {/* Transférer vers d'autres conversations */}
       <ForwardSheet
         visible={!!forwarding}
+        count={forwarding?.length ?? 0}
         onClose={() => setForwarding(null)}
         onConfirm={(ids) => {
           if (forwarding) forwardTo(forwarding, ids);
           setForwarding(null);
+          setSelection(null); // le transfert consomme la sélection
         }}
       />
       </SafeAreaView>
