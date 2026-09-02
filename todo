@@ -299,6 +299,42 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
   → boutons flottants decales de `composerOverlap` : le bas de la liste deborde sous la zone de saisie (marge negative), sans quoi ils se rangeraient derriere le verre du composeur.
   [PAS FAIT, a juger a l'usage] La date FLOTTANTE pendant le defilement (facon WhatsApp, qui s'estompe a l'arret). Les separateurs inline suffisent peut-etre.
 
+[FAIT 02/09 - WEB] Connexion par QR facon WhatsApp Web. Migration `web_session`.
+  DECISION : QR en principal, OTP par numero garde en REPLI (telephone decharge, appareil photo casse) — le QR seul enfermerait dehors quelqu'un qui a pourtant un compte valide.
+  ⚠️ Le NAVIGATEUR ne prouve JAMAIS son identite : il demande un jeton, l'affiche, attend. C'est le MOBILE deja authentifie qui approuve, et `req.userId` vient du middleware JWT — jamais du corps de la requete. C'est toute la securite du mecanisme.
+  Chaine : web `POST /web-sessions` (sans auth) → jeton opaque de 32 octets, 60 s → QR → socket SANS JWT sur une room nommee d'apres le jeton → mobile scanne, `GET /web-sessions/:token` (apercu) puis `POST /web-sessions/approve` → jetons emis et pousses au navigateur PAR SOCKET.
+  ⚠️ Le socket exigeait un JWT a la connexion : exception ajoutee pour le navigateur en attente — SANS identite (`userId` indefini), une seule room, aucun evenement metier possible (tous verifient l'appartenance a une conversation, donc un userId). Verifie : une injection de message depuis ce socket est refusee.
+  ⚠️ `generateTokens` EXTRAIT en point unique : OTP et approbation web doivent produire les memes jetons avec les memes durees. Duplique, on se retrouve un jour avec deux durees de vie differentes selon le chemin de connexion, sans que personne ne le voie.
+  ⚠️ CONFIRMATION cote mobile obligatoire, avec l'affichage du NAVIGATEUR (`User-Agent`) : scanner ne doit jamais suffire — un QR affiche n'importe ou (site, affiche, ecran d'un tiers) donnerait sinon acces a toute la messagerie de qui le scanne.
+  ⚠️ Le QR se RENOUVELLE avant expiration (marge de 5 s), et l'attente precedente est coupee a chaque renouvellement — sinon un socket ecoute un jeton mort.
+  ⚠️ `QrScanner` etendu : en mode « connexion web » il accepte un jeton opaque au lieu d'une URL `nexa://user/<id>`. La presence de `onWebSession` change ce qu'il ACCEPTE — un QR de profil n'a rien a faire dans un ecran de connexion web, et l'inverse aussi.
+  → verifie par curl : creation, apercu, approbation, REJEU refuse, jeton inconnu refuse, approbation sans JWT en 401, QR expire refuse.
+  [A FAIRE] Lister et REVOQUER les sessions web depuis le mobile (WhatsApp le fait) — rejoint la revocation du refresh token deja notee au Mois 5. Sans elle, une session web approuvee ne peut plus etre coupee.
+
+[ANCIEN - fait ci-dessus] Connexion par QR facon WhatsApp Web. Decide le 02/09.
+  DECISION : QR en principal, OTP par numero garde en REPLI (telephone decharge, appareil photo casse). L'OTP web existe deja et reste fonctionnel.
+  ⚠️ Ce N'EST PAS un habillage de l'OTP : c'est un mecanisme d'authentification a part entiere, qui n'existe pas encore cote backend. Le web ne prouve rien lui-meme — c'est le MOBILE, deja authentifie, qui approuve la session du navigateur.
+  Chaine a construire :
+    1. WEB : demande une session ephemere → recoit un jeton a usage unique → l'affiche en QR et attend ;
+    2. MOBILE : scanne (le composant `QrScanner` existe deja, utilise pour le QR de profil) et POSTe le jeton avec SON JWT — c'est la preuve d'identite ;
+    3. BACKEND : verifie le jeton, emet accessToken + refreshToken pour la session web ;
+    4. WEB : prevenu par SOCKET (pas de polling) et connecte.
+  ⚠️ Points a traiter, tous non triviaux :
+    - EXPIRATION COURTE du jeton QR (~60 s) et usage UNIQUE : un QR photographie ne doit pas ouvrir une session une heure plus tard ;
+    - le socket doit accepter une connexion NON AUTHENTIFIEE le temps de l'attente (aujourd'hui l'auth JWT est exigee a la connexion) — ou passer par un canal dedie ;
+    - CONFIRMATION cote mobile avant d'approuver (« Se connecter a Nexa Web ? ») : scanner un QR ne doit pas suffire, sinon un QR malveillant affiche n'importe ou ouvre une session sur l'appareil de qui le scanne ;
+    - lister et REVOQUER les sessions web depuis le mobile (WhatsApp le fait) — rejoint la revocation du refresh token deja notee au Mois 5 ;
+    - le QR doit se RAFRAICHIR a l'expiration, sinon l'ecran devient muet sans rien dire.
+
+[A FAIRE - Mois 5, SECURITE WEB] Durcissement du client Next.js. Decide le 02/09 en creant le repo.
+  ⚠️ Les jetons vivent en `localStorage` : lisible par TOUT script de la page (XSS) et par les extensions de navigateur. Immunise en revanche contre le CSRF, rien n'etant envoye automatiquement.
+  → CHOIX ASSUME pour la V1 (celui de WhatsApp Web / Slack / Discord). L'alternative — cookies `httpOnly` + SameSite — est la « bonne » reponse academique mais demanderait au backend une SECONDE mecanique d'authentification a maintenir a cote de celle du mobile (pose et rafraichissement des cookies, protection CSRF, CORS avec credentials). Non retenu pour la V1.
+  ⚠️ CE QUI PROTEGE VRAIMENT, c'est l'absence de XSS — pas le lieu de stockage. D'ou les mesures ci-dessous, a faire de toute facon :
+    1. CSP stricte (`Content-Security-Policy`) sur le site Next.js : c'est elle qui empeche un script injecte de s'executer ET d'exfiltrer ;
+    2. CORS restreint cote backend (deja au todo securite, `cors()` est grand ouvert) — sans quoi n'importe quel site peut appeler l'API avec un jeton vole ;
+    3. REVOCATION du refresh token a la deconnexion : il dure 7 JOURS et le backend n'a aujourd'hui aucune liste de revocation, donc un jeton vole reste valide jusqu'a son expiration meme apres deconnexion. Demande une petite table ou un champ en base.
+  ⚠️ Implication KVKK/RGPD a mentionner au client si l'app vise un usage professionnel : la decision n'est pas que technique.
+
 [A FAIRE - Mois 5, NETTOYAGE S3] Aucun objet S3 n'est JAMAIS supprime, nulle part. Constate le 01/09 en repondant a « faut-il supprimer du S3 ? ».
   ⚠️ `src/lib/s3.ts` n'importe que `PutObjectCommand` : la capacite de suppression n'existe pas. `deleteExpiredStories` supprime les lignes `Story` mais pas les fichiers ; la purge des ephemeres (toutes les 5 min) fait de meme ; un message supprime voit son `mediaUrl` vide en base, le fichier reste.
   ⚠️ LE CAS LE PLUS EXPOSE N'EST PAS LA SUPPRESSION MANUELLE. Un message supprime est un geste explicite de l'utilisateur. Une STORY 24h et un message EPHEMERE portent une PROMESSE DE DUREE affichee dans l'interface — et leur photo reste telechargeable indefiniment via CloudFront pour qui connait l'URL. Contradiction directe avec ce qu'on annonce, et point KVKK/RGPD (droit a l'effacement).

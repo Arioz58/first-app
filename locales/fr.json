@@ -571,5 +571,16 @@
     "you": "Vous",
     "foreground_only_title": "Partage limité",
     "foreground_only": "Sans l'autorisation « Toujours », votre position cesse d'être transmise dès que vous quittez l'application. Vous pouvez l'accorder dans les réglages."
+  },
+  "web_login": {
+    "title": "Nexa Web",
+    "intro_title": "Connecter Nexa Web",
+    "intro_body": "Ouvrez Nexa Web sur votre ordinateur, puis scannez le code affiché à l'écran.",
+    "scan": "Scanner le code",
+    "confirm_title": "Autoriser cette connexion ?",
+    "confirm_hint": "Cet appareil aura accès à vos conversations. N'autorisez que vos propres appareils.",
+    "approve": "Autoriser",
+    "done_title": "Connecté",
+    "done_body": "Nexa Web est maintenant connecté à votre compte."
   }
 }

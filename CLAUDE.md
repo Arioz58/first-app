@@ -48,7 +48,7 @@ Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintena
 ```
 first-app/           → ce repo — app mobile React Native (Expo)
 first-app-backend/   → backend Node.js + Express (repo séparé, même machine)
-first-app-web/       → Next.js — à créer au Mois 3
+first-app-web/       → Next.js — client web (Mois 3). Connexion par **QR** (le mobile approuve), liste + fil temps réel. Backend partagé, sans changement : `cors()` ouvert et Socket.io en `origin: '*'` — à restreindre au Mois 5
 ```
 
 ---
@@ -258,6 +258,9 @@ GET  /health
 POST /auth/send-code                              → envoie l'OTP (Twilio ou simulation console) ; `{ phone, mode? }` — `mode:'login'` refuse si compte inexistant, `mode:'signup'` refuse si déjà existant
 POST /auth/verify-code                            → vérifie OTP, crée user si nouveau, retourne JWT
 POST /auth/refresh                                → renouvelle access token
+POST /web-sessions                                → **sans auth** : le navigateur demande un jeton de connexion (32 octets aléatoires, 60 s) à afficher en QR
+GET  /web-sessions/:token                         → aperçu de la demande (navigateur, date) pour que le mobile sache **ce qu'il approuve**
+POST /web-sessions/approve                        → le mobile approuve `{ token }`. ⚠️ L'identité vient de SON JWT, jamais du corps ; les jetons partent au navigateur **par socket** (`web_session_approved`), usage unique
 
 GET  /users/search?q=                             → recherche d'utilisateurs (nom/numéro, ≥2 car., exclut soi-même, max 20 → id/name/photoUrl) — usage interne (membres de groupe)
 POST /users/search-by-phone                       → recherche contact par numéro exact `{ phone }` (rate limit Redis 20/h, block-aware = compte masqué si bloqué, self-detection, photo gated) → `{ found, self?, user: { id, name, phone, photoUrl, relationStatus } }`

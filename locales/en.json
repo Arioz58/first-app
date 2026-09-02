@@ -571,5 +571,16 @@
     "you": "You",
     "foreground_only_title": "Limited sharing",
     "foreground_only": "Without the \"Always\" permission, your location stops being shared as soon as you leave the app. You can grant it in Settings."
+  },
+  "web_login": {
+    "title": "Nexa Web",
+    "intro_title": "Connect Nexa Web",
+    "intro_body": "Open Nexa Web on your computer, then scan the code shown on screen.",
+    "scan": "Scan the code",
+    "confirm_title": "Allow this connection?",
+    "confirm_hint": "This device will have access to your conversations. Only allow your own devices.",
+    "approve": "Allow",
+    "done_title": "Connected",
+    "done_body": "Nexa Web is now linked to your account."
   }
 }

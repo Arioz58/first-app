@@ -571,5 +571,16 @@
     "you": "Siz",
     "foreground_only_title": "Sınırlı paylaşım",
     "foreground_only": "“Her zaman” izni olmadan, uygulamadan çıktığınız anda konumunuz paylaşılmayı durdurur. Bu izni Ayarlar’dan verebilirsiniz."
+  },
+  "web_login": {
+    "title": "Nexa Web",
+    "intro_title": "Nexa Web'i bağla",
+    "intro_body": "Bilgisayarınızda Nexa Web'i açın, ardından ekrandaki kodu tarayın.",
+    "scan": "Kodu tara",
+    "confirm_title": "Bu bağlantıya izin verilsin mi?",
+    "confirm_hint": "Bu cihaz sohbetlerinize erişebilecek. Yalnızca kendi cihazlarınıza izin verin.",
+    "approve": "İzin ver",
+    "done_title": "Bağlandı",
+    "done_body": "Nexa Web artık hesabınıza bağlı."
   }
 }

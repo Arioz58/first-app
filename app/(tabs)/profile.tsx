@@ -448,6 +448,13 @@ export default function ProfileScreen() {
             value={locating ? t('location.detecting') : formatLocation(myLocation) || t('location.none')}
             onPress={handleLocation}
           />
+          {/* Connexion de Nexa Web : dans Confidentialité, car c'est une autorisation
+              d'accès à ses conversations — pas une préférence d'affichage. */}
+          <SettingRow
+            icon="laptop-outline"
+            label={t('web_login.title')}
+            onPress={() => router.push('/web-login' as any)}
+          />
           <SettingRow icon="lock-closed-outline" label={t('privacy_settings.title')} onPress={() => router.push('/privacy' as any)} />
           <SettingRow icon="ban-outline" label={t('blocked_title')} onPress={() => router.push('/blocked' as any)} />
           <SettingRow

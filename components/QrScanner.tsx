@@ -36,10 +36,19 @@ export default function QrScanner({
   visible,
   origin,
   onClose,
+  onWebSession,
 }: {
   visible: boolean;
   origin: ScanOrigin;
   onClose: () => void;
+  /**
+   * Connexion à Nexa Web : appelé avec le jeton scanné au lieu d'ouvrir un profil.
+   *
+   * ⚠️ Sa présence change ce que le scanner ACCEPTE — un QR de profil n'a rien à faire dans
+   * un écran « connecter Nexa Web », et l'inverse est vrai aussi. Deux QR différents, deux
+   * lectures différentes, jamais les deux à la fois.
+   */
+  onWebSession?: (token: string) => void;
 }) {
   const router = useRouter();
   const { t } = useTranslation();
@@ -105,6 +114,34 @@ export default function QrScanner({
 
   const onScanned = ({ data }: { data: string }) => {
     if (handledRef.current || busyRef.current) return;
+    /**
+     * ⚠️ En mode « connexion web », on ACCEPTE le jeton tel quel — c'est une chaîne opaque
+     * générée par le serveur, pas une URL. On se contente d'écarter ce qui est visiblement
+     * autre chose (un lien, un texte trop court) : le serveur reste seul juge de sa validité.
+     */
+    if (onWebSession) {
+      const token = data.trim();
+      const plausible = token.length >= 20 && !token.includes('://') && !token.includes(' ');
+      if (!plausible) {
+        busyRef.current = true;
+        setStatus('error');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setTimeout(() => {
+          setStatus('idle');
+          busyRef.current = false;
+        }, 1500);
+        return;
+      }
+      handledRef.current = true;
+      setStatus('success');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setTimeout(() => {
+        onClose();
+        onWebSession(token);
+      }, 300);
+      return;
+    }
+
     const id = parseUserId(data);
     if (!id) {
       busyRef.current = true;
