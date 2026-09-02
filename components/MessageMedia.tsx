@@ -10,22 +10,27 @@ import { DocumentViewer } from './DocumentViewer';
 import { MEDIA_FADE_MS, MEDIA_PLACEHOLDER } from '../lib/mediaAppearance';
 
 type MediaMessage = {
+  id?: string;
   mediaUrl?: string | null;
   mediaType?: string | null;
   fileName?: string | null;
   fileSize?: number | null;
   durationMs?: number | null;
+  sender?: { name: string } | null;
 };
 
 // Rendu de la pièce jointe d'un message dans la bulle, selon son type.
 export function MessageMedia({
   message,
   tint,
+  conversationId,
   onOpenImage,
   onOpenVideo,
 }: {
   message: MediaMessage;
   tint: string;
+  /** Sert au mini-player : savoir vers quelle conversation ramener. */
+  conversationId?: string;
   onOpenImage: (url: string) => void;
   onOpenVideo: (url: string) => void;
 }) {
@@ -68,7 +73,24 @@ export function MessageMedia({
     // ⚠️ `key` d'identité : sous FlashList, un support recyclé garde son état interne — un
     // lecteur « armé » (donc natif, en cours de lecture) suivrait le support jusqu'à un
     // AUTRE vocal. La clé force le remontage quand l'uri change.
-    return <AudioMessage key={mediaUrl} uri={mediaUrl} tint={tint} durationMs={message.durationMs} />;
+    return (
+      <AudioMessage
+        key={mediaUrl}
+        uri={mediaUrl}
+        tint={tint}
+        durationMs={message.durationMs}
+        nowPlaying={
+          message.id && conversationId
+            ? {
+                messageId: message.id,
+                conversationId,
+                senderName: message.sender?.name ?? '',
+                durationMs: message.durationMs,
+              }
+            : undefined
+        }
+      />
+    );
   }
 
   // Document

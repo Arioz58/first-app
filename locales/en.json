@@ -156,7 +156,8 @@
     "forward_n_to_one": "Forward {{count}} message to",
     "forward_n_to_other": "Forward {{count}} messages to",
     "nothing_to_forward": "None of these messages can be forwarded.",
-    "forwarded": "Forwarded"
+    "forwarded": "Forwarded",
+    "playing_tap_to_open": "Playing — tap to open"
   },
   "details": {
     "title": "Details",
@@ -213,7 +214,14 @@
     "24h": "24 hours",
     "7d": "7 days",
     "30d": "30 days",
-    "off": "Off"
+    "off": "Off",
+    "expiring": "expiring",
+    "left_minutes_one": "{{count}}m",
+    "left_minutes_other": "{{count}}m",
+    "left_hours_one": "{{count}}h",
+    "left_hours_other": "{{count}}h",
+    "left_days_one": "{{count}}d",
+    "left_days_other": "{{count}}d"
   },
   "media": {
     "attach": "Attachment",

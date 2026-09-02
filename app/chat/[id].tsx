@@ -13,6 +13,7 @@ import Animated, {
   FadeInDown,
   FadeOutUp,
   runOnJS,
+  withRepeat,
   withSequence,
   useAnimatedStyle,
   useSharedValue,
@@ -811,6 +812,97 @@ function PillEnter({ children }: { children: React.ReactNode }) {
   return <Animated.View style={style}>{children}</Animated.View>;
 }
 
+/**
+ * Temps restant avant disparition d'un message éphémère.
+ *
+ * ⚠️ Unité choisie selon l'échéance, jamais un décompte à la seconde : ces messages vivent
+ * 24 h, 7 j ou 30 j, et une horloge qui s'égrène donnerait l'impression d'une urgence qui
+ * n'existe pas — tout en forçant un rendu par seconde sur chaque bulle du fil.
+ */
+const ephemeralLeft = (iso: string, t: (k: string, o?: any) => string): string => {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return t('ephemeral.expiring');
+  const min = Math.floor(ms / 60000);
+  if (min < 60) return t('ephemeral.left_minutes', { count: Math.max(1, min) });
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return t('ephemeral.left_hours', { count: hours });
+  return t('ephemeral.left_days', { count: Math.floor(hours / 24) });
+};
+
+/**
+ * Badge « ce message va disparaître », posé contre l'heure.
+ *
+ * ⚠️ Rafraîchi à la MINUTE et non en continu : au-delà de l'heure le libellé ne change que
+ * toutes les heures, et un intervalle par bulle serait payé sur tout le fil. Le composant
+ * est monté seulement sur les messages qui expirent.
+ */
+function EphemeralBadge({ expiresAt, tone }: { expiresAt: string; tone: string }) {
+  const { t } = useTranslation();
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => tick((v) => v + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <View className="flex-row items-center gap-0.5">
+      <Ionicons name="timer-outline" size={11} color={tone} />
+      <Text style={{ color: tone }} className="text-[10px]">
+        {ephemeralLeft(expiresAt, t)}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * Fil en cours de chargement : silhouettes de bulles.
+ *
+ * ⚠️ Il comble un vrai trou, pas une coquetterie : l'écran rend sa mise en page finale tout
+ * de suite (décision du 6 août, contre le flash blanc) et se remplit ensuite. Entre les
+ * deux, le fil était VIDE — et `ListEmptyComponent` y annonçait « Dites bonjour ! », un
+ * message faux pour une conversation qui a de l'historique.
+ *
+ * ⚠️ Largeurs FIGÉES et non aléatoires : tirées à chaque rendu, elles changeraient à chaque
+ * frappe ou message reçu, et le squelette frétillerait.
+ */
+const SKELETON_ROWS: { mine: boolean; width: number }[] = [
+  { mine: false, width: 0.55 },
+  { mine: true, width: 0.4 },
+  { mine: false, width: 0.7 },
+  { mine: true, width: 0.6 },
+  { mine: false, width: 0.35 },
+  { mine: true, width: 0.5 },
+];
+
+function ThreadSkeleton() {
+  const pulse = useSharedValue(0.5);
+  useEffect(() => {
+    // Va-et-vient doux : `withRepeat(reverse)` évite le saut d'un cycle qui reboucle.
+    pulse.value = withRepeat(withTiming(1, { duration: 850 }), -1, true);
+  }, [pulse]);
+  const style = useAnimatedStyle(() => ({ opacity: pulse.value }));
+
+  return (
+    <View className="flex-1 justify-end px-3 pb-4" pointerEvents="none">
+      {SKELETON_ROWS.map((row, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            style,
+            ROUND.bubble,
+            {
+              width: `${row.width * 100}%`,
+              height: 42,
+              marginTop: 8,
+              alignSelf: row.mine ? 'flex-end' : 'flex-start',
+            },
+          ]}
+          className="bg-black/[0.06] dark:bg-white/[0.07]"
+        />
+      ))}
+    </View>
+  );
+}
+
 /** Pastille de date, posée dans le fil avant le premier message d'une journée. */
 function DateSeparator({ label }: { label: string }) {
   return (
@@ -933,10 +1025,13 @@ function BubbleTime({
   overlay = false,
   status,
   edited = false,
+  expiresAt,
 }: {
   iso: string;
   isMe: boolean;
   overlay?: boolean;
+  /** Message éphémère : le temps restant s'affiche contre l'heure. */
+  expiresAt?: string | null;
   /** Absent sur les messages reçus : on n'accuse que ses propres envois. */
   status?: SendStatus;
   /**
@@ -950,6 +1045,7 @@ function BubbleTime({
   if (overlay) {
     return (
       <View className="absolute bottom-1.5 right-1.5 flex-row items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5">
+        {expiresAt && <EphemeralBadge expiresAt={expiresAt} tone="rgba(255,255,255,0.85)" />}
         {edited && <Text className="text-[10px] text-white/80">{i18n.t('chat.edited')}</Text>}
         <Text className="text-[10px] text-white">{formatTime(iso)}</Text>
         {status && <StatusIcon status={status} tone="rgba(255,255,255,0.85)" />}
@@ -958,6 +1054,12 @@ function BubbleTime({
   }
   return (
     <View className="flex-row items-center gap-1 self-end mt-0.5">
+      {expiresAt && (
+        <EphemeralBadge
+          expiresAt={expiresAt}
+          tone={isMe ? 'rgba(255,255,255,0.7)' : '#9CA3AF'}
+        />
+      )}
       {edited && (
         <Text
           className={`text-[11px] italic ${isMe ? 'text-white/60' : 'text-gray-400 dark:text-zinc-500'}`}
@@ -1086,6 +1188,8 @@ type ChatRowProps = {
   selected: boolean;
   searchTerm: string;
   currentUserId: string | null;
+  /** Conversation courante — le mini-player doit savoir où ramener. */
+  conversationId: string;
   bubbleColor: string;
   theirBubble: string;
   myTailColor: string;
@@ -1121,6 +1225,7 @@ const ChatRow = React.memo(
     selected,
     searchTerm,
     currentUserId,
+    conversationId,
     bubbleColor,
     theirBubble,
     myTailColor,
@@ -1420,7 +1525,7 @@ const ChatRow = React.memo(
                 }
               />
             </View>
-            <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
+            <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} expiresAt={item.expiresAt} />
           </>
         ) : isStoryReply ? (
           <>
@@ -1465,7 +1570,7 @@ const ChatRow = React.memo(
                 >
                   {item.content}
                 </Text>
-                <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
+                <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} expiresAt={item.expiresAt} />
               </View>
             )}
           </>
@@ -1497,10 +1602,10 @@ const ChatRow = React.memo(
                     >
                       {item.content}
                     </Text>
-                    <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
+                    <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} expiresAt={item.expiresAt} />
                   </View>
                 ) : (
-                  <BubbleTime iso={item.createdAt} isMe={isMe} overlay status={sendStatus} />
+                  <BubbleTime iso={item.createdAt} isMe={isMe} overlay status={sendStatus} expiresAt={item.expiresAt} />
                 )}
                 {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
                 {sending && <SendingVeil />}
@@ -1524,11 +1629,12 @@ const ChatRow = React.memo(
                     key={item.id}
                     message={item}
                     tint={bubbleColor}
+                    conversationId={conversationId}
                     onOpenImage={() => {}}
                     onOpenVideo={() => {}}
                   />
                 </View>
-                <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
+                <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} expiresAt={item.expiresAt} />
                 {lastOfGroup && (
                   <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />
                 )}
@@ -1591,7 +1697,7 @@ const ChatRow = React.memo(
                 // des bulles clignoterait à chaque frappe, avant même d'avoir des résultats.
                 highlight={searchTerm || undefined}
               />
-              <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} />
+              <BubbleTime iso={item.createdAt} isMe={isMe} status={sendStatus} edited={!!item.editedAt} expiresAt={item.expiresAt} />
               {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
             </View>
           </>
@@ -1632,6 +1738,7 @@ const ChatRow = React.memo(
       a.selected === b.selected &&
       a.searchTerm === b.searchTerm &&
       a.currentUserId === b.currentUserId &&
+      a.conversationId === b.conversationId &&
       a.bubbleColor === b.bubbleColor &&
       a.theirBubble === b.theirBubble &&
       a.myTailColor === b.myTailColor
@@ -1869,6 +1976,15 @@ export default function ChatScreen() {
     loading: boolean;
   } | null>(null);
   const searchReqRef = useRef(0);
+  /**
+   * L'historique initial est-il arrivé ?
+   *
+   * ⚠️ Distinct de « le fil est vide » : une conversation neuve est vide DÉFINITIVEMENT et
+   * doit afficher « Dites bonjour ! », alors qu'un fil en cours de chargement l'est
+   * PROVISOIREMENT — les confondre annonçait une conversation vide à quelqu'un qui a mille
+   * messages.
+   */
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [pinIndex, setPinIndex] = useState(0);
   const [pinBarHidden, setPinBarHidden] = useState(false);
   /**
@@ -2305,6 +2421,7 @@ export default function ChatScreen() {
         // Marqué AVANT le rendu : sinon tout l'historique s'animerait à l'ouverture.
         for (const m of history) seenIdsRef.current.add(m.id);
         replaceMessages(history.reverse());
+        setHistoryLoaded(true);
         // Rien à mesurer ni à caler : inutile de faire attendre devant un écran vide.
         if (!history.length) scroll.revealNow();
 
@@ -3906,6 +4023,7 @@ export default function ChatScreen() {
         selected={!!selection && row.messages.some((m) => selection.includes(m.id))}
         searchTerm={search?.applied ?? ''}
         currentUserId={currentUserId}
+        conversationId={id}
         bubbleColor={bubbleColor}
         theirBubble={theirBubble}
         myTailColor={myTailColor}
@@ -4326,6 +4444,16 @@ export default function ChatScreen() {
         {/* Enveloppe porteuse du fondu d'ouverture. Posée AUTOUR de la liste et non sur
             elle : la liste doit être montée et mesurée normalement — c'est ce qui lui
             permet de se caler en bas — elle ne doit simplement pas être vue avant. */}
+        {/*
+          ⚠️ Le squelette est posé HORS de l'enveloppe du fondu d'ouverture, qui est à
+          opacité ZÉRO tant que le fil n'est pas calé : dedans, il aurait été invisible —
+          précisément pendant le chargement qu'il doit couvrir.
+        */}
+        {!historyLoaded && (
+          <View style={StyleSheet.absoluteFill}>
+            <ThreadSkeleton />
+          </View>
+        )}
         <Animated.View style={[{ flex: 1 }, scroll.revealStyle]}>
         <FlashList
           ref={listRef}
@@ -4408,7 +4536,13 @@ export default function ChatScreen() {
           onContentSizeChange={scroll.onContentSizeChange}
           onLayout={scroll.onLayout}
           renderItem={({ item: row, index }) => renderRow(row, index)}
+          /**
+           * ⚠️ Squelette tant que l'historique n'est pas arrivé, « Dites bonjour » seulement
+           * après : une conversation en cours de chargement est vide PROVISOIREMENT, et
+           * annoncer qu'elle est vide à quelqu'un qui a mille messages serait faux.
+           */
           ListEmptyComponent={
+            !historyLoaded ? null : (
             <View className="items-center px-10 pt-24">
               <View className="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-900/30 items-center justify-center mb-4">
                 <Ionicons name="chatbubble-ellipses" size={30} color={NEXA} />
@@ -4420,6 +4554,7 @@ export default function ChatScreen() {
                 {t('chat.empty_hint')}
               </Text>
             </View>
+            )
           }
         />
         </Animated.View>

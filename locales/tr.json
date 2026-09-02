@@ -156,7 +156,8 @@
     "forward_n_to_one": "{{count}} mesajı şuraya ilet",
     "forward_n_to_other": "{{count}} mesajı şuraya ilet",
     "nothing_to_forward": "Bu mesajların hiçbiri iletilemez.",
-    "forwarded": "İletildi"
+    "forwarded": "İletildi",
+    "playing_tap_to_open": "Çalıyor — açmak için dokunun"
   },
   "details": {
     "title": "Ayrıntılar",
@@ -213,7 +214,14 @@
     "24h": "24 saat",
     "7d": "7 gün",
     "30d": "30 gün",
-    "off": "Kapalı"
+    "off": "Kapalı",
+    "expiring": "doluyor",
+    "left_minutes_one": "{{count}} dk",
+    "left_minutes_other": "{{count}} dk",
+    "left_hours_one": "{{count}} sa",
+    "left_hours_other": "{{count}} sa",
+    "left_days_one": "{{count}} g",
+    "left_days_other": "{{count}} g"
   },
   "media": {
     "attach": "Ek",

@@ -169,6 +169,7 @@ components/
 ├── AlbumViewer.tsx      # Visionneuse d'album plein écran (pagination + bande de miniatures)
 ├── DocumentViewer.tsx   # Visionneuse de documents in-app (WebView : PDF/texte/images ; repli téléchargement sinon). ⚠️ **Aucun** service de conversion tiers (ne pas envoyer d'URL privée à Google Docs Viewer)
 ├── VoiceRecorderBar.tsx # Barre d'enregistrement vocal (chrono, annulation, envoi) + niveaux via `metering`
+├── VoiceMiniPlayer.tsx  # Rappel du vocal en cours quand on a quitté sa conversation — monté dans `app/_layout.tsx`, sinon il disparaîtrait avec l'écran
 ├── VoiceWaveform.tsx    # Tracé d'onde : `LiveWaveform` (fenêtre glissante à l'enregistrement) et lecture avec seek au doigt
 ├── FloatingSuggestions.tsx # Suggestions d'amis en orbite animée (onglet Actus)
 ├── BlueAura.tsx         # Lueur bleue diffuse de l'onboarding (28 disques superposés, pur JS — aucun bord visible)
@@ -213,6 +214,7 @@ lib/
 ├── friendRequests.ts    # Store externe (`useSyncExternalStore`) du **compteur de demandes d'ami reçues** — alimente le badge natif de l'onglet Contacts et la pastille du segment Amis
 ├── unreadMessages.ts    # Store externe du **total de messages non lus** (détail par conversation) — badge de l'onglet Discussion **et** pastille de l'icône de l'app
 ├── config.ts            # BASE_URL (local/Railway selon `__DEV__`) + PRIVACY_URL / PRIVACY_POLICY_VERSION + GIPHY_API_KEY + INVITE_URL (⚠️ 3 placeholders + 1 clé en dur, cf. Sécurité)
+├── voicePlayback.ts     # Vocal en cours au niveau de l'APP (store externe) — ne porte que la description + un rappel `stop` ; le lecteur natif reste dans son composant
 ├── threadScroll.ts      # **Position dans le fil de discussion** — machine à états (`opening`/`anchored`/`following`/`jumping`), **un seul propriétaire du défilement** à la fois. Remplace les 9 refs qui s'annulaient mutuellement (voir la section Chat)
 ├── theme.ts             # Thème clair/sombre : `ThemePref`, `getThemePref`/`setThemePref` (SecureStore), `initTheme()` au démarrage, `useThemeColors()` (palette sémantique pour les props en dur)
 ├── contacts.ts          # Répertoire : permission, normalisation E.164 (libphonenumber-js, région déduite de `expo-localization`, défaut TR), `POST /users/contacts/match`, **cache mémoire** du dernier résultat (évite de re-synchroniser à chaque bascule de segment → rate limit)

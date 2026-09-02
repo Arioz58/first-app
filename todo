@@ -379,6 +379,21 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
     ⚠️ le KAV (padding) REDIMENSIONNAIT la liste a chaque frame → FlashList recalcule sa mise en page, cout ∝ nombre de lignes, 60×/s — d'ou « plus il y a de messages, plus ca saccade ». Remplace par `useReanimatedKeyboardAnimation` : bloc entier translate sur le thread UI, zero layout. Compensation de la zone sure au prorata de `progress` (sinon composeur ~34 px trop haut, et une marche pendant la fermeture interactive). Recollage au bas sur VRAI redimensionnement conserve (rotation).
     ⚠️ la liste inversee donnait « clavier ouvre = bas suivi » GRATUITEMENT (bas = offset zero) ; en chronologique il faut recoller explicitement (fait, mode following seul).
 
+[FAIT 02/09 - LOT 6, partie app] Timer ephemere, skeletons, mini-player vocal.
+  → TIMER EPHEMERE : le champ `expiresAt` existait depuis la Phase C mais RIEN ne montrait qu'un message allait disparaitre — l'utilisateur ne pouvait pas le savoir. Badge contre l'heure (`EphemeralBadge`).
+    ⚠️ Unite choisie selon l'echeance (min / h / j), jamais un decompte a la seconde : ces messages vivent 24 h, 7 j ou 30 j, et une horloge qui s'egrene donnerait une fausse urgence tout en forcant un rendu par seconde sur CHAQUE bulle. Rafraichi a la minute, et seulement sur les messages qui expirent.
+    ⚠️ Nom `ephemeralLeft` et non `remainingLabel` : ce dernier est deja pris par `lib/liveLocation` (partage de position).
+  → SKELETONS : l'ecran rend sa mise en page finale tout de suite (decision du 06/08 contre le flash blanc) puis se remplit — entre les deux le fil etait VIDE, et `ListEmptyComponent` y annoncait « Dites bonjour ! », un message FAUX pour une conversation qui a mille messages.
+    ⚠️ `historyLoaded` distinct de « le fil est vide » : une conversation neuve est vide DEFINITIVEMENT, un fil en chargement l'est PROVISOIREMENT. Les confondre etait le bug.
+    ⚠️ Le squelette est pose HORS de l'enveloppe du fondu d'ouverture, qui est a opacite ZERO tant que le fil n'est pas cale : dedans, il aurait ete invisible pendant exactement le chargement qu'il doit couvrir.
+    ⚠️ Largeurs FIGEES et non aleatoires : tirees a chaque rendu, elles changeraient a chaque frappe et le squelette fretillerait.
+  → MINI-PLAYER VOCAL (`lib/voicePlayback.ts` + `components/VoiceMiniPlayer.tsx`, monte dans `app/_layout.tsx`).
+    ⚠️ Store externe (`useSyncExternalStore`) et non un etat d'ecran : le lecteur doit survivre a la sortie de la conversation — c'est tout l'objet du mini-player. Un etat dans `chat/[id].tsx` serait demonte avec lui, et la lecture s'arreterait au moment precis ou l'on veut qu'elle continue.
+    ⚠️ Le store ne contient QUE de la description (qui joue, quoi, ou) + un rappel `stop` : le LECTEUR NATIF reste dans le composant qui l'a cree. Le deplacer demanderait de le recreer hors de tout composant et de gerer sa destruction a la main, pour un gain nul — `expo-audio` continue de jouer tant que son composant est monte.
+    ⚠️ `clearNowPlaying` ne fait rien si un AUTRE vocal a pris la main : le lecteur qu'on vient d'arreter emet lui aussi cet evenement, et sans cette garde il effacerait la lecture qui demarre a peine.
+    → un seul vocal a la fois (demarrer arrete le precedent) ; le rappel est masque sur l'ecran de chat, ou la bulle montre deja sa progression.
+  [PAS FAIT, volontairement] Banniere hors connexion + file d'attente PERSISTEE : recoupe le chantier hors-ligne deja cadre Mois 5/6 (ordre, doublons, rejeu au demarrage). Le faire ici serait de l'avance, pas du rattrapage — et l'absence d'etat d'echec est deja une decision assumee (cf. la note sur SendStatus).
+
 [FAIT 05/08] Archivage des conversations (facon WhatsApp) + gestes de glissement sur la liste.
   Glisser vers la GAUCHE : Archiver + « … » (rouvre le menu d'actions existant). Vers la DROITE : Non lu + Epingler. Les gestes doublent l'appui long, ils ne le remplacent pas.
   Decisions : un nouveau message NE desarchive PAS (sinon ranger une conversation active n'a aucun effet durable) ; les archives sont exclues des pastilles onglet+icone (sinon un nombre que rien ne fait retomber dans la liste visible) ; archiver retire l'epinglage.

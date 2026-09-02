@@ -3,6 +3,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { enterPlaybackMode } from '../lib/audioMode';
+import { clearNowPlaying, setNowPlaying } from '../lib/voicePlayback';
 import { VoiceWaveform, waveformFor } from './VoiceWaveform';
 
 const BARS = 28;
@@ -38,11 +39,14 @@ function ActiveAudioMessage({
   tint,
   initialRate,
   onCycleRate,
+  nowPlaying,
 }: {
   uri: string;
   tint: string;
   initialRate: number;
   onCycleRate: (r: number) => void;
+  /** Identité du message, pour le mini-player. Absent = pas de suivi applicatif. */
+  nowPlaying?: { messageId: string; conversationId: string; senderName: string; durationMs?: number | null };
 }) {
   // 500 ms par défaut : la progression n'avancerait que deux fois par seconde.
   const player = useAudioPlayer({ uri }, { updateInterval: STATUS_MS });
@@ -79,6 +83,29 @@ function ActiveAudioMessage({
   useEffect(() => {
     if (playing) stopAwaiting();
   }, [playing]);
+
+  /**
+   * Publication de la lecture en cours, pour le mini-player.
+   *
+   * ⚠️ `stop` capture `player`, qui vit dans CE composant : c'est lui qui détient le lecteur
+   * natif, et le store ne fait que transporter le rappel. Au démontage on signale la fin —
+   * mais sans arrêter le son, précisément pour qu'il survive à la sortie de l'écran.
+   */
+  useEffect(() => {
+    if (!nowPlaying) return;
+    if (playing) {
+      setNowPlaying({ ...nowPlaying, stop: () => player.pause() });
+    } else {
+      clearNowPlaying(nowPlaying.messageId);
+    }
+  }, [playing, nowPlaying?.messageId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(
+    () => () => {
+      if (nowPlaying) clearNowPlaying(nowPlaying.messageId);
+    },
+    [nowPlaying?.messageId], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   useEffect(() => () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -193,11 +220,14 @@ export function AudioMessage({
   uri,
   tint,
   durationMs,
+  nowPlaying,
 }: {
   uri: string;
   tint: string;
   /** Durée connue du message (colonne `durationMs`) : affichée avant tout chargement. */
   durationMs?: number | null;
+  /** Identité du message, pour le mini-player applicatif. */
+  nowPlaying?: { messageId: string; conversationId: string; senderName: string; durationMs?: number | null };
 }) {
   const scheme = useColorScheme();
   const [armed, setArmed] = useState(false);
@@ -207,7 +237,15 @@ export function AudioMessage({
   const levels = useMemo(() => waveformFor(uri, BARS), [uri]);
 
   if (armed) {
-    return <ActiveAudioMessage uri={uri} tint={tint} initialRate={rate} onCycleRate={setRate} />;
+    return (
+      <ActiveAudioMessage
+        uri={uri}
+        tint={tint}
+        initialRate={rate}
+        onCycleRate={setRate}
+        nowPlaying={nowPlaying}
+      />
+    );
   }
 
   return (

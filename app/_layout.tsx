@@ -24,6 +24,7 @@ import { connectSocket, pauseSocket, resumeSocket } from "../lib/socket";
 import { hydrateLiveShares } from "../lib/liveLocation";
 import { clearTokens, getAccessToken, getRefreshToken } from "../lib/storage";
 import { initTheme, useThemeColors } from "../lib/theme";
+import { VoiceMiniPlayer } from "../components/VoiceMiniPlayer";
 import "./globals.css";
 
 // ⚠️ À appeler au niveau MODULE, jamais dans un composant ou un effet : sans cela, le splash
@@ -258,6 +259,9 @@ export default function RootLayout() {
         cette vue et hors de sa transformation — c'est justement ce qui permet de reculer
         l'écran sans reculer la feuille avec. */}
     <Animated.View style={[{ flex: 1, overflow: "hidden" }, recedeStyle]}>
+    {/* ⚠️ Hors du `Stack` : un vocal doit continuer d'être signalé quand on QUITTE la
+        conversation où il joue — monté dans un écran, ce rappel disparaîtrait avec lui. */}
+    <VoiceMiniPlayer />
     <Stack screenOptions={{ contentStyle: { backgroundColor: themeColors.canvas } }}>
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
