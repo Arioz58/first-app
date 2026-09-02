@@ -3300,15 +3300,30 @@ export default function ChatScreen() {
    * ⚠️ Vider la sélection SORT du mode : garder une barre d'actions ouverte sur zéro message
    * laisserait l'utilisateur dans un état sans issue visible, sinon la croix.
    */
-  const toggleSelected = useCallback((messageId: string) => {
-    setSelection((prev) => {
-      if (!prev) return [messageId];
-      const next = prev.includes(messageId)
-        ? prev.filter((x) => x !== messageId)
-        : [...prev, messageId];
-      return next.length ? next : null;
-    });
-  }, []);
+  const toggleSelected = useCallback(
+    (messageId: string) => {
+      /**
+       * ⚠️ Un ALBUM se coche EN ENTIER : la coche est posée sur la bulle, qui porte
+       * plusieurs messages. N'en retenir qu'un ferait transférer ou supprimer une seule
+       * photo alors que l'utilisateur en a désigné cinq — et la coche, elle, dit « toute
+       * la bulle ».
+       */
+      const target = messagesRef.current.find((m) => m.id === messageId);
+      const ids = target?.batchId
+        ? messagesRef.current.filter((m) => m.batchId === target.batchId).map((m) => m.id)
+        : [messageId];
+
+      setSelection((prev) => {
+        if (!prev) return ids;
+        const on = prev.includes(messageId);
+        const next = on
+          ? prev.filter((x) => !ids.includes(x))
+          : [...prev, ...ids.filter((x) => !prev.includes(x))];
+        return next.length ? next : null;
+      });
+    },
+    [],
+  );
 
   /**
    * Recherche débouncée.
@@ -3428,9 +3443,20 @@ export default function ChatScreen() {
           Clipboard.setStringAsync(msg.content ?? '').catch(() => {});
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           break;
-        case 'forward':
-          setForwarding([msg]);
+        case 'forward': {
+          /**
+           * ⚠️ Un ALBUM est UNE bulle mais PLUSIEURS messages : transférer `msg` seul
+           * n'envoyait que le média sur lequel on avait appuyé. On reprend donc toute la
+           * ligne — c'est ce que l'utilisateur voit et croit transférer.
+           *
+           * Les albums sont regroupés par `batchId` ; un message sans batch reste seul.
+           */
+          const group = msg.batchId
+            ? messages.filter((m) => m.batchId === msg.batchId)
+            : [msg];
+          setForwarding(group);
           break;
+        }
         case 'pin':
         case 'unpin':
           togglePin(messageId, action === 'unpin');
@@ -4719,7 +4745,16 @@ export default function ChatScreen() {
       {/* Transférer vers d'autres conversations */}
       <ForwardSheet
         visible={!!forwarding}
-        count={forwarding?.length ?? 0}
+        /**
+         * ⚠️ Compte de BULLES, pas de messages : un album de 5 photos est une seule chose
+         * transférée du point de vue de l'utilisateur, et annoncer « 5 messages » pour une
+         * bulle qu'il a désignée une fois serait faux.
+         */
+        count={
+          forwarding
+            ? new Set(forwarding.map((m) => m.batchId ?? m.id)).size
+            : 0
+        }
         onClose={() => setForwarding(null)}
         onConfirm={(ids) => {
           if (forwarding) forwardTo(forwarding, ids);

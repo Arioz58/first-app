@@ -108,7 +108,7 @@ export function ForwardSheet({
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder={t('search')}
+            placeholder={t('search.placeholder')}
             placeholderTextColor={colors.faint}
             className="flex-1 ml-2 text-base text-gray-900 dark:text-zinc-100"
           />
