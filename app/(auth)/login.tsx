@@ -21,7 +21,7 @@ import CountryPicker from "../../components/CountryPicker";
 import { apiRequest } from "../../lib/api";
 import { ROUND } from "../../lib/radius";
 import { PRIVACY_URL } from "../../lib/config";
-import { COUNTRIES, Country } from "../../lib/countries";
+import { Country, defaultCountry } from "../../lib/countries";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -33,7 +33,15 @@ export default function LoginScreen() {
   const [name, setName] = useState("");
   const [accepted, setAccepted] = useState(false); // consentement politique de confidentialité (inscription)
   const [loading, setLoading] = useState(false);
-  const [country, setCountry] = useState<Country>(COUNTRIES[0]);
+  /**
+   * Pays deduit des reglages de l'appareil.
+   *
+   * ⚠️ En INITIALISEUR paresseux (`useState(fn)`) et non dans un effet : le champ afficherait
+   * sinon l'indicatif turc pendant une image avant de basculer, et un utilisateur rapide
+   * pourrait commencer a taper sur le mauvais format. La lecture est synchrone, rien ne
+   * justifie de la differer.
+   */
+  const [country, setCountry] = useState<Country>(defaultCountry);
   const [nameError, setNameError] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [serverError, setServerError] = useState("");

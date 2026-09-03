@@ -1,5 +1,5 @@
 import * as Contacts from 'expo-contacts';
-import { getLocales } from 'expo-localization';
+import { deviceRegion } from './countries';
 import { CountryCode, parsePhoneNumberFromString } from 'libphonenumber-js';
 import { apiRequest } from './api';
 
@@ -31,10 +31,10 @@ type ServerCard = {
 };
 
 // Pays par défaut pour interpréter les numéros locaux du carnet (« 0532… » → « +90532… »).
-const defaultRegion = (): CountryCode => {
-  const r = getLocales()[0]?.regionCode;
-  return (r && r.length === 2 ? r.toUpperCase() : 'TR') as CountryCode;
-};
+// ⚠️ Même source que le pré-remplissage du sélecteur à l'inscription (`lib/countries.ts`) :
+// deux règles distinctes finiraient par diverger, et un numéro serait alors interprété dans
+// une région différente de celle affichée à l'utilisateur.
+const defaultRegion = () => deviceRegion() as CountryCode;
 
 export const getContactsPermission = () => Contacts.getPermissionsAsync();
 

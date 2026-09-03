@@ -1,3 +1,8 @@
+import { getLocales } from 'expo-localization';
+
+/** Marché principal de la V1 : ce sur quoi on retombe quand la région est inconnue. */
+const FALLBACK_REGION = 'TR';
+
 export type Country = {
   code: string;
   name: string;
@@ -68,3 +73,32 @@ export const COUNTRIES: Country[] = [
   { code: 'UZ', name: 'Ouzbékistan', dialCode: '+998', flag: '🇺🇿' },
   { code: 'YE', name: 'Yémen', dialCode: '+967', flag: '🇾🇪' },
 ];
+
+/**
+ * Région de l'appareil (« FR », « TR »…), telle que déclarée par ses réglages.
+ *
+ * ⚠️ `expo-localization` et non la géolocalisation : c'est instantané, hors ligne, et surtout
+ * SANS PERMISSION. Demander l'accès à la position pour pré-remplir un indicatif serait
+ * disproportionné, et le refus — fréquent sur un premier écran — laisserait de toute façon
+ * sans réponse.
+ *
+ * ⚠️ C'est la région des RÉGLAGES, pas celle où l'on se trouve : un Français en voyage garde
+ * « FR », ce qui est justement le bon indicatif pour SON numéro. Une détection par position
+ * lui proposerait le pays où il passe ses vacances.
+ */
+export const deviceRegion = (): string => {
+  const r = getLocales()[0]?.regionCode;
+  return r && r.length === 2 ? r.toUpperCase() : FALLBACK_REGION;
+};
+
+/**
+ * Pays pré-sélectionné à la saisie d'un numéro.
+ *
+ * ⚠️ Repli sur la Turquie : c'est le marché de la V1, et la liste `COUNTRIES` ne couvre pas
+ * le monde entier — un appareil réglé sur un pays absent doit atterrir quelque part de
+ * plausible plutôt que sur le premier de la liste par hasard.
+ */
+export const defaultCountry = (): Country =>
+  COUNTRIES.find((c) => c.code === deviceRegion()) ??
+  COUNTRIES.find((c) => c.code === FALLBACK_REGION) ??
+  COUNTRIES[0];
