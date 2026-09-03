@@ -77,9 +77,9 @@ const FAB_ACTIONS: {
   },
 ];
 
-/** ⚠️ Reference STABLE : un `[]` litteral serait une nouvelle valeur a chaque rendu,
- *  ce qui ferait echouer la memoisation des lignes. */
-const EMPTY_COLORS: string[] = [];
+/** ⚠️ Référence STABLE : un `[]` littéral serait une nouvelle valeur à chaque rendu,
+ *  ce qui ferait échouer la mémoïsation des lignes. */
+const EMPTY_TAGS: { name: string; color: string }[] = [];
 
 const FILTERS = ['all', 'unread', 'favorites', 'groups'] as const;
 type BuiltinFilter = (typeof FILTERS)[number];
@@ -353,18 +353,19 @@ export default function ConversationsScreen() {
   const unreadTotal = active.filter((c) => c.unreadCount > 0 || c.manualUnread).length;
 
   /**
-   * Couleurs de filtre par conversation.
+   * Étiquettes de filtre par conversation.
    *
-   * ⚠️ Un index construit une fois, pas une recherche par ligne : sans lui chaque ligne
-   * parcourrait tous les filtres a chaque rendu, dans une liste recyclee au defilement.
+   * ⚠️ Un index construit UNE fois, pas une recherche par ligne : sans lui chaque ligne
+   * parcourrait tous les filtres à chaque rendu, dans une liste recyclée au défilement.
    */
-  const colorsByConversation = useMemo(() => {
-    const map = new Map<string, string[]>();
+  const tagsByConversation = useMemo(() => {
+    const map = new Map<string, { name: string; color: string }[]>();
     for (const f of customFilters) {
+      const tag = { name: f.name, color: f.color };
       for (const id of f.conversationIds) {
         const list = map.get(id);
-        if (list) list.push(f.color);
-        else map.set(id, [f.color]);
+        if (list) list.push(tag);
+        else map.set(id, [tag]);
       }
     }
     return map;
@@ -965,7 +966,7 @@ export default function ConversationsScreen() {
             <ConversationRow
               conv={item}
               currentUserId={currentUserId}
-              filterColors={colorsByConversation.get(item.id) ?? EMPTY_COLORS}
+              filterTags={tagsByConversation.get(item.id) ?? EMPTY_TAGS}
               onPress={() => openChat(item)}
               onLongPress={() => openActions(item)}
             />

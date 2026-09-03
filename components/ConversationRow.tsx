@@ -99,25 +99,39 @@ export function useConversationLabels(currentUserId: string | null) {
   return { getConvName, getLastMessage, formatDate };
 }
 
+/**
+ * Étiquettes de filtre affichées sur une ligne.
+ *
+ * ⚠️ Deux au plus, et douze caractères chacune : elles partagent la largeur avec le nom de
+ * la conversation. Une conversation appartient presque toujours à un seul filtre — au-delà,
+ * mieux vaut en montrer deux lisibles que trois illisibles.
+ */
+const MAX_TAGS = 2;
+const TAG_MAX_CHARS = 12;
+
+/** Coupe au nombre de caractères plutôt qu'à la largeur : la troncature reste prévisible. */
+const truncateTag = (name: string) =>
+  name.length > TAG_MAX_CHARS ? `${name.slice(0, TAG_MAX_CHARS).trimEnd()}…` : name;
+
 export function ConversationRow({
   conv,
   currentUserId,
   onPress,
   onLongPress,
-  filterColors = [],
+  filterTags = [],
 }: {
   conv: RowConversation;
   currentUserId: string | null;
   onPress: () => void;
   onLongPress?: () => void;
   /**
-   * Couleurs des filtres personnalises auxquels CETTE conversation appartient.
+   * Filtres personnalisés auxquels CETTE conversation appartient.
    *
-   * ⚠️ Calculees par l'ecran, pas ici : la ligne ne connait pas les filtres, et les lui
-   * faire charger la rendrait dependante d'un appel reseau alors qu'elle est rendue des
-   * dizaines de fois dans une liste recyclee.
+   * ⚠️ Calculés par l'écran, pas ici : la ligne ne connaît pas les filtres, et les lui faire
+   * charger la rendrait dépendante d'un appel réseau alors qu'elle est rendue des dizaines
+   * de fois dans une liste recyclée.
    */
-  filterColors?: string[];
+  filterTags?: { name: string; color: string }[];
 }) {
   const { getConvName, getLastMessage, formatDate } = useConversationLabels(currentUserId);
   const other = otherMemberOf(conv, currentUserId);
@@ -151,14 +165,22 @@ export function ConversationRow({
           {conv.favoritedAt && (
             <Ionicons name="star" size={15} color="#F59E0B" style={{ marginLeft: 4 }} />
           )}
-          {/* Pastilles des filtres. ⚠️ Plafonnees a 3 : au-dela elles pousseraient le nom
-              hors de la ligne, et l'information tient de toute facon dans la couleur. */}
-          {filterColors.slice(0, 3).map((c, i) => (
+          {/* Étiquettes des filtres : le NOM sur un fond de la couleur du filtre.
+              ⚠️ Plafonnées à MAX_TAGS et tronquées à TAG_MAX_CHARS — elles partagent la ligne
+              avec le nom de la conversation, qui doit rester lisible. Sans ces deux limites,
+              deux filtres au nom long réduisaient le nom à une initiale.
+              ⚠️ `shrink-0` : ce sont elles qui gardent leur taille, le nom au-dessus a déjà
+              `flex-shrink` et sait s'abréger proprement. */}
+          {filterTags.slice(0, MAX_TAGS).map((tag) => (
             <View
-              key={`${c}-${i}`}
-              className="w-2.5 h-2.5 rounded-full"
-              style={{ backgroundColor: c, marginLeft: 4 }}
-            />
+              key={tag.name}
+              className="shrink-0 rounded px-1.5 py-0.5"
+              style={{ backgroundColor: tag.color, marginLeft: 5 }}
+            >
+              <Text className="text-xs font-semibold text-white" numberOfLines={1}>
+                {truncateTag(tag.name)}
+              </Text>
+            </View>
           ))}
           {isConversationMuted(conv) && (
             <Ionicons
