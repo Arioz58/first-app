@@ -78,6 +78,8 @@ import { GlassSurface, FLOATING_SHADOW } from '../../components/GlassSurface';
 import { RADIUS, ROUND } from '../../lib/radius';
 import { useThreadScroll } from '../../lib/threadScroll';
 import { ProgressiveBlur } from '../../components/ProgressiveBlur';
+import { ChatHeaderShell } from '../../components/ChatHeaderShell';
+import { useHeaderStyle, setHeaderStyle, HEADER_STYLES } from '../../lib/headerStyle';
 import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
 import { UserAvatar } from '../../components/UserAvatar';
 import { BubbleGestureContext } from '../../lib/bubbleGesture';
@@ -1977,6 +1979,8 @@ export default function ChatScreen() {
   const [myRole, setMyRole] = useState<'admin' | 'moderator' | 'member'>('member');
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
   const [header, setHeader] = useState<HeaderProfile | null>(null);
+  // ⏳ Temporaire : variante d'apparence de l'en-tête en cours d'arbitrage (lib/headerStyle).
+  const headerStyle = useHeaderStyle();
   const [custom, setCustom] = useState<ConversationCustomization>({});
   const [clearedAt, setClearedAt] = useState<number | null>(null);
   const [wallpaper, setWallpaper] = useState<ChatWallpaper | null>(null);
@@ -4094,6 +4098,20 @@ export default function ChatScreen() {
       { text: t('details.mute'), onPress: muteMenu },
       { text: t('details.ephemeral'), onPress: ephemeralMenu },
       { text: t('chat.wallpaper'), onPress: () => setPickerOpen(true) },
+      // ⏳ Temporaire — à retirer une fois la variante d'en-tête choisie (lib/headerStyle).
+      {
+        text: t('header_style.title'),
+        onPress: () =>
+          Alert.alert(t('header_style.title'), undefined, [
+            ...HEADER_STYLES.map((v) => ({
+              // La variante active est cochée : sans repère, on ne sait plus laquelle on
+              // regarde après deux ou trois essais.
+              text: `${headerStyle === v ? '✓ ' : ''}${t(`header_style.${v}`)}`,
+              onPress: () => setHeaderStyle(v),
+            })),
+            { text: t('cancel'), style: 'cancel' as const },
+          ]),
+      },
       { text: t('details.clear_chat'), style: 'destructive', onPress: clearChat },
       ...(direct
         ? [
@@ -4185,22 +4203,13 @@ export default function ChatScreen() {
       {/* Seul le bas est réservé : en haut, c'est le bandeau flottant qui gère la marge
           d'écran, et laisser le SafeAreaView la poser aussi la compterait deux fois. */}
       <SafeAreaView className="flex-1" edges={['bottom']}>
-      {/* Header : carte OPAQUE détachée des bords, posée sur le fil qui défile derrière.
-          Hauteur fixe — le sous-titre apparaît et disparaît (frappe, présence, « vu le… »)
-          et une hauteur variable ferait sauter le contenu de la liste à chaque
+      {/* Header, posé sur le fil qui défile derrière. Son APPARENCE est déléguée à
+          `ChatHeaderShell` — trois variantes en cours d'arbitrage par le client (voir
+          `lib/headerStyle.ts`).
+          ⚠️ Hauteur FIXE : le sous-titre apparaît et disparaît (frappe, présence,
+          « vu le… ») et une hauteur variable ferait sauter le contenu de la liste à chaque
           changement. */}
-      <View
-        className="absolute bg-white dark:bg-zinc-900"
-        style={{
-          ...ROUND.surface,
-          top: insets.top + 4,
-          left: 10,
-          right: 10,
-          height: HEADER_H,
-          zIndex: 10,
-          ...HEADER_SHADOW,
-        }}
-      >
+      <ChatHeaderShell variant={headerStyle} topInset={insets.top} height={HEADER_H} zIndex={10}>
       <View className="flex-row items-center px-3 flex-1">
         <TouchableOpacity onPress={() => router.back()} className="px-1 py-1">
           <Ionicons name="arrow-back" size={24} color={NEXA} />
@@ -4290,7 +4299,7 @@ export default function ChatScreen() {
           <Ionicons name="ellipsis-vertical" size={20} color="#374151" />
         </TouchableOpacity>
       </View>
-      </View>
+      </ChatHeaderShell>
 
       {/* Bandeau de partage en direct. Flottant comme le header et AU-DESSUS de lui en
           empilement (`zIndex`) : posé dans le flux, il se retrouvait derrière le dégradé de
@@ -4404,19 +4413,13 @@ export default function ChatScreen() {
         pour la multi-sélection, une barre d'une autre taille ferait sauter le fil.
       */}
       {search && (
-        <Animated.View
+        <ChatHeaderShell
           entering={FadeInDown.duration(160)}
           exiting={FadeOutUp.duration(140)}
-          className="absolute bg-white dark:bg-zinc-900"
-          style={{
-            ...ROUND.surface,
-            top: insets.top + 4,
-            left: 10,
-            right: 10,
-            height: HEADER_H,
-            zIndex: 12,
-            ...HEADER_SHADOW,
-          }}
+          variant={headerStyle}
+          topInset={insets.top}
+          height={HEADER_H}
+          zIndex={12}
         >
           <View className="flex-row items-center h-full px-2">
             <Pressable hitSlop={8} className="px-2 py-2" onPress={() => setSearch(null)}>
@@ -4470,7 +4473,7 @@ export default function ChatScreen() {
               </>
             ) : null}
           </View>
-        </Animated.View>
+        </ChatHeaderShell>
       )}
 
       {/*
@@ -4479,19 +4482,13 @@ export default function ChatScreen() {
         taille ferait sauter tout le fil à l'entrée comme à la sortie du mode.
       */}
       {selection && (
-        <Animated.View
+        <ChatHeaderShell
           entering={FadeInDown.duration(160)}
           exiting={FadeOutUp.duration(140)}
-          className="absolute bg-white dark:bg-zinc-900"
-          style={{
-            ...ROUND.surface,
-            top: insets.top + 4,
-            left: 10,
-            right: 10,
-            height: HEADER_H,
-            zIndex: 11,
-            ...HEADER_SHADOW,
-          }}
+          variant={headerStyle}
+          topInset={insets.top}
+          height={HEADER_H}
+          zIndex={11}
         >
           <View className="flex-row items-center h-full px-2">
             <Pressable hitSlop={8} className="px-2 py-2" onPress={() => setSelection(null)}>
@@ -4568,7 +4565,7 @@ export default function ChatScreen() {
               <Ionicons name="trash-outline" size={20} color="#EF4444" />
             </Pressable>
           </View>
-        </Animated.View>
+        </ChatHeaderShell>
       )}
 
       {/* Messages — bloc entier (liste + composeur) translaté avec le clavier. */}

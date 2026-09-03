@@ -592,5 +592,11 @@
     "sent_one": "Envoyé à 1 conversation",
     "sent_many": "Envoyé à {{count}} conversations",
     "send_error": "Échec de l'envoi"
+  },
+  "header_style": {
+    "title": "Apparence de l'en-tête",
+    "glass": "Verre dépoli (carte)",
+    "banner": "Bandeau pleine largeur",
+    "bare": "Sans surface"
   }
 }

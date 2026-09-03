@@ -592,5 +592,11 @@
     "sent_one": "1 sohbete gönderildi",
     "sent_many": "{{count}} sohbete gönderildi",
     "send_error": "Gönderilemedi"
+  },
+  "header_style": {
+    "title": "Başlık görünümü",
+    "glass": "Buzlu cam (kart)",
+    "banner": "Tam genişlik şerit",
+    "bare": "Yüzeysiz"
   }
 }

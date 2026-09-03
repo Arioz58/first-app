@@ -592,5 +592,11 @@
     "sent_one": "Sent to 1 conversation",
     "sent_many": "Sent to {{count}} conversations",
     "send_error": "Sending failed"
+  },
+  "header_style": {
+    "title": "Header appearance",
+    "glass": "Frosted glass (card)",
+    "banner": "Full-width bar",
+    "bare": "No surface"
   }
 }

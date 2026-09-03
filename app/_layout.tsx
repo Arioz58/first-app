@@ -24,6 +24,7 @@ import { connectSocket, pauseSocket, resumeSocket } from "../lib/socket";
 import { hydrateLiveShares } from "../lib/liveLocation";
 import { clearTokens, getAccessToken, getRefreshToken } from "../lib/storage";
 import { initTheme, useThemeColors } from "../lib/theme";
+import { initHeaderStyle } from "../lib/headerStyle";
 import { VoiceMiniPlayer } from "../components/VoiceMiniPlayer";
 import "./globals.css";
 
@@ -169,6 +170,10 @@ export default function RootLayout() {
         // second éclair au lancement, sur les appareils en thème sombre. On est sous le
         // splash à ce moment-là, donc l'attente ne se voit pas.
         await initTheme();
+        // ⏳ Temporaire — variante d'en-tête de conversation en cours d'arbitrage.
+        // ⚠️ PAS attendu, contrairement au thème : cela ne concerne qu'un écran, qui n'est
+        // pas encore monté. L'attendre allongerait le lancement pour rien.
+        initHeaderStyle().catch(() => {});
         const token = await getAccessToken();
         const refreshToken = await getRefreshToken();
         const inAuth = segments[0] === "(auth)";
