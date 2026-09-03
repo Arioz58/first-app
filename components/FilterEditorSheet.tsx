@@ -27,13 +27,16 @@ export type FilterPickItem = {
 };
 
 /**
- * Création et modification d'un filtre personnalisé, EN DEUX ÉTAPES.
+ * Création et modification d'un filtre personnalisé.
  *
- * ⚠️ Deux étapes dans UNE SEULE feuille, et non deux feuilles superposées. Une `BottomSheet`
- * est un `Modal` : en empiler deux revient à en présenter une pendant que l'autre vit, ce
- * sur quoi ce projet a déjà buté (voir le prop `onClosed` de `BottomSheet` et le différé des
- * actions dans l'onglet Discussion). Le résultat visuel est le même — un panneau qui prend
- * la place — sans le risque de modal fantôme.
+ * ⚠️ Le choix des conversations est une SECONDE feuille, rendue DANS la première et non à
+ * côté. C'est ce que fait déjà `CountryPicker` dans `AddContactSheet`, et c'est ce que
+ * `claimRecede` prévoit explicitement : seule la feuille la plus basse fait reculer l'écran,
+ * celle du dessus se pose par-dessus sans le reculer une seconde fois.
+ *
+ * ⚠️ À ne pas confondre avec le piège documenté sur `onClosed` : celui-là concerne le fait
+ * de PRÉSENTER quelque chose pendant qu'une feuille se FERME. Ici les deux coexistent, ce
+ * qui est un cas différent et pris en charge.
  *
  * ⚠️ La liste des conversations est FOURNIE par l'écran, qui l'a déjà chargée : la recharger
  * ici doublerait une requête pour afficher la même chose, et les deux pourraient diverger le
@@ -68,15 +71,15 @@ export function FilterEditorSheet({
   const [color, setColor] = useState(FILTER_COLORS[0]);
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  /** Étape affichée. La feuille garde sa hauteur : seul son contenu change. */
-  const [step, setStep] = useState<'edit' | 'pick'>('edit');
+  /** Seconde feuille (choix des conversations) ouverte par-dessus la première. */
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
 
   useEffect(() => {
     if (!visible) return;
     setName(initial?.name ?? '');
     setColor(initial?.color ?? FILTER_COLORS[0]);
-    setStep('edit');
+    setPickerOpen(false);
     setQuery('');
     /**
      * ⚠️ Restreint aux conversations RÉELLEMENT présentes : un filtre peut porter
@@ -113,85 +116,6 @@ export function FilterEditorSheet({
 
   const canSave = !!name.trim() && picked.length > 0 && !busy;
 
-  // --- Étape 2 : choix des conversations ---
-  if (step === 'pick') {
-    return (
-      <BottomSheet visible={visible} onClose={onClose} onClosed={onClosed} height={560}>
-        <View className="flex-row items-center px-3 pt-1 pb-2">
-          <TouchableOpacity onPress={() => setStep('edit')} className="p-2" hitSlop={8}>
-            <Ionicons name="arrow-back" size={22} color={colors.content} />
-          </TouchableOpacity>
-          <Text className="flex-1 text-lg font-bold text-gray-900 dark:text-zinc-100">
-            {t('filters.pick')}
-          </Text>
-          <TouchableOpacity onPress={() => setStep('edit')} className="px-3 py-2">
-            <Text className="text-lg font-semibold text-nexa">{t('filters.done')}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View className="px-5 pb-2">
-          <View
-            style={ROUND.inner}
-            className="flex-row items-center bg-gray-100 dark:bg-zinc-800 px-3"
-          >
-            <Ionicons name="search" size={18} color="#6B7280" />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder={t('filters.search')}
-              placeholderTextColor="#9CA3AF"
-              className="flex-1 py-2.5 px-2 text-lg text-gray-900 dark:text-zinc-100"
-              autoCorrect={false}
-            />
-          </View>
-        </View>
-
-        <FlatList
-          data={results}
-          keyExtractor={(c) => c.id}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          ListEmptyComponent={
-            <Text className="text-center text-gray-400 dark:text-zinc-500 mt-8">
-              {t('filters.none_found')}
-            </Text>
-          }
-          renderItem={({ item }) => {
-            const on = picked.includes(item.id);
-            return (
-              <TouchableOpacity
-                className="flex-row items-center px-5 py-2.5"
-                onPress={() => toggle(item.id)}
-                activeOpacity={0.7}
-              >
-                <UserAvatar
-                  photoUrl={item.photoUrl}
-                  name={item.name}
-                  size={40}
-                  group={item.isGroup}
-                />
-                <Text
-                  className="flex-1 ml-3 text-lg text-gray-900 dark:text-zinc-100"
-                  numberOfLines={1}
-                >
-                  {item.name}
-                </Text>
-                <View
-                  className={`w-6 h-6 rounded-full items-center justify-center border-2 ${
-                    on ? 'bg-nexa border-nexa' : 'border-gray-300 dark:border-zinc-600'
-                  }`}
-                >
-                  {on && <Ionicons name="checkmark" size={15} color="#fff" />}
-                </View>
-              </TouchableOpacity>
-            );
-          }}
-        />
-      </BottomSheet>
-    );
-  }
-
-  // --- Étape 1 : nom, couleur, et accès au choix des conversations ---
   return (
     <BottomSheet visible={visible} onClose={onClose} onClosed={onClosed} height={560}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 8 }}>
@@ -276,7 +200,7 @@ export function FilterEditorSheet({
           {/* Accès au choix des conversations. ⚠️ Un bouton et non la liste entière : celle-ci
               occupait tout l'écran et noyait le nom et la couleur, qui sont l'essentiel. */}
           <TouchableOpacity
-            onPress={() => setStep('pick')}
+            onPress={() => setPickerOpen(true)}
             style={ROUND.inner}
             className="mt-2 flex-row items-center bg-gray-100 dark:bg-zinc-800 px-4 py-3.5"
           >
@@ -352,6 +276,87 @@ export function FilterEditorSheet({
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Seconde feuille, POSÉE SUR la première (voir l'en-tête du fichier). */}
+      <BottomSheet
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        height={560}
+        // ⚠️ Backdrop plus discret : deux voiles à 0.55 empilés noircissent presque
+        // complètement l'écran, et la feuille du dessous disparaît.
+        backdropOpacity={0.3}
+      >
+        <View className="flex-row items-center px-3 pt-1 pb-2">
+          <TouchableOpacity onPress={() => setPickerOpen(false)} className="p-2" hitSlop={8}>
+            <Ionicons name="arrow-back" size={22} color={colors.content} />
+          </TouchableOpacity>
+          <Text className="flex-1 text-lg font-bold text-gray-900 dark:text-zinc-100">
+            {t('filters.pick')}
+          </Text>
+          <TouchableOpacity onPress={() => setPickerOpen(false)} className="px-3 py-2">
+            <Text className="text-lg font-semibold text-nexa">{t('filters.done')}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View className="px-5 pb-2">
+          <View
+            style={ROUND.inner}
+            className="flex-row items-center bg-gray-100 dark:bg-zinc-800 px-3"
+          >
+            <Ionicons name="search" size={18} color="#6B7280" />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder={t('filters.search')}
+              placeholderTextColor="#9CA3AF"
+              className="flex-1 py-2.5 px-2 text-lg text-gray-900 dark:text-zinc-100"
+              autoCorrect={false}
+            />
+          </View>
+        </View>
+
+        <FlatList
+          data={results}
+          keyExtractor={(c) => c.id}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          ListEmptyComponent={
+            <Text className="text-center text-gray-400 dark:text-zinc-500 mt-8">
+              {t('filters.none_found')}
+            </Text>
+          }
+          renderItem={({ item }) => {
+            const on = picked.includes(item.id);
+            return (
+              <TouchableOpacity
+                className="flex-row items-center px-5 py-2.5"
+                onPress={() => toggle(item.id)}
+                activeOpacity={0.7}
+              >
+                <UserAvatar
+                  photoUrl={item.photoUrl}
+                  name={item.name}
+                  size={40}
+                  group={item.isGroup}
+                />
+                <Text
+                  className="flex-1 ml-3 text-lg text-gray-900 dark:text-zinc-100"
+                  numberOfLines={1}
+                >
+                  {item.name}
+                </Text>
+                <View
+                  className={`w-6 h-6 rounded-full items-center justify-center border-2 ${
+                    on ? 'bg-nexa border-nexa' : 'border-gray-300 dark:border-zinc-600'
+                  }`}
+                >
+                  {on && <Ionicons name="checkmark" size={15} color="#fff" />}
+                </View>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      </BottomSheet>
     </BottomSheet>
   );
 }
