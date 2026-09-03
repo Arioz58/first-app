@@ -1,13 +1,22 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, FlatList, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import BottomSheet from './BottomSheet';
 import { UserAvatar } from './UserAvatar';
 import { ROUND } from '../lib/radius';
 import { useThemeColors } from '../lib/theme';
-import type { CustomFilter } from '../lib/customFilters';
+import { FILTER_COLORS, FILTER_PRESETS, type CustomFilter } from '../lib/customFilters';
 
 /** Conversation proposée au choix — le minimum pour la ligne, fourni par l'écran appelant. */
 export type FilterPickItem = {
@@ -43,18 +52,23 @@ export function FilterEditorSheet({
   onClose: () => void;
   /** Appelé une fois la feuille démontée — pour lâcher `initial` sans escamoter l'animation. */
   onClosed?: () => void;
-  onSubmit: (name: string, conversationIds: string[]) => Promise<void>;
+  onSubmit: (name: string, conversationIds: string[], color: string) => Promise<void>;
   onDelete?: () => void;
 }) {
   const { t } = useTranslation();
   const colors = useThemeColors();
   const [name, setName] = useState('');
+  const [color, setColor] = useState(FILTER_COLORS[0]);
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  // ⚠️ `BottomSheet` ne retire PAS la zone sûre : son contenu descend jusqu'au bord de
+  // l'écran, donc sous le *home indicator*. C'est au contenu de s'en occuper.
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (!visible) return;
     setName(initial?.name ?? '');
+    setColor(initial?.color ?? FILTER_COLORS[0]);
     /**
      * ⚠️ Restreint aux conversations RÉELLEMENT présentes : un filtre peut porter
      * l'identifiant d'une conversation quittée ou supprimée depuis. Le garder tel quel le
@@ -74,7 +88,7 @@ export function FilterEditorSheet({
   const submit = () => {
     if (!name.trim() || !picked.length || busy) return;
     setBusy(true);
-    onSubmit(name.trim(), picked).finally(() => setBusy(false));
+    onSubmit(name.trim(), picked, color).finally(() => setBusy(false));
   };
 
   const canSave = !!name.trim() && picked.length > 0 && !busy;
@@ -94,7 +108,69 @@ export function FilterEditorSheet({
           style={ROUND.inner}
           className="mt-3 bg-gray-100 dark:bg-zinc-800 px-4 py-3 text-lg text-gray-900 dark:text-zinc-100"
         />
+        {/* Modèles : un nom et une couleur d'un seul geste. ⚠️ Proposés à la CRÉATION
+            seulement — en modification, ils écraseraient un nom déjà choisi. */}
+        {!initial && (
+          <>
+            <Text className="mt-4 text-sm font-semibold uppercase text-gray-400 dark:text-zinc-500">
+              {t('filters.presets')}
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              // ⚠️ `flexGrow: 0` : un ScrollView horizontal s'étire en hauteur dans un parent
+              // en colonne et laisserait une bande vide (cf. la barre de filtres de l'onglet).
+              style={{ flexGrow: 0 }}
+              contentContainerStyle={{ paddingVertical: 8 }}
+            >
+              {FILTER_PRESETS.map((p) => (
+                <TouchableOpacity
+                  key={p.key}
+                  onPress={() => {
+                    setName(t(`filters.preset_${p.key}`));
+                    setColor(p.color);
+                  }}
+                  style={ROUND.inner}
+                  className="flex-row items-center bg-gray-100 dark:bg-zinc-800 px-3 py-2 mr-2"
+                >
+                  <View
+                    className="w-3 h-3 rounded-full mr-2"
+                    style={{ backgroundColor: p.color }}
+                  />
+                  <Text className="text-base text-gray-700 dark:text-zinc-200">
+                    {t(`filters.preset_${p.key}`)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        )}
+
         <Text className="mt-3 text-sm font-semibold uppercase text-gray-400 dark:text-zinc-500">
+          {t('filters.color')}
+        </Text>
+        <View className="flex-row items-center py-2">
+          {FILTER_COLORS.map((c) => (
+            <TouchableOpacity
+              key={c}
+              onPress={() => setColor(c)}
+              accessibilityLabel={c}
+              className="w-8 h-8 rounded-full mr-3 items-center justify-center"
+              style={{
+                backgroundColor: c,
+                // La pastille retenue porte un anneau : une bordure sur toutes les autres
+                // ferait une rangée de cibles identiques où rien ne ressort.
+                borderWidth: color === c ? 3 : 0,
+                borderColor: colors.canvas,
+                // Halo extérieur, sinon l'anneau intérieur seul rétrécit juste la pastille.
+                transform: [{ scale: color === c ? 1.15 : 1 }],
+              }}
+            />
+          ))}
+        </View>
+
+        <Text className="mt-2 text-sm font-semibold uppercase text-gray-400 dark:text-zinc-500">
           {t('filters.pick')}
           {picked.length > 0 ? ` · ${t('filters.selected', { count: picked.length })}` : ''}
         </Text>
@@ -132,7 +208,13 @@ export function FilterEditorSheet({
         }}
       />
 
-      <View className="flex-row items-center gap-3 px-5 py-4">
+      {/* ⚠️ La zone sûre est retirée ICI : sans elle le bouton descend sous le *home
+          indicator*, ce qui le fait paraître trop bas et rend son bord difficile à viser.
+          Repli à 12 pour les appareils qui n'en ont pas. */}
+      <View
+        className="flex-row items-center gap-3 px-5 pt-3"
+        style={{ paddingBottom: Math.max(insets.bottom, 12) }}
+      >
         {onDelete && (
           <TouchableOpacity
             onPress={onDelete}

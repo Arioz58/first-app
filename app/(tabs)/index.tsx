@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { ActivityIndicator, Alert, FlatList, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
@@ -75,6 +75,10 @@ const FAB_ACTIONS: {
     },
   },
 ];
+
+/** ⚠️ Reference STABLE : un `[]` litteral serait une nouvelle valeur a chaque rendu,
+ *  ce qui ferait echouer la memoisation des lignes. */
+const EMPTY_COLORS: string[] = [];
 
 const FILTERS = ['all', 'unread', 'favorites', 'groups'] as const;
 type BuiltinFilter = (typeof FILTERS)[number];
@@ -337,6 +341,24 @@ export default function ConversationsScreen() {
   const archivedUnread = archived.reduce((n, c) => n + c.unreadCount, 0);
 
   const unreadTotal = active.filter((c) => c.unreadCount > 0 || c.manualUnread).length;
+
+  /**
+   * Couleurs de filtre par conversation.
+   *
+   * ⚠️ Un index construit une fois, pas une recherche par ligne : sans lui chaque ligne
+   * parcourrait tous les filtres a chaque rendu, dans une liste recyclee au defilement.
+   */
+  const colorsByConversation = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const f of customFilters) {
+      for (const id of f.conversationIds) {
+        const list = map.get(id);
+        if (list) list.push(f.color);
+        else map.set(id, [f.color]);
+      }
+    }
+    return map;
+  }, [customFilters]);
 
   const visible = active.filter((conv) => {
     /**
@@ -781,12 +803,23 @@ export default function ConversationsScreen() {
                 setFilterEditorOpen(true);
               }}
             >
-              <Text
-                className={`text-base font-semibold ${active ? 'text-white' : 'text-gray-600 dark:text-zinc-300'}`}
-                numberOfLines={1}
-              >
-                {f.name}
-              </Text>
+              <View className="flex-row items-center">
+                {/* Pastille reprise sur la ligne de conversation : c'est elle qui fait le
+                    lien entre la puce et les conversations qu'elle designe. Masquee quand la
+                    puce est active — le fond bleu la rendrait illisible. */}
+                {!active && (
+                  <View
+                    className="w-2.5 h-2.5 rounded-full mr-2"
+                    style={{ backgroundColor: f.color }}
+                  />
+                )}
+                <Text
+                  className={`text-base font-semibold ${active ? 'text-white' : 'text-gray-600 dark:text-zinc-300'}`}
+                  numberOfLines={1}
+                >
+                  {f.name}
+                </Text>
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -912,6 +945,7 @@ export default function ConversationsScreen() {
             <ConversationRow
               conv={item}
               currentUserId={currentUserId}
+              filterColors={colorsByConversation.get(item.id) ?? EMPTY_COLORS}
               onPress={() => openChat(item)}
               onLongPress={() => openActions(item)}
             />
@@ -942,16 +976,17 @@ export default function ConversationsScreen() {
           isGroup: c.type === 'group',
         }))}
         onClose={() => setFilterEditorOpen(false)}
-        onSubmit={async (name, ids) => {
+        onSubmit={async (name, ids, color) => {
           try {
             if (editingFilter) {
               const updated = await updateCustomFilter(editingFilter.id, {
                 name,
                 conversationIds: ids,
+                color,
               });
               setCustomFilters((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
             } else {
-              const created = await createCustomFilter(name, ids);
+              const created = await createCustomFilter(name, ids, color);
               setCustomFilters((prev) => [...prev, created]);
               // On bascule sur le filtre qu'on vient de créer : c'est ce qu'on voulait voir.
               setFilter({ customId: created.id });

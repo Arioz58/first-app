@@ -427,7 +427,15 @@
     "delete": "Filtreyi sil",
     "delete_confirm": "Bu filtre çubuktan kaldırılacak. Sohbetleriniz etkilenmez.",
     "empty": "Bu filtrede sohbet yok.",
-    "selected": "{{count}} seçildi"
+    "selected": "{{count}} seçildi",
+    "presets": "Şablonlar",
+    "color": "Renk",
+    "preset_work": "İş",
+    "preset_family": "Aile",
+    "preset_friends": "Arkadaşlar",
+    "preset_important": "Önemli",
+    "preset_projects": "Projeler",
+    "preset_later": "Sonra"
   },
   "conv_actions": {
     "pin": "Sabitle",

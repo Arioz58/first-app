@@ -427,7 +427,15 @@
     "delete": "Supprimer le filtre",
     "delete_confirm": "Ce filtre sera retiré de la barre. Les conversations ne sont pas touchées.",
     "empty": "Aucune conversation dans ce filtre.",
-    "selected": "{{count}} sélectionnée(s)"
+    "selected": "{{count}} sélectionnée(s)",
+    "presets": "Modèles",
+    "color": "Couleur",
+    "preset_work": "Travail",
+    "preset_family": "Famille",
+    "preset_friends": "Amis",
+    "preset_important": "Important",
+    "preset_projects": "Projets",
+    "preset_later": "Plus tard"
   },
   "conv_actions": {
     "pin": "Épingler",

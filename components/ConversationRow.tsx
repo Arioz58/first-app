@@ -104,11 +104,20 @@ export function ConversationRow({
   currentUserId,
   onPress,
   onLongPress,
+  filterColors = [],
 }: {
   conv: RowConversation;
   currentUserId: string | null;
   onPress: () => void;
   onLongPress?: () => void;
+  /**
+   * Couleurs des filtres personnalises auxquels CETTE conversation appartient.
+   *
+   * ⚠️ Calculees par l'ecran, pas ici : la ligne ne connait pas les filtres, et les lui
+   * faire charger la rendrait dependante d'un appel reseau alors qu'elle est rendue des
+   * dizaines de fois dans une liste recyclee.
+   */
+  filterColors?: string[];
 }) {
   const { getConvName, getLastMessage, formatDate } = useConversationLabels(currentUserId);
   const other = otherMemberOf(conv, currentUserId);
@@ -142,6 +151,15 @@ export function ConversationRow({
           {conv.favoritedAt && (
             <Ionicons name="star" size={15} color="#F59E0B" style={{ marginLeft: 4 }} />
           )}
+          {/* Pastilles des filtres. ⚠️ Plafonnees a 3 : au-dela elles pousseraient le nom
+              hors de la ligne, et l'information tient de toute facon dans la couleur. */}
+          {filterColors.slice(0, 3).map((c, i) => (
+            <View
+              key={`${c}-${i}`}
+              className="w-2.5 h-2.5 rounded-full"
+              style={{ backgroundColor: c, marginLeft: 4 }}
+            />
+          ))}
           {isConversationMuted(conv) && (
             <Ionicons
               name="notifications-off"

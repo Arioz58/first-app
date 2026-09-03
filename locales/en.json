@@ -427,7 +427,15 @@
     "delete": "Delete filter",
     "delete_confirm": "This filter will be removed from the bar. Your chats are untouched.",
     "empty": "No conversation in this filter.",
-    "selected": "{{count}} selected"
+    "selected": "{{count}} selected",
+    "presets": "Templates",
+    "color": "Colour",
+    "preset_work": "Work",
+    "preset_family": "Family",
+    "preset_friends": "Friends",
+    "preset_important": "Important",
+    "preset_projects": "Projects",
+    "preset_later": "Later"
   },
   "conv_actions": {
     "pin": "Pin",
