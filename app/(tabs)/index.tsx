@@ -729,6 +729,14 @@ export default function ConversationsScreen() {
         horizontal
         showsHorizontalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        /**
+         * ⚠️ `flexGrow: 0` INDISPENSABLE. Un `ScrollView` grandit par défaut pour occuper
+         * l'espace disponible de son parent ; en horizontal dans une colonne, il s'étire donc
+         * en HAUTEUR. La liste en dessous n'ayant pas de `flex`, il récupérait tout le reste :
+         * une bande vide sous les puces, d'autant plus grande que la liste était courte — le
+         * gap grandissait donc en passant sur un filtre qui montre moins de conversations.
+         */
+        style={{ flexGrow: 0 }}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12, alignItems: 'center' }}
       >
         {FILTERS.map((f) => {
