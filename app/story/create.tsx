@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { permissionDeniedAlert } from '../../lib/permissionAlert';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -568,7 +569,7 @@ export default function CreateStoryScreen() {
   const pickMedia = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(t('stories.permission_denied'), t('stories.gallery_permission'));
+      permissionDeniedAlert(t('stories.permission_denied'), t('stories.gallery_permission'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({

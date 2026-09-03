@@ -19,7 +19,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { apiRequest } from "../../lib/api";
 import { ROUND } from "../../lib/radius";
 import { PRIVACY_POLICY_VERSION } from "../../lib/config";
-import { registerForPushNotifications } from "../../lib/notifications";
 import { connectSocket } from "../../lib/socket";
 import { saveTokens } from "../../lib/storage";
 
@@ -165,8 +164,12 @@ export default function VerifyScreen() {
         }).catch(() => {});
       }
       await connectSocket();
-      await registerForPushNotifications();
-      router.replace("/(tabs)");
+      /**
+       * ⚠️ La demande de notifications a DÉMÉNAGÉ vers `/permissions`, qui l'explique
+       * d'abord. Elle partait ici sans le moindre contexte, juste après la saisie du code :
+       * une boîte de dialogue système surgissant sans raison visible se refuse.
+       */
+      router.replace("/permissions");
     } catch (e: any) {
       setError(t("auth.wrong_code"));
       setDigits(["", "", "", "", "", ""]);

@@ -631,5 +631,22 @@
     "glass": "Verre dépoli (carte)",
     "banner": "Bandeau pleine largeur",
     "bare": "Sans surface"
+  },
+  "permissions": {
+    "title": "Quelques autorisations",
+    "subtitle": "Voici ce que Nexa pourra vous demander, et pourquoi. Rien n'est demandé maintenant — chaque autorisation vous sera proposée au moment où elle servira.",
+    "camera_title": "Appareil photo et micro",
+    "camera_desc": "Pour vos photos, vos vidéos et vos messages vocaux.",
+    "photos_title": "Photos",
+    "photos_desc": "Pour envoyer des images et choisir votre photo de profil.",
+    "location_title": "Position",
+    "location_desc": "Pour partager où vous êtes, quand vous le décidez.",
+    "contacts_title": "Contacts",
+    "contacts_desc": "Pour retrouver qui utilise déjà Nexa. Vos contacts ne sont jamais conservés sur nos serveurs.",
+    "notif_title": "Notifications",
+    "notif_desc": "Pour être prévenu de vos nouveaux messages. C'est la seule autorisation demandée maintenant.",
+    "continue": "Continuer",
+    "find_friends": "Trouver mes amis dans mes contacts",
+    "revoke": "Vous pourrez tout modifier à tout moment dans les réglages de votre téléphone."
   }
 }

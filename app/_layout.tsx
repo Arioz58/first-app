@@ -307,6 +307,13 @@ export default function RootLayout() {
         }}
       />
       <Stack.Screen name="story/create" options={{ headerShown: false }} />
+      {/* Dernière étape de l'inscription : ce que l'app demandera, et pourquoi.
+          ⚠️ Pas de retour en arrière (`gestureEnabled: false`) — le compte est créé, revenir
+          à la saisie du code n'aurait aucun sens. */}
+      <Stack.Screen
+        name="permissions"
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
       {/* Raccourci appareil photo de l'onglet Discussion. ⚠️ Sans en-tête : la caméra est
           plein écran et porte ses propres commandes (fermer, flash, objectif). */}
       <Stack.Screen

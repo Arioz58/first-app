@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { permissionDeniedAlert } from '../../lib/permissionAlert';
 import { Image } from 'expo-image';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Linking from 'expo-linking';
@@ -113,7 +114,7 @@ export default function MediaScreen() {
 
     const perm = await MediaLibrary.requestPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert('', t('media.library_permission'));
+      permissionDeniedAlert('', t('media.library_permission'));
       return;
     }
 

@@ -631,5 +631,22 @@
     "glass": "Frosted glass (card)",
     "banner": "Full-width bar",
     "bare": "No surface"
+  },
+  "permissions": {
+    "title": "A few permissions",
+    "subtitle": "Here is what Nexa may ask for, and why. Nothing is requested now — each permission will be asked when it is actually needed.",
+    "camera_title": "Camera and microphone",
+    "camera_desc": "For your photos, videos and voice messages.",
+    "photos_title": "Photos",
+    "photos_desc": "To send images and choose your profile picture.",
+    "location_title": "Location",
+    "location_desc": "To share where you are, when you choose to.",
+    "contacts_title": "Contacts",
+    "contacts_desc": "To find who already uses Nexa. Your contacts are never stored on our servers.",
+    "notif_title": "Notifications",
+    "notif_desc": "To be told about new messages. This is the only permission requested now.",
+    "continue": "Continue",
+    "find_friends": "Find my friends from my contacts",
+    "revoke": "You can change all of this at any time in your phone settings."
   }
 }

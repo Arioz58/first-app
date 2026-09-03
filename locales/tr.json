@@ -631,5 +631,22 @@
     "glass": "Buzlu cam (kart)",
     "banner": "Tam genişlik şerit",
     "bare": "Yüzeysiz"
+  },
+  "permissions": {
+    "title": "Birkaç izin",
+    "subtitle": "Nexa'nın isteyebileceği izinler ve nedenleri. Şu anda hiçbiri istenmiyor — her izin, gerçekten gerektiği anda sorulacak.",
+    "camera_title": "Kamera ve mikrofon",
+    "camera_desc": "Fotoğraflarınız, videolarınız ve sesli mesajlarınız için.",
+    "photos_title": "Fotoğraflar",
+    "photos_desc": "Görsel göndermek ve profil fotoğrafınızı seçmek için.",
+    "location_title": "Konum",
+    "location_desc": "Siz istediğinizde nerede olduğunuzu paylaşmak için.",
+    "contacts_title": "Kişiler",
+    "contacts_desc": "Nexa'yı kimlerin kullandığını bulmak için. Kişileriniz sunucularımızda asla saklanmaz.",
+    "notif_title": "Bildirimler",
+    "notif_desc": "Yeni mesajlarınızdan haberdar olmak için. Şu anda istenen tek izin budur.",
+    "continue": "Devam",
+    "find_friends": "Kişilerimden arkadaşlarımı bul",
+    "revoke": "Tümünü istediğiniz zaman telefon ayarlarınızdan değiştirebilirsiniz."
   }
 }

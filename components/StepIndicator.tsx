@@ -2,7 +2,8 @@ import { MotiView } from "moti";
 import { Dimensions, View } from "react-native";
 
 const { width } = Dimensions.get("window");
-const TOTAL_STEPS = 5;
+// welcome → security → intro → login → verify → permissions.
+const TOTAL_STEPS = 6;
 const GAP = 6;
 const PADDING = 16;
 const ACTIVE_RATIO = 3;

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { permissionDeniedAlert } from '../lib/permissionAlert';
 import { Image } from 'expo-image';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
@@ -45,7 +46,7 @@ export default function ChatWallpaperPicker({ visible, current, onClose, onSelec
   const pickPhoto = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert(t('chat.wallpaper'), t('chat.wallpaper_permission'));
+      permissionDeniedAlert(t('chat.wallpaper'), t('chat.wallpaper_permission'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({

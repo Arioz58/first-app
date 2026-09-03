@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { permissionDeniedAlert } from '../../lib/permissionAlert';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -129,7 +130,12 @@ export default function GroupDetailsScreen() {
 
   const changePhoto = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
+    if (!perm.granted) {
+      // ⚠️ Ne renvoyait rien du tout : le bouton devenait muet, sans que rien n'explique
+      // pourquoi la galerie ne s'ouvrait pas.
+      permissionDeniedAlert(t('chat.wallpaper'), t('chat.wallpaper_permission'));
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
