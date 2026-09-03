@@ -441,7 +441,10 @@
     "search": "Search",
     "done": "Done",
     "none_found": "No results",
-    "remove": "Remove"
+    "remove": "Remove",
+    "manage": "Manage filters",
+    "create": "Create a filter",
+    "edit_hint": "Tap a filter to edit it"
   },
   "conv_actions": {
     "pin": "Pin",

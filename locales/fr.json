@@ -441,7 +441,10 @@
     "search": "Rechercher",
     "done": "Terminé",
     "none_found": "Aucun résultat",
-    "remove": "Retirer"
+    "remove": "Retirer",
+    "manage": "Gérer les filtres",
+    "create": "Créer un filtre",
+    "edit_hint": "Appuyez sur un filtre pour le modifier"
   },
   "conv_actions": {
     "pin": "Épingler",

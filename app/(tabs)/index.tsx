@@ -24,6 +24,7 @@ import {
   type CustomFilter,
 } from '../../lib/customFilters';
 import { FilterEditorSheet } from '../../components/FilterEditorSheet';
+import { FilterManagerSheet } from '../../components/FilterManagerSheet';
 import { requestContactsSegment } from '../../lib/tabsNav';
 import { useThemeColors } from '../../lib/theme';
 import BottomSheet from '../../components/BottomSheet';
@@ -182,6 +183,15 @@ export default function ConversationsScreen() {
    * tire son contenu de cette valeur, et la lâcher pour fermer escamoterait l'animation.
    */
   const [editingFilter, setEditingFilter] = useState<CustomFilter | null>(null);
+  const [filterManagerOpen, setFilterManagerOpen] = useState(false);
+  /**
+   * Editeur a ouvrir une fois le gestionnaire DEMONTE.
+   *
+   * ⚠️ Meme differe que les actions de la feuille « … » : ouvrir une feuille pendant qu'une
+   * autre se ferme laisse un modal fantome. Ici on ne les IMBRIQUE pas (le gestionnaire
+   * s'efface au profit de l'editeur), donc il faut attendre sa fermeture.
+   */
+  const pendingFilterRef = useRef<CustomFilter | null | 'none'>('none');
   /**
    * Conversation affichée par la feuille « … », et ouverture de celle-ci.
    *
@@ -828,8 +838,14 @@ export default function ConversationsScreen() {
           accessibilityLabel={t('filters.add')}
           className="w-9 h-9 rounded-full bg-gray-100 dark:bg-zinc-800 items-center justify-center"
           onPress={() => {
-            setEditingFilter(null);
-            setFilterEditorOpen(true);
+            // ⚠️ Pas de gestionnaire quand il n'y a rien a gerer : une liste vide surmontee
+            // d'un seul bouton serait une etape pour rien.
+            if (customFilters.length === 0) {
+              setEditingFilter(null);
+              setFilterEditorOpen(true);
+              return;
+            }
+            setFilterManagerOpen(true);
           }}
         >
           <Ionicons name="add" size={20} color={colors.nexa} />
@@ -964,6 +980,28 @@ export default function ConversationsScreen() {
       >
         <Ionicons name="add" size={30} color="#fff" />
       </TouchableOpacity>
+
+      <FilterManagerSheet
+        visible={filterManagerOpen}
+        filters={customFilters}
+        onClose={() => setFilterManagerOpen(false)}
+        onEdit={(f) => {
+          pendingFilterRef.current = f;
+          setFilterManagerOpen(false);
+        }}
+        onCreate={() => {
+          pendingFilterRef.current = null;
+          setFilterManagerOpen(false);
+        }}
+        // ⚠️ L'editeur n'est ouvert qu'une fois CETTE feuille demontee, sinon les deux se
+        // presentent en meme temps et iOS en laisse une fantome.
+        onClosed={() => {
+          if (pendingFilterRef.current === 'none') return;
+          setEditingFilter(pendingFilterRef.current);
+          pendingFilterRef.current = 'none';
+          requestAnimationFrame(() => setFilterEditorOpen(true));
+        }}
+      />
 
       <FilterEditorSheet
         visible={filterEditorOpen}

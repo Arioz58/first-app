@@ -441,7 +441,10 @@
     "search": "Ara",
     "done": "Bitti",
     "none_found": "Sonuç yok",
-    "remove": "Kaldır"
+    "remove": "Kaldır",
+    "manage": "Filtreleri yönet",
+    "create": "Filtre oluştur",
+    "edit_hint": "Düzenlemek için bir filtreye dokunun"
   },
   "conv_actions": {
     "pin": "Sabitle",
