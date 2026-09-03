@@ -815,14 +815,18 @@ export default function ConversationsScreen() {
             >
               <View className="flex-row items-center">
                 {/* Pastille reprise sur la ligne de conversation : c'est elle qui fait le
-                    lien entre la puce et les conversations qu'elle designe. Masquee quand la
-                    puce est active — le fond bleu la rendrait illisible. */}
-                {!active && (
-                  <View
-                    className="w-2.5 h-2.5 rounded-full mr-2"
-                    style={{ backgroundColor: f.color }}
-                  />
-                )}
+                    lien entre la puce et les conversations qu'elle designe.
+                    ⚠️ Affichee AUSSI quand la puce est active : la masquer faisait perdre le
+                    repere couleur au moment precis ou l'on consulte ce filtre. Un lisere
+                    blanc la detache du fond bleu, ou elle se confondrait sinon. */}
+                <View
+                  className="w-2.5 h-2.5 rounded-full mr-2"
+                  style={{
+                    backgroundColor: f.color,
+                    borderWidth: active ? 1.5 : 0,
+                    borderColor: '#fff',
+                  }}
+                />
                 <Text
                   className={`text-base font-semibold ${active ? 'text-white' : 'text-gray-600 dark:text-zinc-300'}`}
                   numberOfLines={1}
