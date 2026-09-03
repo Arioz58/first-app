@@ -299,6 +299,31 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
   → boutons flottants decales de `composerOverlap` : le bas de la liste deborde sous la zone de saisie (marge negative), sans quoi ils se rangeraient derriere le verre du composeur.
   [PAS FAIT, a juger a l'usage] La date FLOTTANTE pendant le defilement (facon WhatsApp, qui s'estompe a l'arret). Les separateurs inline suffisent peut-etre.
 
+[FAIT 03/09] Feuille « … » d'une conversation : 5 actions demandees par le client.
+  Mode silencieux, Infos du contact/groupe, Effacer la discussion, Bloquer, Supprimer la discussion. Sous un filet : les entrees existantes RANGENT la conversation, celles-ci la modifient ou la quittent.
+  Migration backend `conversation_delete` : `ConversationMember.deletedAt`, un horodatage PAR MEMBRE comme `archivedAt`/`lastReadAt`. Route `DELETE /conversations/:id`.
+  ⚠️ Rien n'est efface cote serveur ni chez l'autre : on pose une date et tout ce qui la precede est masque pour moi. Supprimer reellement les messages effacerait ceux de l'autre participant — et dans un groupe, ceux de tout le monde.
+  ⚠️ La conversation REMONTE des qu'un message arrive ensuite (WhatsApp). Sans cela, la supprimer la ferait disparaitre definitivement, messages futurs compris, sans que rien ne l'annonce.
+  ⚠️ Le filtre est dans `AND` et non en `createdAt` de premier niveau : plusieurs appelants etalent `liveMessages` puis ajoutent LEUR propre `createdAt` (premier non lu, curseur). En premier niveau, la derniere cle ecrite ecrase l'autre EN SILENCE et l'historique supprime redevient visible.
+  ⚠️ Les DEUX compteurs de non-lus alignes (`getUserConversations` + `lib/unread.ts`), sinon la pastille de l'icone annonce des messages qu'aucun ecran ne montre.
+  ⚠️ « Effacer » reste LOCAL, « Supprimer » passe par le SERVEUR — assume : une conversation qui reapparait apres reinstallation se lit comme un bug, des messages qui reviennent passent pour une resynchronisation.
+  → RENFORCE la decision Mois 5 sur « Effacer la conversation » : le mecanisme serveur existe desormais, il suffirait de le reutiliser avec une seconde colonne (`clearedAt`) si on veut le rendre durable.
+  ⚠️ Le client parlait du glissement « vers la droite » ; le bouton « … » est revele en glissant vers la GAUCHE. C'est bien lui qui etait vise (il n'y a qu'un bouton « plus »), et la feuille s'ouvre aussi par appui long.
+
+[FAIT 03/09] Raccourcis « + » et appareil photo en en-tete de l'onglet Discussion.
+  « + » ouvre la MEME feuille que le FAB (deux chemins vers un meme choix, pas deux choix differents selon l'endroit ou l'on a appuye). L'appareil photo ouvre `app/capture.tsx` : capture → plusieurs conversations, ou sa story.
+  ⚠️ La VIDEO est acceptee bien que l'acces s'appelle « photo » : `StoryCamera` enregistre au maintien du doigt, c'est une affordance VISIBLE. La refuser donnerait un maintien sans effet, qui se lit comme un bug.
+  ⚠️ UN SEUL televersement reutilise pour toutes les conversations retenues, comme le transfert d'un message.
+  ⚠️ `story/create` accepte un media en parametre de route, pose en INITIALISEUR d'etat et non par un effet (sinon l'ecran de choix « Photo / Story texte » clignote avant d'etre remplace). Les parametres sont des CHAINES : `width`/`height` reconvertis.
+
+[EN COURS 03/09 - A ARBITRER PAR LE CLIENT] En-tete de conversation accorde au fond.
+  Le client trouve que l'en-tete tranche avec le fond. C'est exact : c'etait le SEUL element opaque de l'ecran, alors que la barre de saisie est deja en verre depoli et qu'un flou progressif court deja derriere l'en-tete.
+  3 variantes livrees ensemble, menu « … » → Apparence de l'en-tete : A `glass` (carte en verre, defaut), B `banner` (bandeau pleine largeur facon WhatsApp/iOS), C `bare` (aucune surface).
+  ⚠️ Les TROIS en-tetes de l'ecran passent par `ChatHeaderShell` (conversation, recherche, selection) : n'en traiter qu'un ferait reapparaitre la carte blanche des l'ouverture de la recherche.
+  ⚠️ Variante A : ombre sur la vue EXTERIEURE, rognage par `GlassSurface` — sur iOS une meme vue ne peut pas projeter une ombre ET rogner ses enfants.
+  ⚠️ Variante C la plus risquee : sur une photo perso contrastee le nom peut devenir illisible.
+  [A FAIRE] Une fois la variante retenue : garder la seule branche choisie, retirer l'entree de menu, supprimer `lib/headerStyle.ts` et les cles `header_style.*`. Marche a suivre en tete de `lib/headerStyle.ts`.
+
 [FAIT 03/09 - WEB] Menus flottants en portail + clic droit.
   `src/components/FloatingMenu.tsx`, partage par les trois menus (message, conversation, membre de groupe). Point de depart : le menu d'un membre s'inserait DANS la liste et poussait les lignes.
   ⚠️ Rendu dans un PORTAIL sur `document.body` : les trois menus vivent dans des conteneurs en `overflow-y-auto`, ou un enfant en `absolute` est DECOUPE au bord — sur les dernieres lignes le menu se retrouvait tronque.
