@@ -440,7 +440,8 @@
     "people_count": "{{count}} sohbet",
     "search": "Ara",
     "done": "Bitti",
-    "none_found": "Sonuç yok"
+    "none_found": "Sonuç yok",
+    "remove": "Kaldır"
   },
   "conv_actions": {
     "pin": "Sabitle",

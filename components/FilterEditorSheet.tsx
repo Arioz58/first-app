@@ -214,32 +214,38 @@ export function FilterEditorSheet({
             <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
           </TouchableOpacity>
 
-          {/* Aperçu des conversations retenues : sans lui, le compte seul n'apprend pas ce
-              qu'on a coché, et il faudrait rouvrir l'étape 2 pour le vérifier. */}
+          {/* Conversations retenues : sans cette liste, le compte seul n'apprend pas ce qu'on
+              a coché, et il faudrait rouvrir la feuille de choix pour le vérifier.
+
+              ⚠️ Rendu par un `map` et non une `FlatList` : on est déjà DANS un `ScrollView`
+              vertical, et imbriquer deux listes virtualisées de même orientation casse la
+              virtualisation (React Native le signale explicitement). Le nombre de lignes est
+              de toute façon celui qu'on vient de cocher à la main. */}
           {pickedItems.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ flexGrow: 0 }}
-              contentContainerStyle={{ paddingVertical: 10 }}
-            >
+            <View className="mt-2">
               {pickedItems.map((c) => (
-                <TouchableOpacity
-                  key={c.id}
-                  onPress={() => toggle(c.id)}
-                  className="items-center mr-3 w-16"
-                  accessibilityLabel={c.name}
-                >
-                  <UserAvatar photoUrl={c.photoUrl} name={c.name} size={44} group={c.isGroup} />
+                <View key={c.id} className="flex-row items-center py-2">
+                  <UserAvatar photoUrl={c.photoUrl} name={c.name} size={40} group={c.isGroup} />
                   <Text
-                    className="text-xs text-gray-500 dark:text-zinc-400 mt-1"
+                    className="flex-1 ml-3 text-lg text-gray-900 dark:text-zinc-100"
                     numberOfLines={1}
                   >
                     {c.name}
                   </Text>
-                </TouchableOpacity>
+                  {/* ⚠️ Le retrait est sur l'ICÔNE seule, pas sur la ligne entière : une ligne
+                      entièrement cliquable qui SUPPRIME se déclenche par erreur, et il n'y a
+                      pas d'annulation — il faudrait rouvrir la liste pour recocher. */}
+                  <TouchableOpacity
+                    onPress={() => toggle(c.id)}
+                    hitSlop={10}
+                    accessibilityLabel={`${t('filters.remove')} ${c.name}`}
+                    className="p-1"
+                  >
+                    <Ionicons name="close-circle" size={24} color="#DC2626" />
+                  </TouchableOpacity>
+                </View>
               ))}
-            </ScrollView>
+            </View>
           )}
         </View>
       </ScrollView>

@@ -440,7 +440,8 @@
     "people_count": "{{count}} chat(s)",
     "search": "Search",
     "done": "Done",
-    "none_found": "No results"
+    "none_found": "No results",
+    "remove": "Remove"
   },
   "conv_actions": {
     "pin": "Pin",

@@ -440,7 +440,8 @@
     "people_count": "{{count}} conversation(s)",
     "search": "Rechercher",
     "done": "Terminé",
-    "none_found": "Aucun résultat"
+    "none_found": "Aucun résultat",
+    "remove": "Retirer"
   },
   "conv_actions": {
     "pin": "Épingler",
