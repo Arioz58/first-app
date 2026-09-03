@@ -40,10 +40,32 @@ export const FILTER_PRESETS: { key: string; color: string }[] = [
 /**
  * Palette de pastilles.
  *
- * ⚠️ Volontairement restreinte : une roue chromatique libre produirait des couleurs
- * illisibles sur fond clair ou sombre, alors que ces six-là sont contrastées dans les deux.
+ * ⚠️ Une liste FERMÉE plutôt qu'une roue chromatique libre : celle-ci laisserait choisir des
+ * teintes illisibles sur fond clair ou sombre (jaunes pâles, gris), alors que chacune de
+ * celles-ci reste visible dans les deux thèmes.
+ *
+ * ⚠️ Le serveur ne valide que la FORME `#RRGGBB`, pas l'appartenance à cette liste : la
+ * palette peut donc s'allonger sans rien changer côté backend, et un filtre créé avec une
+ * ancienne couleur reste valide.
  */
-export const FILTER_COLORS = FILTER_PRESETS.map((p) => p.color);
+export const FILTER_COLORS = [
+  '#1E40AF', // bleu nexa
+  '#0891B2', // cyan
+  '#0D9488', // sarcelle
+  '#16A34A', // vert
+  '#65A30D', // olive
+  '#CA8A04', // ambre
+  '#F59E0B', // orange
+  '#EA580C', // orange brûlé
+  '#DC2626', // rouge
+  '#E11D48', // framboise
+  '#DB2777', // rose
+  '#9333EA', // violet
+  '#7C3AED', // pourpre
+  '#4F46E5', // indigo
+  '#57534E', // pierre
+  '#475569', // ardoise
+];
 
 export const fetchCustomFilters = () => apiRequest<CustomFilter[]>('/filters');
 

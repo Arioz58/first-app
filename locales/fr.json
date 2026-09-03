@@ -435,7 +435,12 @@
     "preset_friends": "Amis",
     "preset_important": "Important",
     "preset_projects": "Projets",
-    "preset_later": "Plus tard"
+    "preset_later": "Plus tard",
+    "add_people": "Ajouter des personnes ou des groupes",
+    "people_count": "{{count}} conversation(s)",
+    "search": "Rechercher",
+    "done": "Terminé",
+    "none_found": "Aucun résultat"
   },
   "conv_actions": {
     "pin": "Épingler",

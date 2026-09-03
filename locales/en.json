@@ -435,7 +435,12 @@
     "preset_friends": "Friends",
     "preset_important": "Important",
     "preset_projects": "Projects",
-    "preset_later": "Later"
+    "preset_later": "Later",
+    "add_people": "Add people or groups",
+    "people_count": "{{count}} chat(s)",
+    "search": "Search",
+    "done": "Done",
+    "none_found": "No results"
   },
   "conv_actions": {
     "pin": "Pin",

@@ -435,7 +435,12 @@
     "preset_friends": "Arkadaşlar",
     "preset_important": "Önemli",
     "preset_projects": "Projeler",
-    "preset_later": "Sonra"
+    "preset_later": "Sonra",
+    "add_people": "Kişi veya grup ekle",
+    "people_count": "{{count}} sohbet",
+    "search": "Ara",
+    "done": "Bitti",
+    "none_found": "Sonuç yok"
   },
   "conv_actions": {
     "pin": "Sabitle",
