@@ -429,7 +429,14 @@
     "mark_unread": "Okunmadı işaretle",
     "archive": "Arşivle",
     "unarchive": "Arşivden çıkar",
-    "more": "Daha fazla"
+    "more": "Daha fazla",
+    "delete": "Sohbeti sil",
+    "delete_confirm": "Bu sohbet listenizden çıkacak ve geçmişi sizden gizlenecek. Karşı tarafta hiçbir şey silinmez; size yazarsa sohbet geri gelir.",
+    "mute": "Sessize al",
+    "unmute": "Bildirimleri aç",
+    "info_contact": "Kişi bilgileri",
+    "info_group": "Grup bilgileri",
+    "clear": "Sohbeti temizle"
   },
   "preview": {
     "image": "📷 Fotoğraf",

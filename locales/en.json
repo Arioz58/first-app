@@ -429,7 +429,14 @@
     "mark_unread": "Mark unread",
     "archive": "Archive",
     "unarchive": "Unarchive",
-    "more": "More"
+    "more": "More",
+    "delete": "Delete chat",
+    "delete_confirm": "This chat will leave your list and its history will be hidden from you. Nothing is deleted for the other person, and it will come back if they message you.",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "info_contact": "Contact info",
+    "info_group": "Group info",
+    "clear": "Clear chat"
   },
   "preview": {
     "image": "📷 Photo",

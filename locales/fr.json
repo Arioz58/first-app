@@ -429,7 +429,14 @@
     "mark_unread": "Marquer non lu",
     "archive": "Archiver",
     "unarchive": "Désarchiver",
-    "more": "Plus"
+    "more": "Plus",
+    "delete": "Supprimer la discussion",
+    "delete_confirm": "Cette discussion quittera votre liste et son historique vous sera masqué. Rien n'est supprimé chez votre correspondant, et elle réapparaîtra s'il vous écrit.",
+    "mute": "Mode silencieux",
+    "unmute": "Réactiver les notifications",
+    "info_contact": "Infos du contact",
+    "info_group": "Infos du groupe",
+    "clear": "Effacer la discussion"
   },
   "preview": {
     "image": "📷 Photo",

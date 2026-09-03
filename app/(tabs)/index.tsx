@@ -1,14 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  TextInput,
-  ScrollView,
-} from 'react-native';
+import { ActivityIndicator, Alert, FlatList, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -24,7 +15,7 @@ import {
   setConversationUnread,
   setUnreadCounts,
 } from '../../lib/unreadMessages';
-import { getUserId } from '../../lib/storage';
+import { getUserId, setConversationClearedAt } from '../../lib/storage';
 import { requestContactsSegment } from '../../lib/tabsNav';
 import { useThemeColors } from '../../lib/theme';
 import BottomSheet from '../../components/BottomSheet';
@@ -37,6 +28,17 @@ const NEXA = '#1E40AF';
 // La tab bar native flotte au-dessus du contenu et `SafeAreaView` ne la connaît
 // pas : on remonte le FAB de sa hauteur (~49pt) + une marge, sinon il passe dessous.
 const FAB_BOTTOM = 96;
+/**
+ * Sourdine « toujours » — même sentinelle que dans le chat (`app/chat/[id].tsx`).
+ *
+ * ⚠️ Une date lointaine plutôt qu'une valeur spéciale : le serveur compare simplement à
+ * maintenant, et un troisième état serait à gérer partout où la sourdine est lue.
+ */
+const MUTE_FOREVER = new Date('2999-12-31T00:00:00Z').toISOString();
+const hoursFromNow = (h: number) => new Date(Date.now() + h * 3600 * 1000).toISOString();
+/** En sourdine à cet instant ? (une échéance passée ne compte plus). */
+const isMuted = (conv: { mutedUntil?: string | null }) =>
+  !!conv.mutedUntil && new Date(conv.mutedUntil) > new Date();
 
 // Ombre portée du FAB (iOS + Android).
 const FAB_SHADOW = {
@@ -431,6 +433,112 @@ export default function ConversationsScreen() {
     }
   };
 
+  // --- Actions demandées par le client (feuille « … » d'une conversation) ---
+
+  /** Sourdine : mêmes durées que dans le chat, la sentinelle « toujours » comprise. */
+  const muteMenu = (conv: Conversation) => {
+    const apply = (mutedUntil: string | null) => {
+      setConversations((prev) =>
+        prev.map((c) => (c.id === conv.id ? { ...c, mutedUntil } : c)),
+      );
+      apiRequest(`/conversations/${conv.id}/mute`, { method: 'PATCH', body: { mutedUntil } })
+        .catch(() => fetchConversations());
+    };
+    if (isMuted(conv)) {
+      apply(null);
+      return;
+    }
+    Alert.alert(t('details.mute'), undefined, [
+      { text: t('mute.8h'), onPress: () => apply(hoursFromNow(8)) },
+      { text: t('mute.week'), onPress: () => apply(hoursFromNow(24 * 7)) },
+      { text: t('mute.always'), onPress: () => apply(MUTE_FOREVER) },
+      { text: t('cancel'), style: 'cancel' },
+    ]);
+  };
+
+  /**
+   * Infos du contact ou du groupe.
+   *
+   * ⚠️ Deux écrans distincts : `chat/details` ne traite que les conversations directes
+   * (profil, blocage, personnalisation), les groupes ont le leur avec les rôles et les
+   * membres. Y envoyer un groupe afficherait un écran vide.
+   */
+  const openInfo = (conv: Conversation) => {
+    if (conv.type === 'group') {
+      router.push({ pathname: '/group/[id]' as any, params: { id: conv.id } });
+      return;
+    }
+    const other = getOtherMember(conv);
+    router.push({
+      pathname: '/chat/details' as any,
+      // ⚠️ Exactement les paramètres attendus par l'écran (`conversationId`, `userId`,
+      // `name`) : il recharge le profil lui-même, une photo passée ici serait ignorée.
+      params: { conversationId: conv.id, userId: other?.userId ?? '', name: getConvName(conv) },
+    });
+  };
+
+  /**
+   * Effacer la discussion : vide l'historique POUR MOI, la conversation reste dans la liste.
+   *
+   * ⚠️ Réglage LOCAL (horodatage en SecureStore), comme depuis les détails — il ne survit
+   * donc pas à une réinstallation. C'est un écart connu, tranché au Mois 5 (voir `todo`) ;
+   * on ne l'introduit pas ici, on réutilise le mécanisme existant.
+   */
+  const clearChat = (conv: Conversation) => {
+    Alert.alert(t('details.clear_chat'), t('details.clear_confirm'), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('details.clear_chat'),
+        style: 'destructive',
+        onPress: () => {
+          setConversationClearedAt(conv.id, Date.now()).catch(() => {});
+        },
+      },
+    ]);
+  };
+
+  const blockContact = (conv: Conversation) => {
+    const other = getOtherMember(conv);
+    if (!other) return;
+    Alert.alert(t('moderation.block_confirm'), '', [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('moderation.block'),
+        style: 'destructive',
+        onPress: () =>
+          apiRequest('/blocks', { method: 'POST', body: { userId: other.userId } })
+            .then(() => fetchConversations())
+            .catch((e: any) => Alert.alert(t('error'), e.message)),
+      },
+    ]);
+  };
+
+  /**
+   * Supprimer la discussion : elle quitte MA liste et son historique m'est masqué.
+   *
+   * ⚠️ Côté SERVEUR (`DELETE /conversations/:id`), contrairement à « Effacer » : une
+   * conversation qui réapparaît après une réinstallation serait lue comme un bug, là où des
+   * messages qui reviennent passent pour une resynchronisation.
+   * ⚠️ Rien n'est supprimé chez l'autre participant, et la conversation REMONTE s'il écrit
+   * ensuite — c'est le comportement WhatsApp.
+   */
+  const deleteConversation = (conv: Conversation) => {
+    Alert.alert(t('conv_actions.delete'), t('conv_actions.delete_confirm'), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('conv_actions.delete'),
+        style: 'destructive',
+        onPress: () => {
+          // Optimiste : elle disparaît tout de suite, le serveur confirme derrière.
+          setConversations((prev) => prev.filter((c) => c.id !== conv.id));
+          clearUnread(conv.id);
+          apiRequest(`/conversations/${conv.id}`, { method: 'DELETE' })
+            .catch(() => fetchConversations());
+        },
+      },
+    ]);
+  };
+
   const openChat = (conv: Conversation) => {
     // Remise à zéro immédiate : le chat marque la conversation lue à l'ouverture.
     if (conv.unreadCount > 0) {
@@ -771,6 +879,66 @@ export default function ConversationsScreen() {
                   }}
                 />
               )}
+
+              {/* Actions demandées par le client. Séparées d'un filet : les précédentes
+                  rangent la conversation, celles-ci la modifient ou la quittent. */}
+              <View className="h-px bg-gray-100 dark:bg-zinc-800 mx-5 my-2" />
+
+              <ConvAction
+                icon={isMuted(actionTarget) ? 'notifications' : 'notifications-off'}
+                label={t(isMuted(actionTarget) ? 'conv_actions.unmute' : 'conv_actions.mute')}
+                onPress={() => {
+                  const target = actionTarget;
+                  setActionTarget(null);
+                  muteMenu(target);
+                }}
+              />
+              <ConvAction
+                icon="information-circle"
+                label={t(
+                  actionTarget.type === 'group'
+                    ? 'conv_actions.info_group'
+                    : 'conv_actions.info_contact',
+                )}
+                onPress={() => {
+                  const target = actionTarget;
+                  setActionTarget(null);
+                  openInfo(target);
+                }}
+              />
+              <ConvAction
+                icon="brush"
+                label={t('conv_actions.clear')}
+                onPress={() => {
+                  const target = actionTarget;
+                  setActionTarget(null);
+                  clearChat(target);
+                }}
+              />
+              {/* ⚠️ Bloquer n'a de sens qu'en conversation DIRECTE : on ne bloque pas un
+                  groupe, et il n'y aurait pas d'utilisateur à désigner au serveur. */}
+              {actionTarget.type === 'direct' && (
+                <ConvAction
+                  icon="ban"
+                  danger
+                  label={t('moderation.block')}
+                  onPress={() => {
+                    const target = actionTarget;
+                    setActionTarget(null);
+                    blockContact(target);
+                  }}
+                />
+              )}
+              <ConvAction
+                icon="trash"
+                danger
+                label={t('conv_actions.delete')}
+                onPress={() => {
+                  const target = actionTarget;
+                  setActionTarget(null);
+                  deleteConversation(target);
+                }}
+              />
             </>
           )}
         </View>
@@ -783,17 +951,30 @@ function ConvAction({
   icon,
   label,
   onPress,
+  danger,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
+  /** Action destructrice (bloquer, supprimer) : rouge, comme partout ailleurs dans l'app. */
+  danger?: boolean;
 }) {
   return (
     <TouchableOpacity className="flex-row items-center px-5 py-4" onPress={onPress}>
-      <View className="w-11 h-11 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center mr-4">
-        <Ionicons name={icon} size={22} color={NEXA} />
+      <View
+        className={`w-11 h-11 rounded-full items-center justify-center mr-4 ${
+          danger ? 'bg-red-50 dark:bg-red-950' : 'bg-blue-50 dark:bg-blue-950'
+        }`}
+      >
+        <Ionicons name={icon} size={22} color={danger ? '#DC2626' : NEXA} />
       </View>
-      <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100">{label}</Text>
+      <Text
+        className={`text-lg font-semibold ${
+          danger ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-zinc-100'
+        }`}
+      >
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
