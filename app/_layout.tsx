@@ -302,6 +302,12 @@ export default function RootLayout() {
         }}
       />
       <Stack.Screen name="story/create" options={{ headerShown: false }} />
+      {/* Raccourci appareil photo de l'onglet Discussion. ⚠️ Sans en-tête : la caméra est
+          plein écran et porte ses propres commandes (fermer, flash, objectif). */}
+      <Stack.Screen
+        name="capture"
+        options={{ headerShown: false, animation: "slide_from_bottom" }}
+      />
     </Stack>
     </Animated.View>
     </KeyboardProvider>

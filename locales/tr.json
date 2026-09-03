@@ -582,5 +582,15 @@
     "approve": "İzin ver",
     "done_title": "Bağlandı",
     "done_body": "Nexa Web artık hesabınıza bağlı."
+  },
+  "capture": {
+    "title": "Yeni çekim",
+    "send_to": "Şuraya gönder…",
+    "my_story": "Hikâyem",
+    "retake": "Yeniden çek",
+    "sending": "Gönderiliyor…",
+    "sent_one": "1 sohbete gönderildi",
+    "sent_many": "{{count}} sohbete gönderildi",
+    "send_error": "Gönderilemedi"
   }
 }

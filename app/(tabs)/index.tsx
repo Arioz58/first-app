@@ -26,6 +26,7 @@ import {
 } from '../../lib/unreadMessages';
 import { getUserId } from '../../lib/storage';
 import { requestContactsSegment } from '../../lib/tabsNav';
+import { useThemeColors } from '../../lib/theme';
 import BottomSheet from '../../components/BottomSheet';
 import { UserAvatar } from '../../components/UserAvatar';
 import { ConversationRow } from '../../components/ConversationRow';
@@ -130,6 +131,12 @@ export default function ConversationsScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [requestCount, setRequestCount] = useState(0);
   const [fabOpen, setFabOpen] = useState(false);
+  /**
+   * ⚠️ `useThemeColors()` et non la constante `NEXA` du fichier pour les icônes d'en-tête :
+   * elles sont posées sur `bg-blue-950` en mode sombre, où `#1E40AF` n'aurait presque aucun
+   * contraste. Le hook éclaircit l'accent en sombre, c'est précisément son rôle.
+   */
+  const colors = useThemeColors();
   const [filter, setFilter] = useState<Filter>('all');
   const [actionTarget, setActionTarget] = useState<Conversation | null>(null);
   // Recherche (barre toujours visible)
@@ -457,6 +464,30 @@ export default function ConversationsScreen() {
     <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
       <View className="flex-row items-center justify-between px-4 py-4">
         <Text className="text-4xl font-bold text-nexa">{t('messages')}</Text>
+
+        {/* Raccourcis d'en-tête : capture, puis « + ». */}
+        <View className="flex-row items-center gap-2">
+          <TouchableOpacity
+            accessibilityLabel={t('media.camera')}
+            className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center"
+            activeOpacity={0.8}
+            onPress={() => router.push('/capture' as any)}
+          >
+            <Ionicons name="camera-outline" size={22} color={colors.nexa} />
+          </TouchableOpacity>
+
+          {/* ⚠️ Ouvre la MÊME feuille que le FAB, et ne double pas ses actions : deux
+              chemins vers un même choix, pas deux choix différents selon l'endroit
+              où l'on a appuyé. */}
+          <TouchableOpacity
+            accessibilityLabel={t('fab.new_chat')}
+            className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center"
+            activeOpacity={0.8}
+            onPress={() => setFabOpen(true)}
+          >
+            <Ionicons name="add" size={24} color={colors.nexa} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Barre de recherche — toujours visible. */}

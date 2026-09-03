@@ -582,5 +582,15 @@
     "approve": "Allow",
     "done_title": "Connected",
     "done_body": "Nexa Web is now linked to your account."
+  },
+  "capture": {
+    "title": "New capture",
+    "send_to": "Send to…",
+    "my_story": "My story",
+    "retake": "Retake",
+    "sending": "Sending…",
+    "sent_one": "Sent to 1 conversation",
+    "sent_many": "Sent to {{count}} conversations",
+    "send_error": "Sending failed"
   }
 }

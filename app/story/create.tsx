@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -266,13 +266,46 @@ export default function CreateStoryScreen() {
   const trashCenterX = winW / 2;
   const trashCenterY = winH - insets.bottom - 131;
 
-  const [media, setMedia] = useState<PickedMedia | null>(null);
+  /**
+   * Média fourni à l'ouverture — raccourci appareil photo de l'onglet Discussion
+   * (`app/capture.tsx`), qui arrive ici avec sa photo déjà prise.
+   *
+   * ⚠️ Les paramètres de route sont des CHAÎNES : `width`/`height` doivent être reconvertis,
+   * sinon le calcul de recadrage à la publication opère sur du texte.
+   */
+  const params = useLocalSearchParams<{
+    uri?: string;
+    mimeType?: string;
+    width?: string;
+    height?: string;
+  }>();
+  const initial: PickedMedia | null = params.uri
+    ? {
+        uri: params.uri,
+        mimeType: params.mimeType ?? 'image/jpeg',
+        width: Number(params.width) || 0,
+        height: Number(params.height) || 0,
+      }
+    : null;
+  const initialIsVideo = !!initial?.mimeType.startsWith('video/');
+
+  /**
+   * ⚠️ Posés en INITIALISEUR d'état, pas par un effet : un effet appliquerait le média
+   * après un premier rendu à vide, donc l'écran de choix « Photo / Story texte »
+   * apparaîtrait une fraction de seconde avant d'être remplacé.
+   */
+  const [media, setMedia] = useState<PickedMedia | null>(initialIsVideo ? null : initial);
   // Mode « story texte seul » : id du preset de fond (null = mode média)
   const [bgId, setBgId] = useState<string | null>(null);
   // Mode caméra in-app (avant l'éditeur)
   const [cameraMode, setCameraMode] = useState(false);
-  // Vidéo brute en attente de rognage (ouvre le VideoTrimmer)
-  const [trimUri, setTrimUri] = useState<string | null>(null);
+  /**
+   * Vidéo brute en attente de rognage (ouvre le VideoTrimmer).
+   *
+   * ⚠️ Une vidéo reçue en paramètre passe par le trimmer comme n'importe quelle autre :
+   * la sauter donnerait une story de 30 s là où toutes les autres sont rognées.
+   */
+  const [trimUri, setTrimUri] = useState<string | null>(initialIsVideo ? initial!.uri : null);
   // Sélecteur d'emojis (stickers)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [loading, setLoading] = useState(false);

@@ -33,12 +33,21 @@ type ConvItem = {
 export function ForwardSheet({
   visible,
   count = 1,
+  title,
   onClose,
   onConfirm,
 }: {
   visible: boolean;
   /** Nombre de messages transférés — annoncé en titre quand il y en a plusieurs. */
   count?: number;
+  /**
+   * Titre de remplacement.
+   *
+   * ⚠️ La feuille sert aussi à ENVOYER une capture toute neuve (`app/capture.tsx`), pas
+   * seulement à transférer un message existant : « Transférer à » y serait faux, on ne
+   * transfère rien.
+   */
+  title?: string;
   onClose: () => void;
   /** Reçoit les identifiants de conversation retenus. L'envoi lui-même reste à l'appelant. */
   onConfirm: (conversationIds: string[]) => void;
@@ -98,7 +107,7 @@ export function ForwardSheet({
         {/* Le compte est annoncé : transférer 6 messages sans le dire exposerait à en
             envoyer plus qu'on ne croit. */}
         <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100 mb-3">
-          {count > 1 ? t('chat.forward_n_to', { count }) : t('chat.forward_to')}
+          {title ?? (count > 1 ? t('chat.forward_n_to', { count }) : t('chat.forward_to'))}
         </Text>
         <View
           style={ROUND.inner}
