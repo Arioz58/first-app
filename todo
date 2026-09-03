@@ -299,6 +299,25 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
   → boutons flottants decales de `composerOverlap` : le bas de la liste deborde sous la zone de saisie (marge negative), sans quoi ils se rangeraient derriere le verre du composeur.
   [PAS FAIT, a juger a l'usage] La date FLOTTANTE pendant le defilement (facon WhatsApp, qui s'estompe a l'arret). Les separateurs inline suffisent peut-etre.
 
+[FAIT 03/09 - WEB] Icones : les emojis d'interface remplaces par `lucide-react`.
+  Un emoji n'est PAS une icone — son dessin appartient au systeme d'exploitation, donc « 📌 » n'a pas la meme allure sur macOS, Windows et Android, et ne s'accorde avec rien autour.
+  lucide choisie pour deux raisons concretes : `CheckCheck` (la double coche dessinee pour les accuses de lecture) et `Pin` — Heroicons n'a meme pas d'epingle, ce qui etait bloquant vu l'usage.
+  `src/components/icons.ts` nomme les concepts (`IconPin`, `IconCheckDouble`) et reste le SEUL point d'import : une meme idee garde le meme dessin partout, et changer de bibliotheque ne toucherait que ce fichier.
+  ⚠️ `messagePreview` renvoie desormais `{ kind, text }` et non une chaine : l'icone est un composant SVG que seul le rendu peut poser.
+  ⚠️ NON touches : `QUICK_REACTIONS` et l'affichage des reactions — ce sont des DONNEES envoyees au serveur et stockees en base, pas de l'habillage.
+
+[FAIT 03/09 - WEB] Moderation et gestion des groupes, portage de `app/group/[id].tsx`.
+  `src/lib/groups.ts` : appels + regles de permission. `src/components/AddMembersDialog.tsx`. Section groupe du `DetailsPanel` refondue.
+  LIVRE : en-tete editable admin (photo S3 / nom / description en UN seul PATCH), liste des membres triee admins → moderateurs → membres, menu par membre (promouvoir/retrograder/expulser), ajout de membres, reglage « qui peut envoyer » (admin), quitter le groupe.
+  ⚠️ Les regles cote client sont un MIROIR de celles du serveur, pas la securite : le backend reverifie tout. Elles evitent de proposer un bouton qui echouera. Si l'une change, l'autre doit suivre.
+  ⚠️ Regles VERIFIEES contre le serveur en direct (12 cas, pas deduites du code) : membre simple refuse partout (403) ; admin ne peut pas se retirer lui-meme (« utilisez leave_group ») ; moderateur peut ajouter des membres et expulser un moderateur, mais PAS un admin ni changer un role ni renommer ; role invalide refuse.
+  ⚠️ « Quitter » ouvert a TOUS, dernier admin inclus — le serveur promeut le suivant. L'interdire laisserait quelqu'un prisonnier de son propre groupe.
+  ⚠️ Un admin ne change jamais SON rang : il se retirerait ses droits sans pouvoir les reprendre si personne d'autre n'est admin.
+  ⚠️ Le composeur passe en LECTURE SEULE quand `whoCanSend:admins` et qu'on n'est ni admin ni moderateur. Ce n'est pas une securite (le socket refuse deja) : ca evite d'ecrire un message rejete sans explication. Moderateur INCLUS dans ceux qui peuvent ecrire, comme le serveur (`canManage`).
+  ⚠️ Les evenements socket de groupe (`members_added`/`member_removed`/`member_left`/`group_updated`) RECHARGENT les metadonnees au lieu d'appliquer un delta : ils ne portent que des identifiants, et un changement de role n'emet meme pas d'evenement dedie.
+  ⚠️ `removed_from_group` redirige AVANT que quoi que ce soit ne rappelle la conversation, sinon l'ecran se remplit de 403 au lieu de se fermer.
+  [A FAIRE] Bandeaux systeme non traduits sur le web (`type:'system'` porte une cle i18n en JSON) : les ajouts/retraits/renommages ne s'affichent donc pas dans le fil web, alors qu'ils y arrivent. Meme cause que l'apercu vide dans la liste.
+
 [FAIT 02/09 - WEB] Connexion par QR facon WhatsApp Web. Migration `web_session`.
   DECISION : QR en principal, OTP par numero garde en REPLI (telephone decharge, appareil photo casse) — le QR seul enfermerait dehors quelqu'un qui a pourtant un compte valide.
   ⚠️ Le NAVIGATEUR ne prouve JAMAIS son identite : il demande un jeton, l'affiche, attend. C'est le MOBILE deja authentifie qui approuve, et `req.userId` vient du middleware JWT — jamais du corps de la requete. C'est toute la securite du mecanisme.
