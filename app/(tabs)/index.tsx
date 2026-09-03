@@ -153,7 +153,23 @@ export default function ConversationsScreen() {
    */
   const colors = useThemeColors();
   const [filter, setFilter] = useState<Filter>('all');
+  /**
+   * Conversation affichée par la feuille « … », et ouverture de celle-ci.
+   *
+   * ⚠️ DEUX états et non un seul. La feuille épouse la hauteur de son contenu : si celui-ci
+   * dépend de `actionTarget`, le passer à `null` pour fermer le fait disparaître AVANT
+   * l'animation — la hauteur tombe à zéro et la feuille s'escamote au lieu de redescendre.
+   * C'est ce qui la rendait plus brusque que les autres (celle du FAB rend ses actions sans
+   * condition, et glisse donc normalement).
+   *
+   * La cible n'est donc effacée qu'une fois la feuille DÉMONTÉE (`onClosed`).
+   */
   const [actionTarget, setActionTarget] = useState<Conversation | null>(null);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const openActions = (conv: Conversation) => {
+    setActionTarget(conv);
+    setActionsOpen(true);
+  };
   // Recherche (barre toujours visible)
   const [query, setQuery] = useState('');
   const [msgResults, setMsgResults] = useState<SearchMsg[]>([]);
@@ -798,7 +814,7 @@ export default function ConversationsScreen() {
                 icon: 'ellipsis-horizontal',
                 label: t('conv_actions.more'),
                 color: '#475569',
-                onPress: () => setActionTarget(item),
+                onPress: () => openActions(item),
               },
             ]}
           >
@@ -806,7 +822,7 @@ export default function ConversationsScreen() {
               conv={item}
               currentUserId={currentUserId}
               onPress={() => openChat(item)}
-              onLongPress={() => setActionTarget(item)}
+              onLongPress={() => openActions(item)}
             />
           </ConversationSwipe>
         )}
@@ -856,9 +872,12 @@ export default function ConversationsScreen() {
 
       {/* Actions sur une conversation (appui long). */}
       <BottomSheet
-        visible={!!actionTarget}
-        onClose={() => setActionTarget(null)}
+        visible={actionsOpen}
+        onClose={() => setActionsOpen(false)}
         onClosed={() => {
+          // La cible n'est lâchée qu'ici : elle a servi à rendre le contenu pendant toute
+          // l'animation de fermeture.
+          setActionTarget(null);
           const run = pendingActionRef.current;
           pendingActionRef.current = null;
           if (!run) return;
@@ -878,7 +897,7 @@ export default function ConversationsScreen() {
                 label={t(actionTarget.pinnedAt ? 'conv_actions.unpin' : 'conv_actions.pin')}
                 onPress={() => {
                   toggleFlag(actionTarget, 'pinnedAt');
-                  setActionTarget(null);
+                  setActionsOpen(false);
                 }}
               />
               <ConvAction
@@ -890,7 +909,7 @@ export default function ConversationsScreen() {
                 )}
                 onPress={() => {
                   toggleFlag(actionTarget, 'favoritedAt');
-                  setActionTarget(null);
+                  setActionsOpen(false);
                 }}
               />
               <ConvAction
@@ -900,7 +919,7 @@ export default function ConversationsScreen() {
                 )}
                 onPress={() => {
                   toggleArchive(actionTarget);
-                  setActionTarget(null);
+                  setActionsOpen(false);
                 }}
               />
               {actionTarget.unreadCount > 0 && (
@@ -909,7 +928,7 @@ export default function ConversationsScreen() {
                   label={t('conv_actions.mark_read')}
                   onPress={() => {
                     markRead(actionTarget);
-                    setActionTarget(null);
+                    setActionsOpen(false);
                   }}
                 />
               )}
@@ -924,7 +943,7 @@ export default function ConversationsScreen() {
                 onPress={() => {
                   const target = actionTarget;
                   pendingActionRef.current = () => muteMenu(target);
-                  setActionTarget(null);
+                  setActionsOpen(false);
                 }}
               />
               <ConvAction
@@ -937,7 +956,7 @@ export default function ConversationsScreen() {
                 onPress={() => {
                   const target = actionTarget;
                   pendingActionRef.current = () => openInfo(target);
-                  setActionTarget(null);
+                  setActionsOpen(false);
                 }}
               />
               <ConvAction
@@ -946,7 +965,7 @@ export default function ConversationsScreen() {
                 onPress={() => {
                   const target = actionTarget;
                   pendingActionRef.current = () => clearChat(target);
-                  setActionTarget(null);
+                  setActionsOpen(false);
                 }}
               />
               {/* ⚠️ Bloquer n'a de sens qu'en conversation DIRECTE : on ne bloque pas un
@@ -959,7 +978,7 @@ export default function ConversationsScreen() {
                   onPress={() => {
                     const target = actionTarget;
                     pendingActionRef.current = () => blockContact(target);
-                    setActionTarget(null);
+                    setActionsOpen(false);
                   }}
                 />
               )}
@@ -970,7 +989,7 @@ export default function ConversationsScreen() {
                 onPress={() => {
                   const target = actionTarget;
                   pendingActionRef.current = () => deleteConversation(target);
-                  setActionTarget(null);
+                  setActionsOpen(false);
                 }}
               />
             </>

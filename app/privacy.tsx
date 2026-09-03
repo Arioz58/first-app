@@ -53,6 +53,13 @@ export default function PrivacyScreen() {
   const [picker, setPicker] = useState<{ key: FieldKey; options: readonly string[] } | null>(
     null,
   );
+  /**
+   * ⚠️ Ouverture SÉPARÉE de la cible : la feuille épouse la hauteur de son contenu, et ce
+   * contenu dépend de `picker`. Le passer à `null` pour fermer le ferait disparaître AVANT
+   * l'animation — la hauteur tombe à zéro et la feuille s'escamote au lieu de redescendre.
+   * `picker` n'est donc lâché qu'une fois la feuille démontée (`onClosed`).
+   */
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     apiRequest<{ profile: Privacy }>('/users/me')
@@ -68,7 +75,7 @@ export default function PrivacyScreen() {
 
   const selectValue = (value: string) => {
     if (picker) patch({ [picker.key]: value } as Partial<Privacy>);
-    setPicker(null);
+    setPickerOpen(false);
   };
 
   if (loading || !privacy) {
@@ -82,7 +89,10 @@ export default function PrivacyScreen() {
   const Row = ({ field, options }: { field: FieldKey; options: readonly string[] }) => (
     <TouchableOpacity
       className="flex-row items-center px-4 py-4 border-b border-gray-50 dark:border-zinc-800"
-      onPress={() => setPicker({ key: field, options })}
+      onPress={() => {
+        setPicker({ key: field, options });
+        setPickerOpen(true);
+      }}
     >
       <Text className="flex-1 text-lg text-gray-900 dark:text-zinc-100">
         {t(`privacy_settings.${LABEL_KEY[field]}` as any)}
@@ -172,7 +182,11 @@ export default function PrivacyScreen() {
       </ScrollView>
 
       {/* Sélecteur de valeur */}
-      <BottomSheet visible={picker !== null} onClose={() => setPicker(null)}>
+      <BottomSheet
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onClosed={() => setPicker(null)}
+      >
         <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 px-5 pt-1 pb-2">
           {picker ? t(`privacy_settings.${LABEL_KEY[picker.key]}` as any) : ''}
         </Text>
