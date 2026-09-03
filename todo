@@ -299,6 +299,23 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
   → boutons flottants decales de `composerOverlap` : le bas de la liste deborde sous la zone de saisie (marge negative), sans quoi ils se rangeraient derriere le verre du composeur.
   [PAS FAIT, a juger a l'usage] La date FLOTTANTE pendant le defilement (facon WhatsApp, qui s'estompe a l'arret). Les separateurs inline suffisent peut-etre.
 
+[FAIT 03/09 - WEB] Menus flottants en portail + clic droit.
+  `src/components/FloatingMenu.tsx`, partage par les trois menus (message, conversation, membre de groupe). Point de depart : le menu d'un membre s'inserait DANS la liste et poussait les lignes.
+  ⚠️ Rendu dans un PORTAIL sur `document.body` : les trois menus vivent dans des conteneurs en `overflow-y-auto`, ou un enfant en `absolute` est DECOUPE au bord — sur les dernieres lignes le menu se retrouvait tronque.
+  ⚠️ Repli mesure en `useLayoutEffect` : la hauteur reelle n'est connue qu'apres le rendu, et repositionner apres la peinture ferait sauter le menu d'une frame. Invisible tant qu'il n'est pas place.
+  ⚠️ Fermeture par ecouteurs DOCUMENT et non par un fond capteur : c'est ce qui permet d'enchainer un clic droit d'une ligne a l'autre. Avec un fond couvrant, le second menu ne s'ouvrait jamais.
+  ⚠️ Le clic gauche qui ferme est AVALE (`click` en capture, `once`) : sans ca, fermer le menu en cliquant sur une conversation l'ouvrirait au passage.
+  ⚠️ `openOnRightClick` PAS utilise dans `MessageBubble` : la fabrique est appelee pendant le rendu et le verificateur de purete ne peut pas prouver que le callback — qui lit `Date.now()` — ne s'execute pas immediatement.
+  COMPROMIS : le clic droit sur une image ou un lien DANS un message ouvre notre menu, plus celui du navigateur (donc plus de « Enregistrer l'image sous… »). C'est ce que fait WhatsApp Web. A revoir si ca gene.
+
+[FAIT 03/09 - WEB] Ecran « Vous » : theme clair/sombre + deconnexion deplacee.
+  `src/lib/theme.ts` + `src/components/ProfilePanel.tsx`, ouvert par l'icone en en-tete de la liste.
+  ⚠️ La variante `dark:` de Tailwind ecoute `prefers-color-scheme` PAR DEFAUT. Redefinie sur une CLASSE (`@custom-variant` dans `globals.css`) : sans ca, « Clair »/« Sombre » ne peut pas contredire le systeme.
+  ⚠️ Script INLINE en tete de `layout.tsx` : la page est rendue sur le SERVEUR, qui ne connait pas le `localStorage`. Sans lui, une app en sombre s'affiche en clair le temps de l'hydratation — eclair blanc a chaque chargement. Pendant web d'`initTheme()`. Inline et non differe, et dans un `try` (navigation privee stricte : lire `localStorage` LEVE).
+  ⚠️ Trois valeurs, pas un booleen : `system` doit CONTINUER a suivre l'OS s'il change a chaud → ecouteur `matchMedia`.
+  ⚠️ `color-scheme` pose en plus de la classe, sinon ascenseurs et champs natifs restent clairs.
+  PERIMETRE : nom, photo, bio, langue et confidentialite restent sur le MOBILE — les porter dupliquerait des ecrans entiers pour un client qui n'est pas l'appareil principal.
+
 [FAIT 03/09 - WEB] Icones : les emojis d'interface remplaces par `lucide-react`.
   Un emoji n'est PAS une icone — son dessin appartient au systeme d'exploitation, donc « 📌 » n'a pas la meme allure sur macOS, Windows et Android, et ne s'accorde avec rien autour.
   lucide choisie pour deux raisons concretes : `CheckCheck` (la double coche dessinee pour les accuses de lecture) et `Pin` — Heroicons n'a meme pas d'epingle, ce qui etait bloquant vu l'usage.
