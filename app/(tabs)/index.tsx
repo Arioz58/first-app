@@ -134,6 +134,19 @@ export default function ConversationsScreen() {
   const [requestCount, setRequestCount] = useState(0);
   const [fabOpen, setFabOpen] = useState(false);
   /**
+   * Action de feuille différée jusqu'au DÉMONTAGE de celle-ci.
+   *
+   * Partagée par les deux feuilles de l'écran (« … » d'une conversation et FAB) : elles ne
+   * peuvent pas être ouvertes en même temps, chacune étant un `Modal`.
+   *
+   * ⚠️ Ces actions présentent toutes un écran (une `Alert` native, une navigation). Les
+   * lancer au tap revient à présenter par-dessus une feuille encore en cours de fermeture :
+   * l'animation se voit mal, et iOS peut laisser un modal fantôme qui capte les touches.
+   * Même motif que `AttachmentSheet`, et exactement ce que le prop `onClosed` de
+   * `BottomSheet` existe pour permettre.
+   */
+  const pendingActionRef = useRef<(() => void) | null>(null);
+  /**
    * ⚠️ `useThemeColors()` et non la constante `NEXA` du fichier pour les icônes d'en-tête :
    * elles sont posées sur `bg-blue-950` en mode sombre, où `#1E40AF` n'aurait presque aucun
    * contraste. Le hook éclaircit l'accent en sombre, c'est précisément son rôle.
@@ -811,15 +824,25 @@ export default function ConversationsScreen() {
         <Ionicons name="add" size={30} color="#fff" />
       </TouchableOpacity>
 
-      <BottomSheet visible={fabOpen} onClose={() => setFabOpen(false)}>
+      {/* ⚠️ Même différé que la feuille « … » : ces actions NAVIGUENT, et pousser un écran
+          pendant que la feuille se referme superpose deux transitions. */}
+      <BottomSheet
+        visible={fabOpen}
+        onClose={() => setFabOpen(false)}
+        onClosed={() => {
+          const run = pendingActionRef.current;
+          pendingActionRef.current = null;
+          if (run) requestAnimationFrame(run);
+        }}
+      >
         <View className="pb-6 pt-2">
           {FAB_ACTIONS.map(({ key, icon, run }) => (
             <TouchableOpacity
               key={key}
               className="flex-row items-center px-5 py-4"
               onPress={() => {
+                pendingActionRef.current = () => run(router);
                 setFabOpen(false);
-                run(router);
               }}
             >
               <View className="w-11 h-11 rounded-full bg-blue-50 dark:bg-blue-950 items-center justify-center mr-4">
@@ -832,7 +855,18 @@ export default function ConversationsScreen() {
       </BottomSheet>
 
       {/* Actions sur une conversation (appui long). */}
-      <BottomSheet visible={!!actionTarget} onClose={() => setActionTarget(null)}>
+      <BottomSheet
+        visible={!!actionTarget}
+        onClose={() => setActionTarget(null)}
+        onClosed={() => {
+          const run = pendingActionRef.current;
+          pendingActionRef.current = null;
+          if (!run) return;
+          // Une frame de marge : le Modal vient d'être démonté côté React, iOS termine son
+          // retrait au run loop suivant.
+          requestAnimationFrame(run);
+        }}
+      >
         <View className="pb-6 pt-2">
           {actionTarget && (
             <>
@@ -889,8 +923,8 @@ export default function ConversationsScreen() {
                 label={t(isMuted(actionTarget) ? 'conv_actions.unmute' : 'conv_actions.mute')}
                 onPress={() => {
                   const target = actionTarget;
+                  pendingActionRef.current = () => muteMenu(target);
                   setActionTarget(null);
-                  muteMenu(target);
                 }}
               />
               <ConvAction
@@ -902,8 +936,8 @@ export default function ConversationsScreen() {
                 )}
                 onPress={() => {
                   const target = actionTarget;
+                  pendingActionRef.current = () => openInfo(target);
                   setActionTarget(null);
-                  openInfo(target);
                 }}
               />
               <ConvAction
@@ -911,8 +945,8 @@ export default function ConversationsScreen() {
                 label={t('conv_actions.clear')}
                 onPress={() => {
                   const target = actionTarget;
+                  pendingActionRef.current = () => clearChat(target);
                   setActionTarget(null);
-                  clearChat(target);
                 }}
               />
               {/* ⚠️ Bloquer n'a de sens qu'en conversation DIRECTE : on ne bloque pas un
@@ -924,8 +958,8 @@ export default function ConversationsScreen() {
                   label={t('moderation.block')}
                   onPress={() => {
                     const target = actionTarget;
+                    pendingActionRef.current = () => blockContact(target);
                     setActionTarget(null);
-                    blockContact(target);
                   }}
                 />
               )}
@@ -935,8 +969,8 @@ export default function ConversationsScreen() {
                 label={t('conv_actions.delete')}
                 onPress={() => {
                   const target = actionTarget;
+                  pendingActionRef.current = () => deleteConversation(target);
                   setActionTarget(null);
-                  deleteConversation(target);
                 }}
               />
             </>
