@@ -418,7 +418,16 @@
     "groups": "Groups",
     "empty_unread": "No unread conversations",
     "empty_favorites": "No favourite conversations",
-    "empty_groups": "No groups"
+    "empty_groups": "No groups",
+    "add": "New filter",
+    "name_placeholder": "Filter name",
+    "pick": "Choose conversations",
+    "save": "Save",
+    "edit": "Edit filter",
+    "delete": "Delete filter",
+    "delete_confirm": "This filter will be removed from the bar. Your chats are untouched.",
+    "empty": "No conversation in this filter.",
+    "selected": "{{count}} selected"
   },
   "conv_actions": {
     "pin": "Pin",

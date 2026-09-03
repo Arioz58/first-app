@@ -418,7 +418,16 @@
     "groups": "Gruplar",
     "empty_unread": "Okunmamış sohbet yok",
     "empty_favorites": "Favori sohbet yok",
-    "empty_groups": "Grup yok"
+    "empty_groups": "Grup yok",
+    "add": "Yeni filtre",
+    "name_placeholder": "Filtre adı",
+    "pick": "Sohbetleri seçin",
+    "save": "Kaydet",
+    "edit": "Filtreyi düzenle",
+    "delete": "Filtreyi sil",
+    "delete_confirm": "Bu filtre çubuktan kaldırılacak. Sohbetleriniz etkilenmez.",
+    "empty": "Bu filtrede sohbet yok.",
+    "selected": "{{count}} seçildi"
   },
   "conv_actions": {
     "pin": "Sabitle",

@@ -418,7 +418,16 @@
     "groups": "Groupes",
     "empty_unread": "Aucune conversation non lue",
     "empty_favorites": "Aucune conversation en favori",
-    "empty_groups": "Aucun groupe"
+    "empty_groups": "Aucun groupe",
+    "add": "Nouveau filtre",
+    "name_placeholder": "Nom du filtre",
+    "pick": "Choisissez les conversations",
+    "save": "Enregistrer",
+    "edit": "Modifier le filtre",
+    "delete": "Supprimer le filtre",
+    "delete_confirm": "Ce filtre sera retiré de la barre. Les conversations ne sont pas touchées.",
+    "empty": "Aucune conversation dans ce filtre.",
+    "selected": "{{count}} sélectionnée(s)"
   },
   "conv_actions": {
     "pin": "Épingler",

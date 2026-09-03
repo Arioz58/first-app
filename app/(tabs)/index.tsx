@@ -16,6 +16,14 @@ import {
   setUnreadCounts,
 } from '../../lib/unreadMessages';
 import { getUserId, setConversationClearedAt } from '../../lib/storage';
+import {
+  createCustomFilter,
+  deleteCustomFilter,
+  fetchCustomFilters,
+  updateCustomFilter,
+  type CustomFilter,
+} from '../../lib/customFilters';
+import { FilterEditorSheet } from '../../components/FilterEditorSheet';
 import { requestContactsSegment } from '../../lib/tabsNav';
 import { useThemeColors } from '../../lib/theme';
 import BottomSheet from '../../components/BottomSheet';
@@ -69,7 +77,16 @@ const FAB_ACTIONS: {
 ];
 
 const FILTERS = ['all', 'unread', 'favorites', 'groups'] as const;
-type Filter = (typeof FILTERS)[number];
+type BuiltinFilter = (typeof FILTERS)[number];
+/**
+ * Filtre actif : l'un des quatre intégrés, ou l'identifiant d'un filtre personnalisé.
+ *
+ * ⚠️ Un seul état pour les deux : ce sont des puces d'une même barre, dont une seule est
+ * active à la fois. Deux états séparés autoriseraient « Non lues » ET « Boulot » ensemble,
+ * ce que la barre ne sait pas montrer.
+ */
+type Filter = BuiltinFilter | { customId: string };
+const isBuiltin = (f: Filter): f is BuiltinFilter => typeof f === 'string';
 
 // Résultat de recherche dans le contenu des messages (backend).
 type SearchMsg = {
@@ -153,6 +170,14 @@ export default function ConversationsScreen() {
    */
   const colors = useThemeColors();
   const [filter, setFilter] = useState<Filter>('all');
+  // --- Filtres personnalisés ---
+  const [customFilters, setCustomFilters] = useState<CustomFilter[]>([]);
+  const [filterEditorOpen, setFilterEditorOpen] = useState(false);
+  /**
+   * ⚠️ Conservé jusqu'au DÉMONTAGE de la feuille, comme la cible des actions : la feuille
+   * tire son contenu de cette valeur, et la lâcher pour fermer escamoterait l'animation.
+   */
+  const [editingFilter, setEditingFilter] = useState<CustomFilter | null>(null);
   /**
    * Conversation affichée par la feuille « … », et ouverture de celle-ci.
    *
@@ -211,6 +236,12 @@ export default function ConversationsScreen() {
         currentUserIdRef.current = id;
       });
       fetchConversations();
+      // ⚠️ Rechargés au focus comme la liste : un filtre créé depuis un autre appareil doit
+      // apparaître ici. Échec silencieux — sans filtres, la barre garde ses quatre puces
+      // intégrées et l'écran reste utilisable.
+      fetchCustomFilters()
+        .then(setCustomFilters)
+        .catch(() => {});
     }, []),
   );
 
@@ -308,6 +339,15 @@ export default function ConversationsScreen() {
   const unreadTotal = active.filter((c) => c.unreadCount > 0 || c.manualUnread).length;
 
   const visible = active.filter((conv) => {
+    /**
+     * ⚠️ Filtre personnalisé = INTERSECTION avec la liste chargée. Un identifiant qui ne
+     * correspond à rien (conversation quittée, supprimée) ne désigne personne et s'ignore de
+     * lui-même — inutile de nettoyer la liste stockée en base.
+     */
+    if (!isBuiltin(filter)) {
+      const f = customFilters.find((x) => x.id === filter.customId);
+      return !!f && f.conversationIds.includes(conv.id);
+    }
     if (filter === 'unread') return conv.unreadCount > 0 || conv.manualUnread;
     if (filter === 'favorites') return !!conv.favoritedAt;
     if (filter === 'groups') return conv.type === 'group';
@@ -682,8 +722,15 @@ export default function ConversationsScreen() {
         />
       ) : (
       <>
-      {/* Filtres façon WhatsApp. Le bouton « ajouter un filtre » reste à faire. */}
-      <View className="flex-row px-4 pb-3">
+      {/* Filtres façon WhatsApp : les quatre intégrés, puis ceux de l'utilisateur, puis « + ».
+          ⚠️ Défilable horizontalement : le nombre de puces n'est plus borné, et sans cela les
+          filtres personnalisés seraient poussés hors de l'écran, sans moyen de les atteindre. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12, alignItems: 'center' }}
+      >
         {FILTERS.map((f) => {
           const active = filter === f;
           const badge = f === 'unread' && unreadTotal > 0 ? unreadTotal : null;
@@ -710,7 +757,43 @@ export default function ConversationsScreen() {
             </TouchableOpacity>
           );
         })}
-      </View>
+
+        {customFilters.map((f) => {
+          const active = !isBuiltin(filter) && filter.customId === f.id;
+          return (
+            <TouchableOpacity
+              key={f.id}
+              className={`rounded-full px-4 py-2 mr-2 ${active ? 'bg-nexa' : 'bg-gray-100 dark:bg-zinc-800'}`}
+              onPress={() => setFilter({ customId: f.id })}
+              // ⚠️ Modifier/supprimer se fait à l'APPUI LONG, pas par une croix sur la puce :
+              // une cible de suppression collée à une cible de sélection se touche par
+              // erreur, et il n'y a pas d'annulation.
+              onLongPress={() => {
+                setEditingFilter(f);
+                setFilterEditorOpen(true);
+              }}
+            >
+              <Text
+                className={`text-base font-semibold ${active ? 'text-white' : 'text-gray-600 dark:text-zinc-300'}`}
+                numberOfLines={1}
+              >
+                {f.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+
+        <TouchableOpacity
+          accessibilityLabel={t('filters.add')}
+          className="w-9 h-9 rounded-full bg-gray-100 dark:bg-zinc-800 items-center justify-center"
+          onPress={() => {
+            setEditingFilter(null);
+            setFilterEditorOpen(true);
+          }}
+        >
+          <Ionicons name="add" size={20} color={colors.nexa} />
+        </TouchableOpacity>
+      </ScrollView>
 
       <FlatList
         data={visible}
@@ -839,6 +922,69 @@ export default function ConversationsScreen() {
       >
         <Ionicons name="add" size={30} color="#fff" />
       </TouchableOpacity>
+
+      <FilterEditorSheet
+        visible={filterEditorOpen}
+        initial={editingFilter}
+        // La liste déjà chargée, ramenée au strict nécessaire pour la ligne de choix.
+        conversations={active.map((c) => ({
+          id: c.id,
+          name: getConvName(c),
+          photoUrl: (c.type === 'group' ? c.photoUrl : getOtherMember(c)?.user.photoUrl) ?? null,
+          isGroup: c.type === 'group',
+        }))}
+        onClose={() => setFilterEditorOpen(false)}
+        onSubmit={async (name, ids) => {
+          try {
+            if (editingFilter) {
+              const updated = await updateCustomFilter(editingFilter.id, {
+                name,
+                conversationIds: ids,
+              });
+              setCustomFilters((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+            } else {
+              const created = await createCustomFilter(name, ids);
+              setCustomFilters((prev) => [...prev, created]);
+              // On bascule sur le filtre qu'on vient de créer : c'est ce qu'on voulait voir.
+              setFilter({ customId: created.id });
+            }
+            setFilterEditorOpen(false);
+          } catch (e: any) {
+            Alert.alert(t('error'), e.message);
+          }
+        }}
+        onDelete={
+          editingFilter
+            ? () => {
+                const target = editingFilter;
+                Alert.alert(t('filters.delete'), t('filters.delete_confirm'), [
+                  { text: t('cancel'), style: 'cancel' },
+                  {
+                    text: t('filters.delete'),
+                    style: 'destructive',
+                    onPress: () => {
+                      setFilterEditorOpen(false);
+                      setCustomFilters((prev) => prev.filter((f) => f.id !== target.id));
+                      // Le filtre supprimé était peut-être actif : on retombe sur « Toutes »,
+                      // sinon la liste resterait vide sans puce sélectionnée.
+                      setFilter((cur) =>
+                        !isBuiltin(cur) && cur.customId === target.id ? 'all' : cur,
+                      );
+                      deleteCustomFilter(target.id).catch(() =>
+                        fetchCustomFilters()
+                          .then(setCustomFilters)
+                          .catch(() => {}),
+                      );
+                    },
+                  },
+                ]);
+              }
+            : undefined
+        }
+        // ⚠️ La cible n'est lâchée qu'au DÉMONTAGE : la feuille en tire son contenu, et la
+        // vider pour fermer escamoterait l'animation (même leçon que la feuille d'actions).
+        onClosed={() => setEditingFilter(null)}
+      />
 
       {/* ⚠️ Même différé que la feuille « … » : ces actions NAVIGUENT, et pousser un écran
           pendant que la feuille se referme superpose deux transitions. */}
