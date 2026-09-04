@@ -337,17 +337,25 @@ vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
 
 --- 1. BLOQUANTS POUR UN USAGE QUOTIDIEN ---
 
-[A FAIRE] ALBUMS : plusieurs medias d'un meme envoi s'affichent en autant de bulles.
-  `buildRows` regroupe deja par `batchId` cote web — c'est le RENDU qui manque, pas la
-  donnee. Porter `MediaGrid` (2 cote a cote, 3 = 2+1, 4+ = 2x2 avec « +N ») et `AlbumViewer`.
+[FAIT 04/09] POSITION dans le fil. Un message `type: 'location'` ne s'affichait PAS DU TOUT :
+  `MediaContent` sortait sur l'absence de `mediaUrl`, or une position n'a pas de piece jointe.
+  ⚠️ PAS de carte embarquee : une tuile chargee depuis un service tiers lui revelerait l'IP du
+  DESTINATAIRE et les coordonnees consultees — meme raisonnement que l'unfurl cote serveur.
+  Carte cliquable (adresse + coordonnees) qui ouvre Maps si l'on choisit d'y aller.
 
-[A FAIRE] DOCUMENTS : `mediaType === 'document'` n'est rendu NULLE PART dans la bulle.
-  ⚠️ Un PDF recu ne s'affiche pas du tout — silencieux, donc pire qu'une erreur.
-  Cote mobile : carte avec icone, nom et taille, plus `DocumentViewer` (WebView).
-  Sur le web, un lien de telechargement suffit : le navigateur SAIT deja afficher un PDF.
+⚠️ CORRECTION de l'analyse initiale : deux « trous » n'en etaient pas. Mon inventaire avait
+  cherche les NOMS DE COMPOSANTS MOBILES (`MediaGrid`, `AlbumViewer`) dans le code web, qui a
+  les siens. Verifie depuis dans `MessageBubble` :
+  - ALBUMS : deja rendus (grille 2 colonnes, « +N » au-dela de 4). Il manque seulement la
+    visionneuse paginee avec bande de miniatures du mobile (`AlbumViewer`) — confort, pas
+    contenu invisible. Le clic ouvre deja le media en plein ecran.
+  - DOCUMENTS : deja rendus (carte icone + nom + taille, ouverture dans un onglet). Complet
+    pour le web, ou le navigateur sait afficher un PDF sans visionneuse maison.
 
-[A FAIRE] POSITION : `type: 'location'` n'est pas rendu dans la bulle non plus.
-  L'apercu de la LISTE le gere deja (« 📍 Position »), pas le fil.
+[A FAIRE] ALBUMS : visionneuse paginee (bande de miniatures, navigation entre les medias d'un
+  meme envoi). Aujourd'hui un clic ouvre le media seul.
+
+[A FAIRE] ENVOI de documents et de GIFs (le mobile a `expo-document-picker` et Giphy).
 
 [A FAIRE] REPERE « N nouveaux messages » a l'ouverture.
   ⚠️ `firstUnreadId` / `unreadCount` sont TYPES dans `lib/messages.ts` mais jamais lus :
@@ -357,8 +365,6 @@ vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
 [A FAIRE] DEMANDES DE MESSAGES (`/conversations/requests`).
   ⚠️ Un inconnu qui ecrit est INVISIBLE sur le web : la liste ne montre que les
   conversations acceptees. Le mobile a une banniere + un ecran dedie.
-
-[A FAIRE] ENVOI de documents et de GIFs (le mobile a `expo-document-picker` et Giphy).
 
 --- 2. ECRANS ABSENTS ---
 
@@ -409,8 +415,8 @@ Appels audio/video (Mois 4), camera in-app, repertoire telephonique (inaccessibl
 un navigateur), position en direct, QR de profil.
 
 --- ORDRE RETENU ---
-1. Albums + documents + position dans la bulle (trois trous ou du contenu recu est
-   purement INVISIBLE — le pire defaut de la liste)
+1. [FAIT] Position dans la bulle. ⚠️ Albums et documents etaient DEJA rendus — mon inventaire
+   initial les avait crus absents en cherchant les noms des composants MOBILES dans le web.
 2. Repere de non-lus (la donnee est deja la, c'est du cablage)
 3. Demandes de messages
 4. Debloquer (fermer le cul-de-sac)
