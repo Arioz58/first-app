@@ -32,7 +32,7 @@ import { AudioModule } from 'expo-audio';
 import i18n from '../../lib/i18n';
 import { apiRequest } from '../../lib/api';
 import { connectSocket, getSocket } from '../../lib/socket';
-import { uploadFile } from '../../lib/upload';
+import { toUploadableImage, uploadFile } from '../../lib/upload';
 import { MessageMedia } from '../../components/MessageMedia';
 import { AttachmentSheet, type AttachAction } from '../../components/AttachmentSheet';
 import { PendingMediaBar, type PendingMedia } from '../../components/PendingMediaBar';
@@ -3042,7 +3042,16 @@ export default function ChatScreen() {
       const isLast = i === queue.length - 1;
       const draftId = drafts[i].id;
       try {
-        const url = await uploadFile(item.uri, item.contentType, 'chat');
+        /**
+         * ⚠️ Normalisé JUSTE AVANT l'envoi, pas à la sélection : la bulle optimiste affiche
+         * l'original du téléphone, qui s'y décode très bien. Convertir plus tôt retarderait
+         * l'aperçu sans rien apporter.
+         */
+        const src =
+          item.mediaType === 'image'
+            ? await toUploadableImage(item.uri, item.contentType)
+            : { uri: item.uri, contentType: item.contentType };
+        const url = await uploadFile(src.uri, src.contentType, 'chat');
         // L'écho du serveur est reconnu par cette URL : elle est notre seul lien avec la
         // vraie bulle, l'identifiant du message étant attribué côté serveur.
         linkDraft(draftId, url);

@@ -11,7 +11,7 @@ import { ForwardSheet } from '../components/ForwardSheet';
 import { StoryCamera, type CapturedMedia } from '../components/StoryCamera';
 import { getSocket } from '../lib/socket';
 import { useThemeColors } from '../lib/theme';
-import { uploadFile } from '../lib/upload';
+import { toUploadableImage, uploadFile } from '../lib/upload';
 
 /**
  * Raccourci appareil photo depuis l'en-tête de l'onglet Discussion.
@@ -75,7 +75,15 @@ export default function CaptureScreen() {
        * que le transfert d'un message. Téléverser par destinataire multiplierait le temps
        * d'attente et le stockage S3 pour un fichier identique.
        */
-      const url = await uploadFile(captured.uri, captured.mimeType, 'chat');
+      /**
+       * ⚠️ Normalisée comme n'importe quelle image : `takePictureAsync` rend du JPEG
+       * aujourd'hui, mais le faire dépendre de ce détail ferait resurgir le problème le jour
+       * où la caméra changera de format.
+       */
+      const src = isVideo
+        ? { uri: captured.uri, contentType: captured.mimeType }
+        : await toUploadableImage(captured.uri, captured.mimeType);
+      const url = await uploadFile(src.uri, src.contentType, 'chat');
       const socket = getSocket();
       if (!socket) throw new Error('socket');
 

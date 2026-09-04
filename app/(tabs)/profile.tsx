@@ -24,6 +24,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomSheet from '../../components/BottomSheet';
 import QrCode from '../../components/QrCode';
+import { toUploadableImage } from '../../lib/upload';
 import { apiRequest } from '../../lib/api';
 import { ROUND } from '../../lib/radius';
 import { SUPPORTED_LANGUAGES, setAppLanguage } from '../../lib/i18n';
@@ -237,14 +238,20 @@ export default function ProfileScreen() {
     const asset = result.assets[0];
     setUploading(true);
     try {
+      /**
+       * ⚠️ Re-encodée en vrai JPEG : une photo d'iPhone est en HEIC, qu'AUCUN navigateur ne
+       * décode. Déclarer `image/jpeg` sans convertir donnait un avatar invisible sur le
+       * client web — et un avatar cassé se remarque plus qu'une image de conversation.
+       */
+      const src = await toUploadableImage(asset.uri);
       const { uploadUrl, publicUrl } = await apiRequest<{ uploadUrl: string; publicUrl: string }>(
         '/upload/presigned-url',
-        { method: 'POST', body: { contentType: 'image/jpeg' } },
+        { method: 'POST', body: { contentType: src.contentType } },
       );
-      const blob = await fetch(asset.uri).then((r) => r.blob());
+      const blob = await fetch(src.uri).then((r) => r.blob());
       const up = await fetch(uploadUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': 'image/jpeg' },
+        headers: { 'Content-Type': src.contentType },
         body: blob,
       });
       if (!up.ok) throw new Error('upload');
