@@ -3693,6 +3693,17 @@ export default function ChatScreen() {
           const group = msg.batchId
             ? messages.filter((m) => m.batchId === msg.batchId)
             : [msg];
+          /**
+           * ⚠️ Un brouillon N'EST PAS TRANSFÉRABLE : son `mediaUrl` est encore le chemin
+           * LOCAL du fichier, le téléversement n'étant pas fini. Le transférer envoyait ce
+           * chemin au serveur — le message s'affichait chez soi (le fichier est là) et nulle
+           * part ailleurs. Un cas réellement rencontré, retrouvé en base sous la forme d'une
+           * `mediaUrl` en `file:///…/CoreSimulator/…`.
+           */
+          if (group.some((m) => m.pendingLocal)) {
+            Alert.alert('', t('chat.forward_pending'));
+            break;
+          }
           setForwarding(group);
           break;
         }
@@ -3721,7 +3732,7 @@ export default function ChatScreen() {
           break;
       }
     },
-    [messages, toQuote, togglePin, toggleStar, confirmDelete, text],
+    [messages, toQuote, togglePin, toggleStar, confirmDelete, text, t],
   );
 
   /**
@@ -3768,7 +3779,14 @@ export default function ChatScreen() {
        * donc explicitement plutôt que de se fier à l'ordre de sélection, qui suit les
        * appuis de l'utilisateur.
        */
-      const ordered = [...msgs].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      /**
+       * ⚠️ Dernière garde : aucun brouillon ne doit partir, quel que soit le chemin d'appel.
+       * Son `mediaUrl` est le fichier LOCAL, inutilisable par qui que ce soit d'autre.
+       */
+      const ordered = [...msgs]
+        .filter((m) => !m.pendingLocal)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      if (!ordered.length) return;
       for (const convId of conversationIds) {
         /**
          * ⚠️ Les albums sont re-groupés par un batchId NEUF, propre à ce transfert.
@@ -4504,8 +4522,10 @@ export default function ChatScreen() {
                 // ⚠️ On ne garde que les messages RÉELLEMENT transférables : un message
                 // supprimé n'a plus de contenu, et un éphémère sorti de sa conversation
                 // perdrait sa durée de vie. Les filtrer ici évite d'envoyer des bulles vides.
+                // ⚠️ `pendingLocal` exclu au même titre : voir le transfert d'un message
+                // seul, plus haut — son `mediaUrl` est encore un chemin local.
                 const picked = messages.filter(
-                  (m) => selection.includes(m.id) && !m.deletedAt && !m.expiresAt,
+                  (m) => selection.includes(m.id) && !m.deletedAt && !m.expiresAt && !m.pendingLocal,
                 );
                 if (!picked.length) {
                   Alert.alert('', t('chat.nothing_to_forward'));
