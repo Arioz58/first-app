@@ -324,6 +324,99 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
   ⚠️ Variante C la plus risquee : sur une photo perso contrastee le nom peut devenir illisible.
   [A FAIRE] Une fois la variante retenue : garder la seule branche choisie, retirer l'entree de menu, supprimer `lib/headerStyle.ts` et les cles `header_style.*`. Marche a suivre en tete de `lib/headerStyle.ts`.
 
+================================================================================
+CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
+================================================================================
+Inventaire complet des deux applications. Ce qui n'est PAS liste ici est au niveau
+du mobile : fil de discussion (reactions, citations, transfert, edition,
+suppression, epingles, favoris, recherche dans la conversation, accuses, frappe,
+presence, ephemeres, apercus de liens, bandeaux systeme), liste des conversations
+(filtres integres ET personnalises, archives, sourdine, epinglage, non-lu manuel,
+menus au clic droit), panneau de details avec moderation de groupe complete,
+vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
+
+--- 1. BLOQUANTS POUR UN USAGE QUOTIDIEN ---
+
+[A FAIRE] ALBUMS : plusieurs medias d'un meme envoi s'affichent en autant de bulles.
+  `buildRows` regroupe deja par `batchId` cote web — c'est le RENDU qui manque, pas la
+  donnee. Porter `MediaGrid` (2 cote a cote, 3 = 2+1, 4+ = 2x2 avec « +N ») et `AlbumViewer`.
+
+[A FAIRE] DOCUMENTS : `mediaType === 'document'` n'est rendu NULLE PART dans la bulle.
+  ⚠️ Un PDF recu ne s'affiche pas du tout — silencieux, donc pire qu'une erreur.
+  Cote mobile : carte avec icone, nom et taille, plus `DocumentViewer` (WebView).
+  Sur le web, un lien de telechargement suffit : le navigateur SAIT deja afficher un PDF.
+
+[A FAIRE] POSITION : `type: 'location'` n'est pas rendu dans la bulle non plus.
+  L'apercu de la LISTE le gere deja (« 📍 Position »), pas le fil.
+
+[A FAIRE] REPERE « N nouveaux messages » a l'ouverture.
+  ⚠️ `firstUnreadId` / `unreadCount` sont TYPES dans `lib/messages.ts` mais jamais lus :
+  le fil s'ouvre toujours en bas, sans dire ou l'on s'etait arrete. Le serveur les calcule
+  deja (seul lui peut les trouver sans charger tout l'historique).
+
+[A FAIRE] DEMANDES DE MESSAGES (`/conversations/requests`).
+  ⚠️ Un inconnu qui ecrit est INVISIBLE sur le web : la liste ne montre que les
+  conversations acceptees. Le mobile a une banniere + un ecran dedie.
+
+[A FAIRE] ENVOI de documents et de GIFs (le mobile a `expo-document-picker` et Giphy).
+
+--- 2. ECRANS ABSENTS ---
+
+[A FAIRE] PROFIL D'UN AUTRE UTILISATEUR (`app/user/[id].tsx`).
+  Bio, ville, amis en commun, boutons dynamiques selon `relationStatus`.
+  ⚠️ Son absence a deja force un contournement : les actions de la recherche par numero
+  sont portees par la CARTE faute d'ecran ou les mettre.
+
+[A FAIRE] CONFIDENTIALITE (`app/privacy.tsx`) : 8 reglages + accuses de lecture.
+
+[A FAIRE] UTILISATEURS BLOQUES (`app/blocked.tsx`).
+  ⚠️ CUL-DE-SAC actuel : on peut bloquer depuis les details, mais pas debloquer.
+
+[A FAIRE] GALERIE PAR CATEGORIE (`app/chat/media.tsx`).
+  Les compteurs sont deja affiches dans le panneau de details, mais rien ne s'ouvre au clic.
+
+[A FAIRE] SUGGESTIONS D'AMIS (`/friends/suggestions`) — endpoint jamais appele par le web.
+
+[A JUGER] STORIES (viewer, editeur, barre). Hors perimetre V1 web jusqu'ici — a confirmer
+  avec le client avant d'y toucher, c'est le plus gros morceau de la liste.
+
+--- 3. CONFORT ET FINITION ---
+
+[A FAIRE] i18n (tr / fr / en). ⚠️ Le web est en FRANCAIS EN DUR.
+  Bloquant pour le marche turc : le client final ne peut pas utiliser le web tel quel.
+
+[A FAIRE] TRADUCTION DES BANDEAUX SYSTEME. Ils arrivent bien, mais leur `content` est une
+  cle i18n en JSON : `MessageBubble` les ecarte donc silencieusement. Depend de l'i18n.
+
+[A FAIRE] RECHERCHE GLOBALE dans les messages (`/conversations/search-messages`).
+  La liste ne cherche aujourd'hui que dans les NOMS de conversation.
+
+[A FAIRE] AMIS EN COMMUN (`/users/:id/mutual-friends`) — depend de l'ecran profil.
+
+[A FAIRE] NOTIFICATIONS NAVIGATEUR (Web Push). Aucune alerte quand l'onglet est en
+  arriere-plan. ⚠️ Chantier a part : Service Worker + VAPID, sans rapport avec Expo Push.
+
+[A FAIRE] PERSONNALISATION DE CONVERSATION (fond, surnom, couleur de bulle) et
+  « effacer la conversation ». ⚠️ Local en SecureStore sur mobile → `localStorage` sur le
+  web, avec le meme ecart assume (perdu au changement de navigateur).
+
+[A FAIRE] REPONSE A UNE STORY, MINI-LECTEUR VOCAL hors conversation, VISIONNEUSE DE
+  DOCUMENTS in-app.
+
+--- 4. HORS PERIMETRE RAISONNABLE ---
+
+Appels audio/video (Mois 4), camera in-app, repertoire telephonique (inaccessible depuis
+un navigateur), position en direct, QR de profil.
+
+--- ORDRE RETENU ---
+1. Albums + documents + position dans la bulle (trois trous ou du contenu recu est
+   purement INVISIBLE — le pire defaut de la liste)
+2. Repere de non-lus (la donnee est deja la, c'est du cablage)
+3. Demandes de messages
+4. Debloquer (fermer le cul-de-sac)
+5. i18n turc/anglais
+6. Profil utilisateur, confidentialite, galerie
+
 [FAIT 03/09 - WEB] Menus flottants en portail + clic droit.
   `src/components/FloatingMenu.tsx`, partage par les trois menus (message, conversation, membre de groupe). Point de depart : le menu d'un membre s'inserait DANS la liste et poussait les lignes.
   ⚠️ Rendu dans un PORTAIL sur `document.body` : les trois menus vivent dans des conteneurs en `overflow-y-auto`, ou un enfant en `absolute` est DECOUPE au bord — sur les dernieres lignes le menu se retrouvait tronque.
