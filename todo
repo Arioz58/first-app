@@ -327,6 +327,31 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 05/09 - demande client, 3e passe] BOUTON D'ACTION FLOTTANT du composeur.
+  Reference donnee par le client : https://motion.dev/examples/vue-floating-action-button
+  Le « + » ne deroule plus un menu en LISTE (`FloatingMenu`) mais se deploie en COLONNE de
+  pastilles decalees dans le temps, chacune avec son libelle en infobulle au survol.
+  ⚠️ Le code de l'exemple est derriere Motion+ (payant), la demo aussi — les deux pages
+    servies sont des coquilles. Reconstruit a partir de la description publique (« un FAB qui
+    se deploie en menu vertical decale, avec ressorts et libelles en infobulle ») et des APIs
+    qu'elle cite : AnimatePresence, whileHover, whilePress (= `whileTap` en React).
+  ⚠️ Deploiement vers le HAUT : le composeur est en bas, une colonne descendante sortirait de
+    la fenetre. `flex-col-reverse` — le PREMIER du DOM (Documents) s'affiche le plus BAS, donc
+    au plus pres du bouton, et c'est lui qui apparait en premier.
+  ⚠️ La cascade S'INVERSE a la fermeture (`staggerDirection: -1`) : les actions rentrent dans
+    le bouton en commencant par la plus eloignee. Sinon la colonne se replie a l'envers de la
+    facon dont elle s'est ouverte et le mouvement parait accidentel.
+  ⚠️ DEUX DEFAUTS VUS A LA CAPTURE, pas au test : (1) l'infobulle ne s'affichait JAMAIS — le
+    `group` etait sur le bouton alors que le libelle est son VOISIN, pas son descendant ;
+    (2) pastilles blanches sur bulles blanches, illisibles — voile `bg-black/20` ajoute, qui
+    les detache sans masquer la conversation.
+  ⚠️ PIEGE DE TEST : `ul li button` attrapait aussi les lignes de la liste des conversations
+    (17 boutons au lieu de 5). Et la cascade se mesure sur l'OPACITE, pas sur le nombre
+    d'elements : les cinq sont dans le DOM des l'ouverture.
+  Verifie : 5 actions, ordre, deploiement vers le haut, opacites 0.64/0.42/0.18/0.01/0 a
+    120 ms (donc cascade reelle), « + » pivote, action qui ouvre son ecran, clic a cote qui
+    referme.
+
 [FAIT 05/09 - demande client, 2e passe] TRANSFORMATIONS PARTAGEES (`layoutId`).
   Le client a designe https://examples.motion.dev/react/ios-app-folder comme reference :
   « fluide avec du rebond ». Le coeur de cet exemple n'est pas un reglage de ressort mais un
