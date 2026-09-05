@@ -327,6 +327,24 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 05/09 - demande client] REBOND sur l'envoi/reception des messages.
+  Ressort dedie `bounce` (`lib/motion.ts`), plus lache que le `soft` commun : la bulle DEPASSE
+  sa place puis revient, et c'est ce depassement qui se lit comme du rebond.
+  ⚠️ L'amplitude du depassement vaut `e^(-πζ/√(1-ζ²))` du trajet. C'est ce qui permet de
+    REGLER plutot que de tatonner :
+      ζ 0.50 (320/18) → 16 % → 4.5 px : juge trop marque
+      ζ 0.58 (300/20) → 11 % → 3.0 px : encore un peu
+      ζ 0.64 (300/22) → 7.6 % → 1.8 px : RETENU
+    Baisser `damping` accentue le rebond, le monter l'efface.
+  ⚠️ Le trajet de depart fait partie du reglage (24 px) : le depassement etant un POURCENTAGE
+    du trajet, une amplitude trop faible ne laisse rien voir et l'effet retombe a un fondu.
+  ⚠️ Le rebond porte sur la TRANSLATION seule, jamais sur l'echelle : une bulle qui grossit
+    au-dela de sa taille rend son texte flou pendant tout le depassement — et une bulle, c'est
+    presque toujours du texte.
+  ⚠️ PIEGE DE TEST : le harnais cherchait la bulle par son TEXTE, et retrouvait celle du run
+    precedent — deja posee, donc transform nul et « aucun rebond ». Texte unique horodate.
+  Mesure : x de -24 px → +1.8 px (depassement) → 0, y jusqu'a -1 px, repos exact a (0,0).
+
 [FAIT 05/09 - demande client, 4e passe] LE PRINCIPE DU FAB ETENDU A TOUTE L'APP WEB.
   Le client a valide l'animation du bouton d'action du composeur et demande de s'en inspirer
   partout. Principe retenu, ecrit en tete de `lib/motion.ts` : UNE CHOSE VIENT DE LA OU ON L'A
