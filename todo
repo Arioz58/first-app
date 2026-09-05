@@ -352,7 +352,9 @@ vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
   - DOCUMENTS : deja rendus (carte icone + nom + taille, ouverture dans un onglet). Complet
     pour le web, ou le navigateur sait afficher un PDF sans visionneuse maison.
 
-[A FAIRE] ALBUMS : visionneuse paginee (bande de miniatures, navigation entre les medias d'un
+[FAIT] ALBUMS : visionneuse paginee  — Visionneuse en carrousel (fleches + bande de miniatures) livree.
+  (ancienne entree ci-dessous, conservee pour le contexte)
+  [detail]  (bande de miniatures, navigation entre les medias d'un
   meme envoi). Aujourd'hui un clic ouvre le media seul.
 
 [FAIT] ENVOI de documents et de GIFs.
@@ -409,28 +411,50 @@ vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
     cesseront de fonctionner a la revocation, jusqu'au prochain build EAS. Le reste de
     l'application n'est pas affecte.
 
-[A FAIRE] REPERE « N nouveaux messages » a l'ouverture.
+[FAIT] REPERE « N nouveaux messages »  — Bandeau de reprise livre, alimente par firstUnreadId/unreadCount.
+  (ancienne entree ci-dessous, conservee pour le contexte)
+  [detail]  a l'ouverture.
   ⚠️ `firstUnreadId` / `unreadCount` sont TYPES dans `lib/messages.ts` mais jamais lus :
   le fil s'ouvre toujours en bas, sans dire ou l'on s'etait arrete. Le serveur les calcule
   deja (seul lui peut les trouver sans charger tout l'historique).
 
-[A FAIRE] DEMANDES DE MESSAGES (`/conversations/requests`).
+[FAIT] DEMANDES DE MESSAGES  — MessageRequestsPanel livre (liste + accepter/refuser).
+  (ancienne entree ci-dessous, conservee pour le contexte)
+  [detail]  (`/conversations/requests`).
   ⚠️ Un inconnu qui ecrit est INVISIBLE sur le web : la liste ne montre que les
   conversations acceptees. Le mobile a une banniere + un ecran dedie.
 
 --- 2. ECRANS ABSENTS ---
 
-[A FAIRE] PROFIL D'UN AUTRE UTILISATEUR (`app/user/[id].tsx`).
+[FAIT] PROFIL D'UN AUTRE UTILISATEUR  — UserProfileDialog livre, ouvrable depuis le fil ET la liste des membres d'un groupe.
+  (ancienne entree ci-dessous, conservee pour le contexte)
+  [detail]  (`app/user/[id].tsx`).
   Bio, ville, amis en commun, boutons dynamiques selon `relationStatus`.
   ⚠️ Son absence a deja force un contournement : les actions de la recherche par numero
   sont portees par la CARTE faute d'ecran ou les mettre.
 
-[A FAIRE] CONFIDENTIALITE (`app/privacy.tsx`) : 8 reglages + accuses de lecture.
+[FAIT] CONFIDENTIALITE (5 sept. 2026) — `components/PrivacyPanel.tsx`, sous-vue du panneau
+  « Vous », meme schema que la liste des bloques. Les 8 reglages + partage de localisation +
+  accuses de lecture, servis par /users/me (le profil porte deja tout : aucun endpoint neuf).
+  - Libelles REPRIS TELS QUELS du mobile dans les 3 langues : meme reglage, memes mots.
+  - `<select>` natif plutot qu'une reprise de la feuille du mobile — controle idiomatique du
+    web, navigable au clavier, rendu comme un selecteur natif sur navigateur mobile.
+  - Mise a jour OPTIMISTE avec retour en arriere si le serveur refuse. Le serveur ignore
+    silencieusement une valeur qu'il ne reconnait pas : afficher un reglage qu'il n'a pas
+    retenu ferait croire a une protection inexistante. Verifie en retardant la reponse, sans
+    quoi l'echec revenait trop vite pour distinguer « optimiste puis annule » de « inerte ».
+  - « Qui voit ma localisation » n'apparait que si le partage est actif (regle du mobile).
+  ⚠️ Rien n'est applique ici : le serveur filtre deja chaque champ. Une confidentialite
+    verifiee dans le navigateur se contourne en modifiant le navigateur.
+  ⚠️ `Row`/`Toggle` sont definis HORS du composant : a l'interieur, React les voit comme un
+    type different a chaque rendu et REMONTE le sous-arbre — une liste ouverte se refermait.
 
-[A FAIRE] UTILISATEURS BLOQUES (`app/blocked.tsx`).
-  ⚠️ CUL-DE-SAC actuel : on peut bloquer depuis les details, mais pas debloquer.
+[FAIT] UTILISATEURS BLOQUES — deja livre dans le panneau « Vous » (liste + debloquer).
+  L'entree du todo etait perimee.
 
-[A FAIRE] GALERIE PAR CATEGORIE (`app/chat/media.tsx`).
+[FAIT] GALERIE PAR CATEGORIE  — MediaGalleryView livre (compteurs par categorie, filtrage, retour aux infos).
+  (ancienne entree ci-dessous, conservee pour le contexte)
+  [detail]  (`app/chat/media.tsx`).
   Les compteurs sont deja affiches dans le panneau de details, mais rien ne s'ouvre au clic.
 
 [A FAIRE] SUGGESTIONS D'AMIS (`/friends/suggestions`) — endpoint jamais appele par le web.
@@ -440,16 +464,22 @@ vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
 
 --- 3. CONFORT ET FINITION ---
 
-[A FAIRE] i18n (tr / fr / en). ⚠️ Le web est en FRANCAIS EN DUR.
+[FAIT] i18n (tr / fr / en)  — ~294 cles, dont 77 reprises telles quelles du mobile. Langue en cookie (lisible au rendu serveur).
+  (ancienne entree ci-dessous, conservee pour le contexte)
+  [detail] . ⚠️ Le web est en FRANCAIS EN DUR.
   Bloquant pour le marche turc : le client final ne peut pas utiliser le web tel quel.
 
-[A FAIRE] TRADUCTION DES BANDEAUX SYSTEME. Ils arrivent bien, mais leur `content` est une
+[FAIT] TRADUCTION DES BANDEAUX SYSTEME  — systemText() parse la cle JSON et la traduit.
+  (ancienne entree ci-dessous, conservee pour le contexte)
+  [detail] . Ils arrivent bien, mais leur `content` est une
   cle i18n en JSON : `MessageBubble` les ecarte donc silencieusement. Depend de l'i18n.
 
 [A FAIRE] RECHERCHE GLOBALE dans les messages (`/conversations/search-messages`).
   La liste ne cherche aujourd'hui que dans les NOMS de conversation.
 
-[A FAIRE] AMIS EN COMMUN (`/users/:id/mutual-friends`) — depend de l'ecran profil.
+[FAIT] AMIS EN COMMUN  — fetchMutualFriends branche sur la fiche profil.
+  (ancienne entree ci-dessous, conservee pour le contexte)
+  [detail]  (`/users/:id/mutual-friends`) — depend de l'ecran profil.
 
 [A FAIRE] NOTIFICATIONS NAVIGATEUR (Web Push). Aucune alerte quand l'onglet est en
   arriere-plan. ⚠️ Chantier a part : Service Worker + VAPID, sans rapport avec Expo Push.
