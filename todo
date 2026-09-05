@@ -618,9 +618,30 @@ vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
     traverse jusqu'aux zones de navigation posees derriere et fait passer la story.
     ⚠️ Liste ouverte ou profil ouvert = story EN PAUSE, sinon elle defile pendant qu'on lit.
 
-  [A FAIRE] CREATION d'une story depuis le web : photo/video depuis le disque ou la webcam
-    (`CameraCapture` existe deja), fond colore, et au moins un texte. L'editeur riche du
-    mobile (gestes, rognage video, stickers) n'a pas vocation a etre porte tel quel.
+  [FAIT 05/09] CREATION d'une story depuis le web — `components/StoryComposer.tsx`.
+    Trois sources : photo/video du disque, WEBCAM (reutilise `CameraCapture` ecrit pour le
+    chat), ou fond colore. Un texte, DEPLACABLE a la souris, avec palette de couleurs, mode
+    de fond (aucun / translucide / plein) et gras/italique/souligne. Presets de fond pour les
+    stories texte. Acces : tuile « + » quand je n'ai aucune story, badge « + » dans le coin de
+    ma vignette sinon (regle du mobile : le tap sur l'avatar reste « visionner »).
+    ⚠️ PERIMETRE ASSUME : UN texte, pas de pincement/rotation/stickers/rognage video. Porter
+      l'editeur gestuel du mobile reviendrait a le reecrire pour un client qui n'est pas
+      l'appareil de capture. La LECTURE, elle, reste complete : une story composee sur
+      telephone s'affiche integralement sur le web.
+    ⚠️ L'apercu utilise `textStyle()`, la MEME fonction que la visionneuse. Un style « a peu
+      pres pareil » pour l'editeur ferait diverger ce qu'on compose de ce qu'on publie.
+    ⚠️ Les positions sont enregistrees NORMALISEES (0..1), bornees a 0.05-0.95 : un texte
+      lache hors du cadre serait invisible et irrecuperable.
+    ⚠️ DEFAUT TROUVE AU TEST : le cadre mesurait 0 × 0. `aspect-[9/16]` ne fabrique pas de
+      dimension, il impose un RAPPORT entre deux cotes dont au moins un doit etre connu ; avec
+      un simple `max-h`, ni l'image ni les textes ne se rendaient. Hauteur explicite posee.
+    ⚠️ Les trois boutons de source sont ecrits un par un et non produits par un `map` : le
+      tableau construit au rendu contenait un acces a `fileRef`, signale par React comme une
+      lecture de ref pendant le rendu.
+    VERIFIE cote base : la story publiee depuis le web porte EXACTEMENT le meme jeu de champs
+      que celles du mobile (bgMode, bold, color, content, italic, kind, normX, normY,
+      rotation, scale, underline) — c'est la garantie qu'elle s'affichera a l'identique sur
+      telephone. Media televerse dans le dossier `stories/` et relu sur S3 en 200.
 
 Appels audio/video (Mois 4), camera in-app, repertoire telephonique (inaccessible depuis
 un navigateur), position en direct, QR de profil.
