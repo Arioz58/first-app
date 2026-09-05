@@ -599,7 +599,7 @@ vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
   « effacer la conversation ». ⚠️ Local en SecureStore sur mobile → `localStorage` sur le
   web, avec le meme ecart assume (perdu au changement de navigateur).
 
-[EN COURS 05/09] STORIES sur le web — VISIONNAGE livre, creation a faire.
+[FAIT 05/09] STORIES sur le web — visionnage ET creation livres.
   `lib/stories.ts` + `components/StoriesBar.tsx` + `components/StoryViewer.tsx`.
   Barre en tete de liste (anneau degrade si non vu, « Ma story » en tete, visible seulement
   sur le filtre « Toutes »), visionneuse plein ecran : barres de progression, clic gauche /
@@ -821,6 +821,9 @@ un navigateur), position en direct, QR de profil.
     [A FAIRE - Mois 5, hardening] Fenetre TOCTOU : le nom peut changer d'adresse entre la verification DNS et la connexion. La parade complete est un agent HTTP qui verifie l'IP au moment de la connexion (`lookup` personnalise sur l'agent). Attaque nettement plus difficile, et les autres gardes tiennent.
 
 [A FAIRE - B2 recherche] Recherche Messages : quand on tape un resultat de la section "Messages", ouvrir la conversation ET defiler jusqu'au message exact + le surligner (comme WhatsApp). Actuellement (B1) on ouvre juste la conversation sans se positionner sur le message.
+  ⚠️ CONCERNE LE MOBILE UNIQUEMENT. Fait cote WEB le 05/09 (`?m=<id>` dans l'adresse +
+  fenetre centree `/messages/around/`) — voir la section CLIENT WEB. La mecanique y est
+  eprouvee et transposable : c'est `jumpTo` + le maintien de position par `holdRef`.
   → necessite la pagination "autour d'un message" dans le chat (charger l'historique autour d'un id, pas seulement la derniere page). Le relais lib/chatNav (requestScrollToMessage) existe deja mais ne marche que si le message est deja dans la page chargee.
 
 [FAIT 01-02/09 - LOT 5 + REFONTE PERF] Recherche dans la conversation, puis migration FlashList.
