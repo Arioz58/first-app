@@ -326,6 +326,12 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
+
+ORDRE DE TRAVAIL ARRETE AVEC LE CLIENT LE 05/09/2026 :
+  1. Recherche globale dans les messages
+  2. Notifications navigateur
+  3. Stories
+  Ecartes : suggestions d'amis, personnalisation de conversation, mini-lecteur vocal.
 ================================================================================
 Inventaire complet des deux applications. Ce qui n'est PAS liste ici est au niveau
 du mobile : fil de discussion (reactions, citations, transfert, edition,
@@ -457,7 +463,8 @@ vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
   [detail]  (`app/chat/media.tsx`).
   Les compteurs sont deja affiches dans le panneau de details, mais rien ne s'ouvre au clic.
 
-[A FAIRE] SUGGESTIONS D'AMIS (`/friends/suggestions`) — endpoint jamais appele par le web.
+[ECARTE] SUGGESTIONS D'AMIS  — ECARTE par le client le 05/09/2026 : pas de besoin. L'endpoint /friends/suggestions reste dispo cote serveur si ca revient.
+  [contexte d'origine]  (`/friends/suggestions`) — endpoint jamais appele par le web.
 
 [A JUGER] STORIES (viewer, editeur, barre). Hors perimetre V1 web jusqu'ici — a confirmer
   avec le client avant d'y toucher, c'est le plus gros morceau de la liste.
@@ -474,7 +481,46 @@ vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
   [detail] . Ils arrivent bien, mais leur `content` est une
   cle i18n en JSON : `MessageBubble` les ecarte donc silencieusement. Depend de l'i18n.
 
-[A FAIRE] RECHERCHE GLOBALE dans les messages (`/conversations/search-messages`).
+[FAIT 05/09] RECHERCHE GLOBALE dans les messages — `components/SearchResults.tsx`.
+  Trois sections : Discussions (noms, filtre local) · Messages (contenu, serveur, deboucee
+  300 ms, anti-course) · Contacts (/friends?q=). Une section absente n'est pas affichee.
+  ⚠️ Les pastilles de filtre sont MASQUEES pendant une recherche : elle parcourt toutes les
+    conversations, afficher un filtre actif annoncerait un perimetre qui n'est pas celui des
+    resultats. Chercher « Marie » depuis « Non lues » sans rien trouver serait incomprehensible.
+  ⚠️ Les resultats portent LE TERME qui les a produits (`{term, hits, contacts}`) au lieu
+    d'etre vides dans un effet : le vidage etait un `setState` synchrone (interdit par React
+    19), et sans le terme on voyait un instant les resultats du mot precedent sous le nouveau.
+  ⚠️ L'extrait est RECENTRE sur la correspondance : un message de plusieurs paragraphes dont
+    le mot cherche est a la fin affichait son debut, et le resultat paraissait faux.
+
+  SAUT VERS LE MESSAGE (l'equivalent de l'item B2, jamais fait sur mobile) :
+  - `?m=<id>` dans l'ADRESSE plutot qu'un relais memoire facon `lib/chatNav` : sur le web
+    c'est une vraie adresse, qui survit a un rechargement. RETIRE une fois consomme — sinon,
+    en cherchant deux fois le meme message depuis la conversation deja ouverte, l'adresse ne
+    changerait pas et le second clic ne ferait visiblement rien.
+  - La cible PRIME sur le repere de non-lus au chargement, et ouvre directement une fenetre
+    centree (`/messages/around/`) quand elle est hors de la derniere page.
+  ⚠️ DEFAUT TROUVE ET CORRIGE AU PASSAGE — `jumpTo` n'utilisait pas `holdRef`, contrairement
+    au repere de reprise. `scrollIntoView` vise une hauteur PROVISOIRE : les images se
+    chargent sur plusieurs secondes (scrollHeight mesure a 3481 → 5466 entre 1 s et 2,5 s) et
+    le message rejoint derivait HORS DE L'ECRAN, 460 px au-dessus du bord haut. Le calage
+    (`settle`, 1,2 s) avait deja renonce. Corrige en retenant la position via `holdRef`
+    (ResizeObserver), libere au premier defilement volontaire. Touchait AUSSI les sauts vers
+    un epingle ou un favori — le meme `jumpTo` les sert.
+  Verifie : message en plein milieu de l'historique (269 avant / 343 apres) centre a 4 px et
+    STABLE a 6 s, surlignage, parametre retire, second saut vers le meme message, molette qui
+    libere le maintien, 3 sections simultanees, insensible a la casse.
+
+[FAIT 05/09 - BACKEND] La recherche globale ne respectait PAS les regles du fil.
+  `searchMessages` refiltrait a la main au lieu de passer par `liveMessages` — dont le
+  commentaire annonce pourtant la recherche parmi ses appelants. Consequences : un message
+  efface « pour moi » et l'historique d'une conversation supprimee pour moi remontaient dans
+  les resultats, et cliquer un tel resultat sautait dans le vide (le fil ne le contient pas).
+  Corrige : une clause PAR CONVERSATION (la coupure `deletedAt` est propre a chaque adhesion)
+  + `hiddenFor`. ⚠️ Le filtre des ephemeres passe dans `AND` : `OR` est deja pris au premier
+  niveau par les adhesions, et deux cles `OR` sur le meme objet s'ecrasent en silence.
+  Verifie : 16 → 15 resultats apres effacement pour soi, et l'autre utilisateur le voit encore.
+  ⚠️ Corrige AUSSI le mobile, qui appelle le meme endpoint.
   La liste ne cherche aujourd'hui que dans les NOMS de conversation.
 
 [FAIT] AMIS EN COMMUN  — fetchMutualFriends branche sur la fiche profil.
@@ -484,13 +530,15 @@ vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
 [A FAIRE] NOTIFICATIONS NAVIGATEUR (Web Push). Aucune alerte quand l'onglet est en
   arriere-plan. ⚠️ Chantier a part : Service Worker + VAPID, sans rapport avec Expo Push.
 
-[A FAIRE] PERSONNALISATION DE CONVERSATION (fond, surnom, couleur de bulle) et
+[ECARTE] PERSONNALISATION DE CONVERSATION  — ECARTE par le client le 05/09/2026 : « pas besoin pour l'instant ». Reglages cosmetiques, purement locaux (localStorage) — a reprendre si demande.
+  [contexte d'origine]  (fond, surnom, couleur de bulle) et
   « effacer la conversation ». ⚠️ Local en SecureStore sur mobile → `localStorage` sur le
   web, avec le meme ecart assume (perdu au changement de navigateur).
 
-[A FAIRE] REPONSE A UNE STORY, MINI-LECTEUR VOCAL hors conversation, VISIONNEUSE DE
-  DOCUMENTS in-app.
-
+[A FAIRE] STORIES sur le web — dernier point de la feuille de route web, priorite 3.
+  ⚠️ MINI-LECTEUR VOCAL hors conversation ECARTE par le client le 05/09/2026 : pas de besoin
+  en web (sur mobile il existe parce qu'on quitte l'ecran ; dans un navigateur la conversation
+  reste a l'ecran a cote de la liste).
 --- 4. HORS PERIMETRE RAISONNABLE ---
 
 Appels audio/video (Mois 4), camera in-app, repertoire telephonique (inaccessible depuis
