@@ -348,20 +348,19 @@ CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
   ⚠️ PIEGE DE TEST : `ul li button` attrapait aussi les lignes de la liste des conversations
     (17 boutons au lieu de 5). Et la cascade se mesure sur l'OPACITE, pas sur le nombre
     d'elements : les cinq sont dans le DOM des l'ouverture.
-  [AJUSTE 05/09, retour client] Deploiement en ARC DE CERCLE, libelles a GAUCHE, pastilles
-    qui SORTENT du bouton (depart a (0,0) et echelle 0.3, pas a leur place finale).
-    ⚠️ Le rayon est dicte par l'ESPACEMENT, pas choisi a l'oeil : l'ecart entre deux centres
-      vaut `rayon x angle_total_en_radians / (n - 1)`. Avec le rayon initial de 132, il tombait
-      a 41 px pour des pastilles de 42 — elles se touchaient. A 225 px sur 56°, l'ecart est de
-      55 px, soit 13 px de jour. Mesure confirmee : 55/54/55/55.
-    ⚠️ L'angle haut s'arrete a 80° et non a la verticale : au-dela, la pastille du sommet passe
-      a gauche du bouton, deja contre le bord du panneau, et son libellé sortait de l'ecran.
-    ⚠️ `y` NEGATIF vers le haut : l'axe du navigateur descend, l'angle trigonometrique monte.
-      Oublier ce signe deploie l'arc sous le bouton, hors de l'ecran.
-    ⚠️ `hover:z-10` sur la ligne : sans lui, le libellé d'une pastille passait DERRIERE ses
-      voisines, l'arc les faisant se recouvrir.
-  Verifie : 5 actions, ordre bas→haut, arc reel (x diminue ET y monte a chaque cran), ecarts
-    de 55 px, libelle a gauche de sa pastille, opacites 0.57/0.30/0.06/0/0 a 120 ms (cascade
+  [AJUSTE 05/09, retour client] Les pastilles SORTENT du bouton : depart a (0,0) et echelle
+    0.3, arrivee a leur place. C'est tout ce qui distingue un menu qui se deploie d'un menu
+    qui s'affiche. Libelles a GAUCHE, apparition de bas en haut.
+    ⚠️ L'ARC DE CERCLE a ete essaye puis ECARTE par le client (« l'arc n'est pas bon, retire-le
+      et garde l'animation »). Colonne verticale conservee. Ce qui reste utile de la tentative :
+      l'ecart entre deux pastilles doit rester superieur a leur diametre — 54 px pour 42 px de
+      diametre, soit 12 px de jour ; en arc le rayon initial de 132 px donnait 41 px et elles
+      se touchaient.
+    ⚠️ `y` NEGATIF : l'axe des ordonnees du navigateur descend, la colonne monte. Le composeur
+      est en bas de l'ecran, vers le bas elle sortirait de la fenetre.
+    ⚠️ `hover:z-10` sur la ligne : sans lui le libellé passait derriere les pastilles voisines.
+  Verifie : 5 actions, ordre bas→haut, colonne verticale (x constant, y qui monte), ecarts
+    de 54 px, libelle a gauche de sa pastille, opacites 0.57/0.30/0.06/0/0 a 120 ms (cascade
     reelle), « + » pivote, action qui ouvre son ecran, clic a cote qui referme.
 
 [FAIT 05/09 - demande client, 2e passe] TRANSFORMATIONS PARTAGEES (`layoutId`).
