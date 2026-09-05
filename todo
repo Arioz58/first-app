@@ -327,6 +327,34 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 05/09 - BUG SIGNALE PAR LE CLIENT] Le theme sombre etait PERDU a chaque rechargement.
+  Signale via l'avertissement React « Encountered a script tag while rendering React
+  component » (layout.tsx). L'avertissement n'etait pas cosmetique : le script anti-flash qui
+  lisait `localStorage` avant la premiere peinture etait rendu DANS l'arbre React, donc
+  recree a l'hydratation — et un script recree de cette facon ne s'execute pas. Mesure : la
+  classe `dark` ET `color-scheme` etaient effaces apres un F5, jusqu'a 4 copies du script
+  dans le `<head>`.
+  ⚠️ `next/script` en `beforeInteractive` NE CORRIGE PAS : meme avertissement, meme perte.
+  CORRECTIF : le theme vient desormais du SERVEUR, par cookie — meme mecanisme que la langue.
+  Plus aucun script. Le layout pose `class="dark"` / `class="light"` selon le cookie, et
+  RIEN en preference « systeme » (le serveur ignore le reglage de l'appareil).
+  ⚠️ La variante `dark:` de globals.css a donc DEUX declencheurs : la classe `.dark`, et
+    `prefers-color-scheme: dark` hors d'un `.light`. La classe seule ne suffirait pas (le
+    defaut « systeme » n'en pose aucune) ; la media query seule non plus (le choix « Sombre »
+    doit pouvoir contredire le systeme).
+  ⚠️ `lib/theme.ts` gere maintenant DEUX classes : `light` doit exister pour contredire un
+    systeme en sombre. Se contenter de retirer `dark` laisserait la media query reprendre la
+    main et ignorerait le choix « Clair ».
+  ⚠️ « Systeme » EFFACE le cookie au lieu d'y ecrire « system » : poser une classe a la place
+    du navigateur figerait le theme et il cesserait de suivre l'OS.
+  Verifie sur les 3 cas (systeme clair + choix sombre, systeme sombre + preference systeme,
+    systeme sombre + choix clair), reglage depuis l'interface, classe presente dans le HTML
+    SERVI (donc aucun eclair), et 3 rechargements sans une seule erreur de console.
+  ⚠️ PIEGE DE DIAGNOSTIC rencontre : une cle i18n sortait en clair dans le HTML servi
+    (`stories.mine`). Ce n'etait PAS un bug — le serveur de dev tournait depuis 5 h et servait
+    un bundle de traductions perime. Redemarrage = probleme disparu. Y penser avant de
+    chercher dans le code.
+
 ORDRE DE TRAVAIL ARRETE AVEC LE CLIENT LE 05/09/2026 :
   1. Recherche globale dans les messages
   2. Notifications navigateur
