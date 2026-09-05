@@ -327,6 +327,26 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 05/09 - demande client, 4e passe] LE PRINCIPE DU FAB ETENDU A TOUTE L'APP WEB.
+  Le client a valide l'animation du bouton d'action du composeur et demande de s'en inspirer
+  partout. Principe retenu, ecrit en tete de `lib/motion.ts` : UNE CHOSE VIENT DE LA OU ON L'A
+  DECLENCHEE. Un menu sort du bouton clique, un popover de son coin d'ancrage, les entrees
+  d'une liste arrivent l'une apres l'autre. Ce qui apparait « sur place » n'a pas d'origine, et
+  l'oeil ne relie pas ce qu'il voit a ce qu'il a fait.
+  ⚠️ REGLE D'ECHELLE, deduite du FAB : le ressort (`soft`, ζ≈0.78) sur les PETITS elements —
+    pastilles, entrees de menu — ou le depassement se lit comme du ressort ; l'amortissement
+    (`damped`) sur les GRANDES surfaces, ou le meme depassement devient un tremblement et
+    brouille le texte le temps du rebond.
+  APPLIQUE : menus contextuels (sortent du point clique via `transformOrigin`, entrees en
+    cascade), selecteur de GIFs (sort de son coin bas-gauche, donc du bouton GIF), composeur
+    de story et camera (n'avaient AUCUNE animation).
+  ⚠️ La transition de la SURFACE et la cascade des ENTREES doivent vivre dans le MEME objet
+    `transition`. Les fusionner par etalement (`...`) ecrasait l'une par l'autre selon l'ordre :
+    le menu perdait son amortissement, ou ses entrees leur decalage.
+  Verifie : menu a 60 ms — origine 0px 0px, echelle 0.935, opacites des entrees
+    0.16/0.04/0/0/0 ; selecteur GIF a 70 ms — origine 0px 384px (coin bas-gauche), echelle
+    0.942. Suite complete repassee : 10 harnais, aucun echec.
+
 [FAIT 05/09 - demande client, 3e passe] BOUTON D'ACTION FLOTTANT du composeur.
   Reference donnee par le client : https://motion.dev/examples/vue-floating-action-button
   Le « + » ne deroule plus un menu en LISTE (`FloatingMenu`) mais se deploie en COLONNE de
