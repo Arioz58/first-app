@@ -367,6 +367,18 @@ CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
       on la lit sur le bouton.
     Mesure : 1re pastille a 2 px du bouton a l'horizontale, ecarts horizontaux croissants
       (10/27/42/51 px) donc la courbe s'incline bien, ecarts de 53-54 px entre centres.
+    [AJUSTE 05/09, 5e aller-retour] Les pastilles partent desormais DU BOUTON.
+    ⚠️ La rotation seule ne peut PAS ramener une lame sur le « + » : le pivot est le centre du
+      cercle, en haut a droite du bouton, et a longueur de bras constante l'extremite decrit un
+      cercle qui NE PASSE PAS par lui. Les pastilles emergeaient d'un point en l'air, 62 px
+      au-dessus. Il faut aussi RETRACTER le bras a l'hypotenuse pivot → bouton (162.3 px pour
+      RAYON 150 et HAUTEUR 62), angle -22.5°.
+    ⚠️ PIEGE : `scale` doit vivre sur le CONTENU, jamais sur le bras. Une echelle sur le bras
+      multiplie sa LONGUEUR : avec `scale: 0.35`, le bras retracte de 162 px n'en faisait plus
+      que 57, ce qui placait les pastilles a 106 px du bouton au lieu de 0. Diagnostic confirme
+      par le calcul avant correction (105.5 px attendus, 106 mesures).
+    Mesure : distances au centre du « + » a +35 ms = 13/1/0/0/0 px, puis 62/115/165/210/248 px
+      a l'arrivee — elles naissent bien sur le bouton et s'en ecartent une par une.
     Trois reglages en tete de fichier : HAUTEUR, RAYON, et le PAS deduit de l'espacement.
   Verifie : 5 actions, ordre bas→haut, chacune plus haute ET plus a droite, ecarts
     de 53-54 px, libelle a gauche de sa pastille, opacites 0.57/0.30/0.06/0/0 a 120 ms (cascade
