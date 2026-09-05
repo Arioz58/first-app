@@ -327,6 +327,38 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 05/09 - demande client] ANIMATIONS (framer-motion 13).
+  ⚠️ UN SEUL endroit definit le ressenti : `lib/motion.ts`. Chaque composant qui invente son
+    propre ressort donne une app qui ne bat pas la meme mesure d'un ecran a l'autre.
+  ⚠️ LE REBOND VIT SUR LES TRANSLATIONS, JAMAIS SUR LES ECHELLES. Feedback client du 06/08 :
+    pas d'overshoot, damping >= 18, jamais de ressort sur l'echelle. Le client demande
+    maintenant « un peu rebondissant (tres leger) » : concilie en mettant le ressort sur les
+    deplacements (`soft`, `snappy`) et un amortissement franc sur tout ce qui change de taille
+    (`damped`). Un ressort sur `scale` rend le texte flou pendant le depassement.
+  ⚠️ `MotionConfig reducedMotion="user"` a la racine (I18nProvider) : respecte
+    `prefers-reduced-motion`. Ce n'est pas du confort — les animations de deplacement
+    provoquent des nausees chez une partie des utilisateurs.
+  COUVERT : bulles a l'envoi/reception, reordonnancement de la liste des conversations
+    (`layout`), menus flottants, 4 boites de dialogue (voile + carte, avec sortie), panneaux
+    (profil, confidentialite, bloques), barre de stories (cascade + retour au toucher),
+    resultats de recherche (cascade par section), « + » qui pivote en croix, bascule
+    micro/envoi avec rotation.
+  ⚠️ BULLES : TRANSFORM SEULEMENT, jamais `height`/`margin`/`layout`. Le fil tient sa position
+    au pixel pres (`settle`, `holdRef`) ; animer la HAUTEUR deplacerait le fil sous les yeux
+    du lecteur et ferait deriver un saut vers un message. Verifie : le saut vers un message du
+    milieu de l'historique reste centre a 4 px.
+  ⚠️ REGISTRE `lib/seenMessages.ts` : seuls les messages NEUFS s'animent. Sans lui, chaque
+    page d'historique rapatriee rejouait 30 animations d'un coup. Decide une fois au montage
+    (initialiseur paresseux), sinon une reaction posee rejouerait l'entree.
+  ⚠️ CASCADE BORNEE (`staggeredList`) : un decalage fixe ne tient pas sur une liste de
+    longueur inconnue — mesure sur 41 resultats, 35 ms/ligne faisaient apparaitre la derniere
+    1,4 s apres la premiere. Le decalage se resserre pour que l'ensemble tienne dans ~300 ms.
+  ⚠️ `AnimatePresence` DANS le composant de dialogue, pas au point d'appel : avec un
+    `if (!open) return null`, le composant quittait l'arbre a la fermeture et l'animation de
+    sortie ne se jouait jamais.
+  ⚠️ `npm install framer-motion` a ELAGUE playwright, installe en `--no-save`. A reinstaller
+    apres toute installation de dependance.
+
 [FAIT 05/09 - BUG SIGNALE PAR LE CLIENT] Le theme sombre etait PERDU a chaque rechargement.
   Signale via l'avertissement React « Encountered a script tag while rendering React
   component » (layout.tsx). L'avertissement n'etait pas cosmetique : le script anti-flash qui
