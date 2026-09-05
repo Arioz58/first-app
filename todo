@@ -327,6 +327,33 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 05/09 - demande client, 2e passe] TRANSFORMATIONS PARTAGEES (`layoutId`).
+  Le client a designe https://examples.motion.dev/react/ios-app-folder comme reference :
+  « fluide avec du rebond ». Le coeur de cet exemple n'est pas un reglage de ressort mais un
+  PROCEDE — `layoutId` : un element se TRANSFORME en un autre au lieu d'apparaitre par-dessus.
+  ⚠️ Le code complet de l'exemple est derriere Motion+ (payant). Ce qui en est public et a ete
+    repris : le ressort `stiffness: 200, damping: 22` et l'usage de `layoutId` + `MotionConfig`.
+  RESSORTS RECALIBRES sur cette reference. ζ ≈ 0.78 (sous 1 = depassement, donc rebond) contre
+    ζ ≈ 0.88 dans ma 1re passe : plus souple, plus « flow ». `morph` est volontairement PLUS
+    LENT (170/24) — un morphing parcourt plusieurs centaines de pixels, et a la vitesse d'une
+    apparition l'oeil ne suit pas le lien entre depart et arrivee, qui fait tout l'interet.
+  APPLIQUE A : photo du fil → visionneuse plein ecran (ouverture ET fermeture), pastille de
+    story → story plein ecran.
+  ⚠️ Le fond de la visionneuse APPARAIT EN FONDU pendant que l'image se deplace. Pose d'un
+    coup, l'aplat noir masquerait le trajet et le morphing serait invisible.
+  ⚠️ `AnimatePresence` au POINT D'APPEL pour ces deux-la : c'est le parent qui monte et
+    demonte, et sans lui l'element ne revient jamais se ranger a sa place.
+  ⚠️ Le `layoutId` de la visionneuse ne suit QUE le media d'origine : en defilant vers la
+    photo suivante il n'y a plus de vignette a rejoindre, et le garder ferait revenir l'image
+    vers une bulle qui n'est pas la sienne.
+  ⚠️ PIEGE DE TEST : mon 1er essai concluait « le morphing ne marche pas ». En realite je
+    cliquais une tuile d'ALBUM, qui n'avait pas de `layoutId` — seule l'image SEULE en avait.
+    Les albums representent la majorite des photos d'une conversation fournie. Corrige, et
+    verifie a la mesure : ouverture 154 → 354 px, fermeture 281 → 124 px (exactement la
+    vignette) ; story 297 → 828 px, retour 710 → 58 px.
+  ⚠️ Une vignette hors ecran fausse toute mesure de morphing : le 1er harnais visait la plus
+    ancienne image, a 1736 px au-dessus de la fenetre.
+
 [FAIT 05/09 - demande client] ANIMATIONS (framer-motion 13).
   ⚠️ UN SEUL endroit definit le ressenti : `lib/motion.ts`. Chaque composant qui invente son
     propre ressort donne une app qui ne bat pas la meme mesure d'un ecran a l'autre.
