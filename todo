@@ -348,27 +348,28 @@ CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
   ⚠️ PIEGE DE TEST : `ul li button` attrapait aussi les lignes de la liste des conversations
     (17 boutons au lieu de 5). Et la cascade se mesure sur l'OPACITE, pas sur le nombre
     d'elements : les cinq sont dans le DOM des l'ouverture.
-  [AJUSTE 05/09, 3 allers-retours avec le client] EVENTAIL a bras pivotants.
-    Historique : colonne verticale → arc (« pas bon ») → colonne → EVENTAIL (« en arc de
-    cercle mais comme un accordeon qui va vers la droite dont l'origine est le + »).
-    ⚠️ CE QUI DISTINGUE L'EVENTAIL DE MA 1re TENTATIVE EN ARC — et c'est tout le sujet : la
-      1re version DEPLACAIT les pastilles vers un point calcule sur un cercle, donc en ligne
-      droite vers une position qui se trouvait etre sur un arc. Ici c'est un BRAS qui pivote
-      autour du bouton : la pastille SUIT l'arc. « Dispose en arc » n'est pas « deplie en arc ».
-    ⚠️ Toutes les lames partent du MEME angle (celui de la premiere) : l'eventail est ferme au
-      depart, pastilles empilees, et s'ouvre en les ecartant. C'est ce qui donne l'accordeon.
-    ⚠️ CONTRE-ROTATION animee sur le contenu, en meme temps que le bras : sans elle, la
-      pastille et surtout son libelle tourneraient avec l'eventail et arriveraient de travers.
-    ⚠️ Rotation NEGATIVE : en CSS un angle positif tourne vers le bas.
-    ⚠️ L'angle bas ne descend pas sous 18° (la pastille passerait derriere la barre de saisie)
-      et l'angle haut s'arrete a 74° (au-dela l'eventail repasse au-dessus du bouton et ne se
-      lit plus comme un depliage vers la droite).
-    ⚠️ La `li` est desormais un PIVOT de taille nulle : les tests qui la visaient (survol,
-      position, opacite) doivent viser la pastille — sauf l'opacite, qui vit sur le pivot et
-      renvoie toujours 1 si on la lit sur le bouton.
-    Trois reglages isoles en tete de fichier : RAYON, ANGLE_FERME, ANGLE_OUVERT.
-  Verifie : 5 actions, ordre bas→haut, arc reel (x diminue ET y monte a chaque lame), ecarts
-    de 54-55 px, libelle a gauche de sa pastille, opacites 0.57/0.30/0.06/0/0 a 120 ms (cascade
+  [AJUSTE 05/09, 4 allers-retours avec le client] COURBE TANGENTE A LA VERTICALE.
+    Formulation finale du client : « le premier element doit etre au-dessus du "+", le
+    deuxieme au-dessus du premier mais un peu plus a droite, le troisieme aussi, etc. »
+    ⚠️ MON ERREUR, repetee DEUX FOIS : je centrais l'arc sur le BOUTON. Sur un tel arc, passe
+      la verticale les pastilles REDESCENDENT — mes deux versions partaient donc presque a
+      l'horizontale et remontaient, au lieu de partir droit en l'air et de s'incliner. Ce que
+      le client decrit est une courbe dont la TANGENTE EST VERTICALE au-dessus du bouton :
+      son centre est a DROITE, a la hauteur de la premiere pastille.
+    ⚠️ `RAYON` regle l'INCLINAISON, pas la taille : plus grand = la courbe reste droite plus
+      longtemps ; plus petit = elle se couche vite vers la droite.
+    ⚠️ Fermees, TOUTES les lames sont a l'angle 0, empilees au-dessus du « + » : c'est de la
+      qu'elles s'ecartent, et c'est ce qui donne au bouton son role d'origine.
+    ⚠️ CONTRE-ROTATION animee sur le contenu : sans elle, pastilles et libelles arriveraient
+      de travers.
+    ⚠️ La `li` est un PIVOT de taille nulle : les tests qui la visaient (survol, position)
+      doivent viser la pastille — sauf l'opacite, qui vit sur le pivot et vaut toujours 1 si
+      on la lit sur le bouton.
+    Mesure : 1re pastille a 2 px du bouton a l'horizontale, ecarts horizontaux croissants
+      (10/27/42/51 px) donc la courbe s'incline bien, ecarts de 53-54 px entre centres.
+    Trois reglages en tete de fichier : HAUTEUR, RAYON, et le PAS deduit de l'espacement.
+  Verifie : 5 actions, ordre bas→haut, chacune plus haute ET plus a droite, ecarts
+    de 53-54 px, libelle a gauche de sa pastille, opacites 0.57/0.30/0.06/0/0 a 120 ms (cascade
     reelle), « + » pivote, action qui ouvre son ecran, clic a cote qui referme.
 
 [FAIT 05/09 - demande client, 2e passe] TRANSFORMATIONS PARTAGEES (`layoutId`).
