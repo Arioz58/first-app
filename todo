@@ -527,8 +527,38 @@ vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
   (ancienne entree ci-dessous, conservee pour le contexte)
   [detail]  (`/users/:id/mutual-friends`) — depend de l'ecran profil.
 
-[A FAIRE] NOTIFICATIONS NAVIGATEUR (Web Push). Aucune alerte quand l'onglet est en
-  arriere-plan. ⚠️ Chantier a part : Service Worker + VAPID, sans rapport avec Expo Push.
+[FAIT 05/09] NOTIFICATIONS NAVIGATEUR — `lib/webNotifications.ts` + `public/sw.js`.
+  ⚠️ CE N'EST PAS UN CONFORT, ca rebouche un TROU introduit par le client web. Le serveur
+    n'envoie de push qu'aux utilisateurs HORS LIGNE (`isUserOnline`), et « en ligne » veut
+    dire « au moins un socket ouvert ». Un onglet web laisse ouvert — meme en arriere-plan,
+    meme sur un autre bureau — suffisait donc a rendre quelqu'un « en ligne » et a PRIVER SON
+    TELEPHONE de ses notifications. Ouvrir le client web rendait silencieux.
+  CHOIX : notification LOCALE depuis le socket deja ouvert, pas du Web Push (VAPID +
+    abonnements stockes + envoi serveur). Le probleme pose etait l'onglet en arriere-plan, que
+    ceci couvre entierement, sans migration ni cle. Limite assumee : onglet FERME, pas de
+    notification web — mais plus aucun socket ne fait alors passer pour en ligne, donc le
+    telephone reprend son role. C'est le modele de WhatsApp Web. Un vrai Web Push n'ajouterait
+    que le cas « navigateur ouvert, onglet ferme ».
+  ⚠️ Service worker plutot que `new Notification()` : ce constructeur n'existe pas sur Chrome
+    Android (il leve), et lui seul permet au clic de RETROUVER l'onglet ouvert au lieu d'en
+    ouvrir un second. Le SW n'a AUCUN gestionnaire `fetch` : intercepter les requetes le
+    rendrait responsable du cache de toute l'app, et une version perimee servie depuis ce
+    cache est le defaut le plus penible a diagnostiquer.
+  ⚠️ `tag` = conversation (dix messages remplacent la meme bulle) + `renotify` (sans lui, un
+    tag deja affiche est remplace EN SILENCE : plus de son, message inapercu).
+  ⚠️ Notifie UNIQUEMENT onglet non visible : visible, la liste se reordonne et la pastille
+    bouge sous les yeux, une bulle par-dessus serait du bruit.
+  ⚠️ DEFAUT TROUVE AU TEST : la notification partait EN DOUBLE. L'appel etait dans la
+    fonction de mise a jour d'etat, que React 19 en mode strict execute deux fois pour
+    debusquer les effets de bord. Corrige par un miroir en ref (`convRef`) lu AVANT
+    `setConversations`. Une fonction de mise a jour doit etre pure — c'est le contrat.
+  ⚠️ La demande de permission part d'un CLIC (bouton dans « Vous ») : les navigateurs
+    refusent une demande spontanee, et Firefox la rejette sans rien afficher — un refus qu'on
+    prendrait pour un « non » de la personne. Une fois refusee, seule la personne peut revenir
+    dessus dans les reglages du navigateur : c'est dit a l'ecran.
+  Verifie : titre/corps/icone en direct et en groupe (« UserB : ... », titre = groupe), tag,
+    url du clic, aucune notification onglet visible, aucune en sourdine, une seule par message.
+  ⏳ Chromium headless refuse les notifications : les tests exigent `channel: 'chromium'`.
 
 [ECARTE] PERSONNALISATION DE CONVERSATION  — ECARTE par le client le 05/09/2026 : « pas besoin pour l'instant ». Reglages cosmetiques, purement locaux (localStorage) — a reprendre si demande.
   [contexte d'origine]  (fond, surnom, couleur de bulle) et
