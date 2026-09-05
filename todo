@@ -327,6 +327,28 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 05/09 - demande client] REGLAGES A CHOIX EN BOITE DE DIALOGUE.
+  Sourdine, messages ephemeres et « qui peut envoyer » affichaient leur liste d'options A LA
+  PLACE du reglage, dans le panneau : rien n'annoncait qu'on entrait dans un choix, le reglage
+  disparaissait au profit d'une liste sans titre, sans valeur courante, et sans moyen de
+  ressortir sans choisir.
+  → `components/ChoiceDialog.tsx`, UN composant pour les trois : meme question, meme defaut.
+    Trois corrections separees auraient laisse trois occasions de diverger.
+  ⚠️ La valeur EN COURS est cochee. Sans repere, on ignore sur quoi le reglage est pose et on
+    le remet au hasard — c'est ce que faisait l'ancienne liste.
+  ⚠️ Dans la LISTE des conversations, la sourdine reste un SOUS-MENU dans le menu contextuel :
+    c'est un motif attendu a cet endroit, le defaut corrige ici etait different (la liste
+    remplacait le reglage dans la page).
+  ⚠️ FUITES i18n corrigees au passage : les durees de sourdine ('8 heures', '1 semaine',
+    'Toujours'), celles des ephemeres ('24 heures'…, 'Desactive'), « Messages ephemeres »,
+    'desactives', 'tout le monde' et 'admins' etaient EN FRANCAIS EN DUR dans `lib/`. Un
+    utilisateur turc les lisait en francais au milieu de son interface.
+  ⚠️ `MUTE_OPTIONS` devient `muteOptions()` : les dates etaient calculees UNE FOIS au
+    chargement du module, donc « 8 heures a partir de l'ouverture de l'onglet ». Sur une
+    session longue, l'ecart se voit.
+  Verifie : dialogue titre, reglage toujours visible derriere, 4 durees, valeur courante
+    cochee, Echap qui referme sans rien changer, libelles traduits.
+
 [FAIT 05/09 - demande client] REBOND sur l'envoi/reception des messages.
   Ressort dedie `bounce` (`lib/motion.ts`), plus lache que le `soft` commun : la bulle DEPASSE
   sa place puis revient, et c'est ce depassement qui se lit comme du rebond.
