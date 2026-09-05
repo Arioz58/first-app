@@ -327,6 +327,40 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 05/09 - BUG SIGNALE PAR LE CLIENT] Saut du fil au chargement de l'historique.
+  Symptome : en remontant, quand les messages plus anciens arrivent, le fil « saute d'un coup
+  plus bas dans la conversation ». Mesure : -1600 px de deplacement au moment de l'insertion.
+  ⚠️ CAUSE : DOUBLE COMPENSATION. Chrome repositionne DEJA le defilement tout seul quand du
+    contenu est insere au-dessus (`overflow-anchor`, actif par defaut) ; notre compensation
+    manuelle etait ADDITIVE (`scrollTop += apres - avant`) et s'ajoutait a la sienne.
+    Les quatre combinaisons, mesurees :
+      ancrage natif + compensation additive  → -1600 px (le defaut)
+      ancrage natif seul                     → 0 px
+      ni l'un ni l'autre                     → 4095 px d'erreur
+      ancrage natif desactive + absolue      → 0 px  ← RETENU
+  ⚠️ On NE s'en remet PAS a l'ancrage natif seul : Safari ne l'implemente pas, et le fil y
+    sauterait des 4095 px. Il est donc DESACTIVE (`overflow-anchor: none`) et la compensation
+    est faite explicitement — meme comportement partout, et sous notre controle.
+  ⚠️ La compensation est ABSOLUE et non additive : on retient la DISTANCE AU BAS du fil
+    (`scrollHeight - scrollTop`), seule grandeur que l'insertion en tete laisse invariante, et
+    on la RETABLIT. Etant idempotente, la reappliquer ne fait aucun mal — c'est ce qui la rend
+    insensible a l'ancrage natif comme aux corrections repetees.
+  ⚠️ Reappliquee a chaque croissance du contenu (`ResizeObserver`) : les images de la page
+    rapatriee ont une hauteur nulle avant decodage et continuent de pousser le fil bien apres
+    l'insertion. Une compensation ponctuelle ne rattrape pas ca.
+  ⚠️ Un defilement VOLONTAIRE ne supprime pas l'ancre, il la DEPLACE : la personne choisit ou
+    elle regarde, et ce nouveau point doit rester stable pendant que les images chargent.
+  ⚠️ `useLayoutEffect` et non `useEffect` : la correction doit passer AVANT la peinture, sinon
+    on voit une image du fil decale avant qu'il ne revienne.
+  ⚠️ PIEGES DE DIAGNOSTIC — trois hypotheses fausses avant la bonne : (1) « le rAF s'execute
+    avant que React ne pose le DOM » — faux, la trace montrait delta=2453 correctement
+    applique ; (2) « les images en cache masquent le defaut » — vrai mais insuffisant, le
+    retard reseau simule ne le reproduisait pas non plus ; (3) le 1er harnais mesurait une
+    amplitude APRES stabilisation, donc toujours 0. Le test qui tranche isole l'insertion
+    seule : position du repere juste avant et juste apres, sans defilement entre les deux.
+  ⚠️ Un test qui passe ne prouve rien s'il ne sait pas echouer : verifie en reconstituant le
+    code d'origine (-1600 px) puis en le retablissant (0 px).
+
 [FAIT 05/09 - demande client] REGLAGES A CHOIX EN BOITE DE DIALOGUE.
   Sourdine, messages ephemeres et « qui peut envoyer » affichaient leur liste d'options A LA
   PLACE du reglage, dans le panneau : rien n'annoncait qu'on entrait dans un choix, le reglage
