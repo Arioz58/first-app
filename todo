@@ -559,17 +559,51 @@ vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
   Verifie : titre/corps/icone en direct et en groupe (« UserB : ... », titre = groupe), tag,
     url du clic, aucune notification onglet visible, aucune en sourdine, une seule par message.
   ⏳ Chromium headless refuse les notifications : les tests exigent `channel: 'chromium'`.
+  [ECARTE 05/09] Angle mort connu et ASSUME par le client : « socket ouvert » ne veut pas dire
+    « devant l'ecran ». Onglet web laisse ouvert au bureau + telephone dans la poche = la
+    notification s'affiche sur un ecran que personne ne regarde, et le telephone reste muet.
+    Correctif propose (marquer la plateforme dans le socket, et faire que le calcul « hors
+    ligne » du push IGNORE les sockets web ; ~30 lignes serveur, sans migration) : « pas
+    besoin » le 05/09. A ressortir si la plainte remonte des utilisateurs.
 
 [ECARTE] PERSONNALISATION DE CONVERSATION  — ECARTE par le client le 05/09/2026 : « pas besoin pour l'instant ». Reglages cosmetiques, purement locaux (localStorage) — a reprendre si demande.
   [contexte d'origine]  (fond, surnom, couleur de bulle) et
   « effacer la conversation ». ⚠️ Local en SecureStore sur mobile → `localStorage` sur le
   web, avec le meme ecart assume (perdu au changement de navigateur).
 
-[A FAIRE] STORIES sur le web — dernier point de la feuille de route web, priorite 3.
-  ⚠️ MINI-LECTEUR VOCAL hors conversation ECARTE par le client le 05/09/2026 : pas de besoin
-  en web (sur mobile il existe parce qu'on quitte l'ecran ; dans un navigateur la conversation
-  reste a l'ecran a cote de la liste).
---- 4. HORS PERIMETRE RAISONNABLE ---
+[EN COURS 05/09] STORIES sur le web — VISIONNAGE livre, creation a faire.
+  `lib/stories.ts` + `components/StoriesBar.tsx` + `components/StoryViewer.tsx`.
+  Barre en tete de liste (anneau degrade si non vu, « Ma story » en tete, visible seulement
+  sur le filtre « Toutes »), visionneuse plein ecran : barres de progression, clic gauche /
+  droite, fleches du clavier, Echap, maintien = pause, video, textes et stickers, « vu par »
+  et suppression sur ses propres stories.
+  ⚠️ Le cadre garde le RATIO 9/16 du mobile. Les positions des textes sont normalisees sur ce
+    format ; les etaler sur un cadre 16/9 les deplacerait par rapport a ce que l'auteur a
+    compose sur son telephone.
+  ⚠️ La taille du texte est PROPORTIONNELLE a la hauteur du cadre (22 px sur ~800 px de haut
+    cote mobile). En dur, le meme texte serait minuscule dans un navigateur.
+  ⚠️ La progression est pilotee par requestAnimationFrame, pas par une transition CSS : il
+    faut pouvoir la GELER au maintien et reprendre au temps restant.
+  TROIS DEFAUTS TROUVES AU TEST, tous invisibles a la lecture du code :
+  1. ORDRE INVERSE. Le serveur renvoie `createdAt: desc` ; le mobile retrie en chronologique
+     (`oldestFirst`), pas moi. Les deux clients racontaient la meme journee a l'envers l'un de
+     l'autre. Corrige au point d'entree de l'API (`fetchStories` / `fetchMyStories`), par une
+     INVERSION et non un tri par date : deux stories publiees dans la meme seconde ont le meme
+     `createdAt` et un tri les laisserait dans un ordre arbitraire.
+  2. TEXTE REPLIE TROP TOT. En `position: absolute`, `left: 50%` ne laisse a l'element que la
+     moitie DROITE du cadre : « Salut tout le monde » tenait sur 3 lignes au lieu d'une, et un
+     texte pose pres du bord droit aurait ete ecrase en colonne. Corrige en ancrant a
+     `left: 0` et en deplacant par `transform: translate(calc(Xpx - 50%), ...)`.
+  3. NOMS DES VIEWERS VIDES. `GET /stories/:id/views` renvoie la personne IMBRIQUEE sous
+     `viewer`, pas a plat. Le compteur etait juste, les noms absents — un ecart qu'aucune
+     verification de type ne rattrape, les deux formes etant du JSON valide.
+  Aussi : la barre se rafraichit DES la suppression et non a la fermeture de la visionneuse —
+    voir sa propre story survivre a sa suppression laisse croire que l'action a echoue.
+  ⚠️ Les stories sont reservees aux AMIS : mon premier jeu de test utilisait UserB, qui n'est
+    pas ami avec UserA, et n'affichait donc rien. Ce n'etait pas un bug.
+  [A FAIRE] CREATION d'une story depuis le web : photo/video depuis le disque ou la webcam
+    (`CameraCapture` existe deja), fond colore, et au moins un texte. L'editeur riche du
+    mobile (gestes, rognage video, stickers) n'a pas vocation a etre porte tel quel.
 
 Appels audio/video (Mois 4), camera in-app, repertoire telephonique (inaccessible depuis
 un navigateur), position en direct, QR de profil.
