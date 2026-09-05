@@ -16,9 +16,10 @@ export const PRIVACY_URL = "https://nexa.app/privacy";
 // Incrémenter à chaque révision du texte légal.
 export const PRIVACY_POLICY_VERSION = "1.0";
 
-// GIFs — Giphy. ⚠️ Placeholder : créer une app sur https://developers.giphy.com
-// et coller ici la clé API (sinon la recherche de GIFs reste désactivée).
-export const GIPHY_API_KEY = "Cba5SL13AfnwB0vwUlzvJOiRqVBNie6R";
+// GIFs — la clé Giphy a été DÉPLACÉE côté serveur (variable d'environnement
+// `GIPHY_API_KEY` du backend, proxy `GET /giphy`). Elle n'a plus rien à faire ici :
+// écrite en dur, elle partait dans le bundle et ne pouvait pas être révoquée sans
+// publier une nouvelle version de l'application. Ne pas la réintroduire.
 
 // Lien d'invitation envoyé par SMS aux contacts qui n'ont pas encore Nexa.
 // ⚠️ Placeholder : remplacer par le vrai lien store (App Store / Google Play,

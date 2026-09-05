@@ -355,7 +355,59 @@ vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
 [A FAIRE] ALBUMS : visionneuse paginee (bande de miniatures, navigation entre les medias d'un
   meme envoi). Aujourd'hui un clic ouvre le media seul.
 
-[A FAIRE] ENVOI de documents et de GIFs (le mobile a `expo-document-picker` et Giphy).
+[FAIT] ENVOI de documents et de GIFs.
+  - DOCUMENTS : fonctionnaient DEJA. `sendFiles` transmettait deja `mediaType`/`fileName`/
+    `fileSize`/`mimeType`, et l'input n'a aucune restriction `accept`. L'entree de ce todo
+    etait fausse : elle avait ete ecrite en lisant la liste des dependances mobiles
+    (`expo-document-picker`) au lieu du code web. Verifie de bout en bout (PDF televerse,
+    carte « test.pdf / 193 o » affichee dans le fil).
+  - GIFs : livres via un PROXY SERVEUR, pas en recopiant la cle dans le bundle web.
+    * Backend `src/modules/giphy/` → `GET /giphy?q=` (authentifie). Cle lue dans
+      `process.env.GIPHY_API_KEY`, limite de 120 recherches/h/utilisateur (le quota Giphy
+      est celui de l'APPLICATION : une personne qui tape en continu l'epuise pour tout le
+      monde), tendances mises en cache 10 min dans Redis (elles sont identiques pour tous
+      et c'est l'appel le plus frequent), delai borne a 6 s, 503 si la cle manque.
+    * Web `components/GifPicker.tsx` : popover ancre au composeur, tendances a l'ouverture,
+      recherche deboucee 350 ms, anti-race sur les reponses.
+    * Mobile `components/GiphyPicker.tsx` BASCULE sur le meme proxy, et `GIPHY_API_KEY`
+      RETIREE de `lib/config.ts`.
+  ⚠️ Le GIF est envoye par son URL Giphy, SANS passer par S3 — comme le mobile le faisait
+    deja. Les deux clients doivent produire le meme message : un GIF envoye du web doit
+    s'afficher sur le telephone.
+[FAIT] MENU « + » CENTRALISE dans le composeur web (5 sept. 2026).
+  Les deux boutons a gauche du champ (trombone, GIF) sont fusionnes en un seul « + » qui
+  ouvre un menu : Documents · Photos et videos · Camera · Audio · GIF. Le micro reste a
+  droite (enregistrer un vocal n'est pas joindre un fichier).
+  - UN SEUL `input[type=file]`, dont `accept` est reecrit avant l'ouverture selon l'entree.
+    Trois inputs distincts auraient triple la remise a zero de `value`, l'oubli qui empeche
+    de rechoisir deux fois le meme fichier.
+  - `ACCEPT` (`lib/upload.ts`) recopie l'allow-list du serveur. ⚠️ Doit le rester : un filtre
+    plus large laisse choisir un fichier que le serveur refusera APRES le televersement.
+    Le HEIC est volontairement exclu (format par defaut des photos iPhone, qu'aucun
+    navigateur ne decode — meme cause que le bug des 8 images cassees).
+  - CAMERA : `components/CameraCapture.tsx`, nouvelle capacite web (`getUserMedia` + canvas
+    → File JPEG, qui repart ensuite dans `sendFiles` comme un fichier ordinaire).
+    ⚠️ Camera FRONTALE : apercu ET photo en miroir. Premiere version : apercu miroir, photo
+    non, au motif qu'un texte filme doit rester lisible — mauvais arbitrage, signale par le
+    client des le premier essai (« l'image fait une symetrie apres avoir pris la photo »).
+    L'argument du texte ne vaut que pour la camera ARRIERE, qui n'est jamais en miroir.
+    Ce qu'on voit doit etre ce qu'on obtient. Verifie au pixel sur les deux objectifs.
+    ⚠️ `phase === 'live'` dit que le flux est ARRIVE, pas que la premiere image est decodee :
+    declencher dans cet intervalle donnait une photo NOIRE envoyee sans rien signaler. Garde
+    sur `videoWidth`. Trouve en corrigeant le harnais de test, pas a l'oeil.
+    ⚠️ Les pistes sont arretees au demontage, sinon la webcam reste allumee (temoin compris)
+    apres fermeture. Verifie sur les 3 sorties : croix, Echap, photo prise.
+    ⚠️ `navigator.mediaDevices` n'existe QUE en contexte securise (HTTPS ou localhost). En
+    HTTP simple l'entree serait inerte — l'ecran le dit au lieu d'echouer en silence. A
+    verifier a la mise en ligne.
+
+  ⏳ RESTE A FAIRE, et c'est le vrai sujet : la cle est deja dans l'historique git, donc
+    compromise. Le proxy rend sa ROTATION possible sans publier d'application, mais ne la
+    fait pas. Il faut la REVOQUER et en generer une nouvelle sur developers.giphy.com, puis
+    la poser dans le `.env` du backend et dans Railway. ⚠️ Les builds mobiles DEJA installes
+    (dont celui d'Hakan) appellent encore Giphy en direct avec l'ancienne cle : les GIFs y
+    cesseront de fonctionner a la revocation, jusqu'au prochain build EAS. Le reste de
+    l'application n'est pas affecte.
 
 [A FAIRE] REPERE « N nouveaux messages » a l'ouverture.
   ⚠️ `firstUnreadId` / `unreadCount` sont TYPES dans `lib/messages.ts` mais jamais lus :

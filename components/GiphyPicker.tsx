@@ -12,11 +12,22 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { GIPHY_API_KEY } from '../lib/config';
+import { apiRequest } from '../lib/api';
 
 type Gif = { id: string; preview: string; original: string };
 
-const configured = !!GIPHY_API_KEY && (GIPHY_API_KEY as string) !== 'GIPHY_API_KEY_PLACEHOLDER';
+/**
+ * ⚠️ Les GIFs passent par NOTRE serveur (`GET /giphy`), plus par `api.giphy.com`.
+ *
+ * La clé d'API était écrite en dur dans `lib/config.ts`, donc embarquée dans le bundle et
+ * lisible par quiconque ouvre l'IPA ou l'APK — et déjà partie dans l'historique git. Tant que
+ * l'application l'utilisait, la révoquer aurait cassé les GIFs sur tous les téléphones
+ * installés. Côté serveur, elle vit dans une variable d'environnement : on peut la changer
+ * sans publier de version.
+ *
+ * ⚠️ L'écran « clé absente » ne disparaît pas, il change de cause : c'est désormais le serveur
+ * qui répond 503 quand `GIPHY_API_KEY` n'est pas défini chez lui.
+ */
 
 export default function GiphyPicker({
   visible,
@@ -31,25 +42,20 @@ export default function GiphyPicker({
   const [query, setQuery] = useState('');
   const [gifs, setGifs] = useState<Gif[]>([]);
   const [loading, setLoading] = useState(false);
+  const [available, setAvailable] = useState(true);
 
   const fetchGifs = useCallback(async (q: string) => {
-    if (!configured) return;
     setLoading(true);
     try {
-      const endpoint = q ? 'search' : 'trending';
-      const url =
-        `https://api.giphy.com/v1/gifs/${endpoint}?api_key=${GIPHY_API_KEY}&limit=24&rating=pg-13` +
-        (q ? `&q=${encodeURIComponent(q)}` : '');
-      const res = await fetch(url).then((r) => r.json());
-      setGifs(
-        (res.data ?? []).map((g: any) => ({
-          id: g.id,
-          preview: g.images.fixed_width_small?.url ?? g.images.fixed_width.url,
-          original: g.images.original.url,
-        })),
+      // Le serveur renvoie déjà les GIFs réduits à { id, preview, original } — rien à remapper.
+      const { gifs: found } = await apiRequest<{ gifs: Gif[] }>(
+        `/giphy${q ? `?q=${encodeURIComponent(q)}` : ''}`,
       );
+      setGifs(found);
+      setAvailable(true);
     } catch {
       setGifs([]);
+      setAvailable(false);
     } finally {
       setLoading(false);
     }
@@ -79,7 +85,7 @@ export default function GiphyPicker({
           />
         </View>
 
-        {!configured ? (
+        {!available ? (
           <View className="flex-1 items-center justify-center px-10">
             <Ionicons name="key-outline" size={40} color="#D1D5DB" />
             <Text className="text-gray-400 dark:text-zinc-500 text-center mt-3">{t('media.gif_no_key')}</Text>
