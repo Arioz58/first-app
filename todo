@@ -601,6 +601,23 @@ vocaux, amis, recherche par numero, theme clair/sombre, connexion par QR.
     voir sa propre story survivre a sa suppression laisse croire que l'action a echoue.
   ⚠️ Les stories sont reservees aux AMIS : mon premier jeu de test utilisait UserB, qui n'est
     pas ami avec UserA, et n'affichait donc rien. Ce n'etait pas un bug.
+  [FAIT 05/09, demande client] Deux ameliorations d'UX :
+  - BASCULE ANIMEE d'une personne a l'autre (rotation 3D facon Instagram, 340 ms). Uniquement
+    au changement de GROUPE : entre deux stories d'un meme auteur, ce sont les barres de
+    progression qui portent l'information, et animer la aussi rendrait une serie penible.
+    Le sens s'inverse selon qu'on avance ou recule. ⚠️ Animation IMPERATIVE (`element.animate`)
+    et non une classe CSS remontee par une `key` : remonter le cadre detacherait le
+    `ResizeObserver` qui le mesure, et les textes perdraient la reference dont depend leur
+    position.
+  - LISTE DES VUES refondue en PILULE cliquable (capsule) : « Vu par X » + pile de 3 avatars
+    qui se chevauchent + chevron, dans une meme capsule translucide, ouvrant la liste
+    complete — chaque ligne menant au profil de la personne. ⚠️ Tout est DANS la pilule, pas
+    le seul chevron : une capsule se lit comme un bouton d'un seul tenant, alors que viser
+    une fleche de 18 px serait une cible trop etroite. ⚠️ Pas de « +N » : le total est deja
+    ecrit dans la pilule, le repeter l'allongerait pour rien. ⚠️ `stopPropagation` obligatoire : sans lui le clic
+    traverse jusqu'aux zones de navigation posees derriere et fait passer la story.
+    ⚠️ Liste ouverte ou profil ouvert = story EN PAUSE, sinon elle defile pendant qu'on lit.
+
   [A FAIRE] CREATION d'une story depuis le web : photo/video depuis le disque ou la webcam
     (`CameraCapture` existe deja), fond colore, et au moins un texte. L'editeur riche du
     mobile (gestes, rognage video, stickers) n'a pas vocation a etre porte tel quel.
