@@ -539,7 +539,7 @@ un navigateur), position en direct, QR de profil.
   ⚠️ Le composeur passe en LECTURE SEULE quand `whoCanSend:admins` et qu'on n'est ni admin ni moderateur. Ce n'est pas une securite (le socket refuse deja) : ca evite d'ecrire un message rejete sans explication. Moderateur INCLUS dans ceux qui peuvent ecrire, comme le serveur (`canManage`).
   ⚠️ Les evenements socket de groupe (`members_added`/`member_removed`/`member_left`/`group_updated`) RECHARGENT les metadonnees au lieu d'appliquer un delta : ils ne portent que des identifiants, et un changement de role n'emet meme pas d'evenement dedie.
   ⚠️ `removed_from_group` redirige AVANT que quoi que ce soit ne rappelle la conversation, sinon l'ecran se remplit de 403 au lieu de se fermer.
-  [A FAIRE] Bandeaux systeme non traduits sur le web (`type:'system'` porte une cle i18n en JSON) : les ajouts/retraits/renommages ne s'affichent donc pas dans le fil web, alors qu'ils y arrivent. Meme cause que l'apercu vide dans la liste.
+  [FAIT 04/09] Bandeaux systeme traduits sur le web : `systemText()` (`lib/messages.ts`) parse la cle i18n en JSON et la rend dans la langue du LECTEUR, comme le mobile. L'apercu de la liste les ignore toujours volontairement (un bandeau n'est pas un message).
 
 [FAIT 02/09 - WEB] Connexion par QR facon WhatsApp Web. Migration `web_session`.
   DECISION : QR en principal, OTP par numero garde en REPLI (telephone decharge, appareil photo casse) — le QR seul enfermerait dehors quelqu'un qui a pourtant un compte valide.
