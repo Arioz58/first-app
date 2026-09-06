@@ -327,6 +327,28 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 06/09 - demande client] TROIS TRANSITIONS DE PLUS.
+  1. BASCULE ENTRE LES PAGES (Discussions / Amis / Actus) : glissement horizontal dont le SENS
+     suit l'ordre des destinations dans la barre — une transition toujours du meme cote ne dit
+     rien, celle-ci confirme le geste. `mode="wait"` : en simultane, deux listes se
+     traverseraient dans une colonne etroite, illisible.
+     ⚠️ Le sens est calcule DANS LE GESTIONNAIRE de clic, qui connait l'ancienne et la nouvelle
+       vue. Le deduire au rendu depuis une ref est interdit (lecture de ref pendant le rendu).
+     ⚠️ Les deux `setState` sont poses COTE A COTE. Glisser `setSens` dans la fonction de mise
+       a jour de `setVue` en ferait un effet de bord dans une fonction censee etre pure, que
+       React 19 en mode strict execute deux fois — exactement ce qui faisait partir les
+       notifications en double.
+  2. RECHERCHE DANS LA CONVERSATION : `mode="popLayout"`, l'element sortant quitte la mise en
+     page immediatement. La barre REMPLACE l'en-tete et toute variation de hauteur ferait
+     sauter le fil derriere. Mesure : hauteur constante a 73 px pendant toute la bascule.
+  3. LISTE DES VUES D'UNE STORY : le panneau MONTE depuis le bas — le bord d'ou il vient, et
+     ce qui dit qu'il sort de la pilule « Vu par » posee juste en dessous. Noms en cascade
+     bornee. `damped` et non ressort : sur cette surface, un depassement brouille les noms.
+     Mesure : 366 → 0 px a l'ouverture, 37 → 471 px a la fermeture.
+  ⚠️ PIEGE DE TEST : la serie de positions contient DEUX vues successives — la sortante
+    d'abord (elle part du cote oppose au deplacement), l'entrante ensuite. Chercher « la
+    premiere grande valeur » attrapait la SORTIE et concluait a l'envers du comportement reel.
+
 [AJUSTE 06/09, retour client] PROFIL DANS LA PILULE + onglet renomme « Actus ».
   Le client a tranche contre ma recommandation : « je n'aime pas le fait qu'il soit a l'ecart,
   trop isole ». Le profil rejoint donc la pilule.
