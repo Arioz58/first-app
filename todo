@@ -327,6 +327,28 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 06/09 - demande client] BLOQUER et SIGNALER passent par une boite de dialogue.
+  ⚠️ DEUX defauts DIFFERENTS derriere la meme demande :
+    - SIGNALER affichait ses 4 categories A LA PLACE des boutons — le meme defaut que la
+      sourdine avant correction. Passe par `ChoiceDialog`.
+    - BLOQUER utilisait `window.confirm`. Nouveau composant `ConfirmDialog`.
+  ⚠️ `window.confirm` BLOQUE le fil du navigateur : rien ne s'affiche ni ne se met a jour tant
+    qu'on n'a pas repondu, socket compris. Il ne se traduit pas — le bouton « OK » reste dans
+    la langue du SYSTEME — et son apparence est celle du navigateur.
+  ⚠️ DEBLOQUER ne demande AUCUNE confirmation : l'action se defait d'un clic et ne detruit
+    rien. Confirmer les deux ferait du dialogue une formalite qu'on clique sans lire.
+  ⚠️ Le message dit ce que le blocage FAIT (supprime l'amitie, annule les demandes en attente)
+    et non « etes-vous sur » : une question sans consequence enoncee ne se lit pas.
+  ⚠️ Action destructrice a DROITE et en rouge, annulation a gauche et neutre : l'inverser fait
+    cliquer « bloquer » a qui voulait sortir.
+  QUITTER LE GROUPE converti aussi, bien que hors demande : laisser un `window.confirm` natif
+    au milieu de boites soignees, dans le meme panneau, se remarque plus qu'une absence
+    d'animation.
+  ⚠️ FUITE i18n corrigee : `REPORT_CATEGORIES` portait ses libelles EN FRANCAIS EN DUR
+    ('Usurpation d'identite', 'Contenu inapproprie'...).
+  Verifie : dialogue titre, 4 categories traduites, boutons toujours visibles derriere, Echap
+    qui annule, deux boutons dans la confirmation, et ZERO dialogue natif rencontre.
+
 [FAIT 05/09 - demande client] BARRE DE NAVIGATION EN PILULE (3 destinations).
   `components/NavRail.tsx` : Discussions · Amis · Stories, en pilule verticale a gauche de la
   colonne. Les stories QUITTENT la bande horizontale de la liste (`StoriesBar.tsx` supprime,
