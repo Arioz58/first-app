@@ -327,6 +327,34 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 06/09 - demande client] PROFIL DANS LA BARRE + INFOBULLES au survol.
+  L'avatar quitte le pied de colonne pour le BAS de la barre de navigation. Infobulles au
+  survol des quatre boutons (« Discussions », « Amis », « Stories », nom + « Vous »), meme
+  traitement que les actions du composeur mais posees A DROITE — la barre etant contre le bord
+  gauche, un libelle a sa gauche sortirait de l'ecran.
+  ⚠️ HORS de la pilule, et c'est un choix : le profil n'est pas une destination de meme rang.
+    Les trois autres changent le CONTENU de la colonne ; lui ouvre un panneau qui la RECOUVRE.
+    Dans la pilule il annoncerait un quatrieme onglet, et il faudrait trancher un cas bancal :
+    l'indicateur actif se pose-t-il dessus ? S'il se pose il ment, sinon le controle devient
+    incoherent avec lui-meme.
+  ⚠️ CONTREPARTIE ASSUMEE, signalee au client avant de le faire : le NOM du compte, visible en
+    permanence dans l'ancien pied de colonne, n'est plus que dans l'infobulle. C'est ainsi
+    qu'on remarquait etre connecte avec le mauvais compte. Gain : ~60 px de hauteur sur toute
+    la colonne.
+  ⚠️ `relative z-20` sur la BARRE : les infobulles debordent sur la colonne de contenu, qui
+    vient APRES dans le document et se peignait par-dessus — le libelle apparaissait tronque,
+    coupe net par le champ de recherche. Un z-index sur l'infobulle seule n'y suffit pas.
+    Reste sous les panneaux (`z-30`), qui doivent recouvrir la barre.
+  ⚠️ `devIndicators.position: 'bottom-right'` dans `next.config.ts` : l'indicateur de
+    developpement de Next.js se pose en bas A GAUCHE, exactement ou vit desormais l'avatar. Il
+    le recouvrait et interceptait les clics. Sans effet en production, ou il n'existe pas.
+  ⚠️ FAILLI PERDRE deux fonctionnalites : `MessageRequestsPanel` et `UserProfileDialog`
+    vivaient dans le meme bloc que le pied de colonne et ont ete emportes avec lui. Rattrapes
+    par les avertissements de lint (imports devenus inutilises) — les lire compte.
+  ⚠️ PIEGE DE TEST : une infobulle en `pointer-events-none` est TRAVERSEE par
+    `elementFromPoint`, qui renvoie toujours ce qu'il y a derriere. Pour verifier l'ordre de
+    peinture, la rendre cliquable le temps de la mesure.
+
 [FAIT 06/09 - demande client] ANIMATION DE LA PILULE DE NAVIGATION.
   Choix laisse ouvert par le client. Quatre ajouts, tous tires du langage deja en place :
   1. CASCADE AU MONTAGE : la pilule arrive, ses icones l'une apres l'autre. Sans cela elle
