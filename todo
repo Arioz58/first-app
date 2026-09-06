@@ -327,6 +327,25 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 06/09 - demande client] ANIMATION DE LA PILULE DE NAVIGATION.
+  Choix laisse ouvert par le client. Quatre ajouts, tous tires du langage deja en place :
+  1. CASCADE AU MONTAGE : la pilule arrive, ses icones l'une apres l'autre. Sans cela elle
+     etait simplement « deja la », alors que tout le reste vient de quelque part.
+  2. ECHELLE DE REPOS DIFFERENTE : icone active a 1, inactives a 0.9. Au changement de vue, le
+     ressort fait donc eclore la nouvelle et se retirer l'ancienne — un mouvement obtenu SANS
+     image-cle ni etat supplementaire, juste par la difference entre deux tailles au repos.
+  3. SURVOL a 1.12, sauf sur l'entree ACTIVE : elle est deja mise en avant par son indicateur,
+     et l'agrandir encore la ferait deborder de la pilule.
+  4. PASTILLE qui grandit de 0 a 1 et repart de meme (`AnimatePresence`) : c'est le seul
+     element de la barre qui change SANS qu'on ait rien fait — un message recu, une demande
+     d'ami — et ce mouvement est ce qui attire l'oeil vers lui.
+  ⚠️ `damped` sur la pilule (une surface) et ressort sur les icones (de petits objets) : meme
+    regle que partout — le depassement se lit comme du ressort sur ce qui est petit, comme un
+    tremblement sur ce qui est large.
+  Mesure : cascade (opacites 0.20/0.03/0), echelles 1/0.9/0.9 puis 0.9/0.9/1 apres bascule,
+    indicateur qui parcourt 10 positions intermediaires (y 22 → 118), survol a 1.12, pastille
+    de 0 → 0.26 → 0.59 → 0.81 → 1.
+
 [FAIT 06/09 - demande client] BLOQUER et SIGNALER passent par une boite de dialogue.
   ⚠️ DEUX defauts DIFFERENTS derriere la meme demande :
     - SIGNALER affichait ses 4 categories A LA PLACE des boutons — le meme defaut que la
