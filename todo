@@ -327,6 +327,19 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[AJUSTE 06/09, retour client] PROFIL DANS LA PILULE + onglet renomme « Actus ».
+  Le client a tranche contre ma recommandation : « je n'aime pas le fait qu'il soit a l'ecart,
+  trop isole ». Le profil rejoint donc la pilule.
+  ⚠️ MA RESERVE RESTE VALABLE et est traitee par un FILET separateur : le profil n'est pas une
+    destination de meme rang (les trois autres changent le CONTENU, lui ouvre un panneau qui
+    RECOUVRE). Sans separation, la pilule annoncerait quatre onglets equivalents — et
+    l'indicateur actif, qui ne se pose jamais sur le profil, paraitrait defaillant plutot que
+    delibere. Le filet garde le groupe visuel sans mentir sur le rang.
+  ⚠️ « Stories » renomme selon les libelles DEJA presents sur mobile (`tabs.updates`) : Actus /
+    Updates / Güncellemeler. Ne pas reinventer un libelle pour la meme destination.
+  Verifie : filet de 44x1 px entre la 3e destination et le profil, 4 boutons dans la pilule,
+    infobulles, panneau profil qui s'ouvre et recouvre la barre.
+
 [FAIT 06/09 - demande client] PROFIL DANS LA BARRE + INFOBULLES au survol.
   L'avatar quitte le pied de colonne pour le BAS de la barre de navigation. Infobulles au
   survol des quatre boutons (« Discussions », « Amis », « Stories », nom + « Vous »), meme
@@ -354,6 +367,9 @@ CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
   ⚠️ PIEGE DE TEST : une infobulle en `pointer-events-none` est TRAVERSEE par
     `elementFromPoint`, qui renvoie toujours ce qu'il y a derriere. Pour verifier l'ordre de
     peinture, la rendre cliquable le temps de la mesure.
+  ⚠️ RAPPEL, rencontre TROIS FOIS le 05-06/09 : ajouter des cles i18n pendant que le serveur
+    de dev tourne provoque une erreur d'hydratation sur les nouveaux libelles — le serveur sert
+    un bundle de traductions perime. REDEMARRER le serveur. Sans effet en production.
 
 [FAIT 06/09 - demande client] ANIMATION DE LA PILULE DE NAVIGATION.
   Choix laisse ouvert par le client. Quatre ajouts, tous tires du langage deja en place :
