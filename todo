@@ -327,6 +327,45 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 06/09 - demande client] VOCAUX WEB : lecteur maison, micro qui morphe en envoi.
+  LECTEUR (`components/AudioMessage.tsx`) remplace le `<audio controls>` natif : lecture/pause
+  qui morphe, piste cliquable pour se deplacer, duree annoncee AVANT tout chargement (elle
+  vient de `durationMs` de l'expediteur), vitesse 1x/1,5x/2x.
+  ⚠️ Le lecteur du navigateur NE SE STYLE PAS : son apparence est celle du systeme, differente
+    sur Chrome, Safari et Firefox, et sans rapport avec le reste de l'interface.
+  ⚠️ Ecouteurs poses sur l'ELEMENT et non pilotes par des props : `play`/`pause` peuvent venir
+    du systeme (touches media), un etat deduit des seuls clics finirait par mentir.
+  ⚠️ Icones REMPLIES (`fill="currentColor"` + `strokeWidth={0}`) : les traces lucide sont des
+    CONTOURS, et un triangle de lecture creux ne se lit pas a 17 px. Le trait est mis a zero,
+    sa valeur par defaut ajoutant un lisere autour d'une forme deja pleine.
+
+  MICRO QUI MORPHE EN ENVOI : le formulaire reste MONTE pendant l'enregistrement, seul son
+  CENTRE bascule (chrono, onde, corbeille). Le bouton de droite n'est jamais demonte — c'est
+  la condition du morphing, comme pour la loupe. `VoiceRecorder` n'a donc plus son propre
+  bouton d'envoi : il expose une poignee `envoyer()` (`VoiceHandle`).
+  ⚠️ L'avion et NON un carre d'arret : ce clic envoie. La corbeille reste le seul moyen de
+    s'arreter sans envoyer.
+  ⚠️ DEUX DEFAUTS REELS corriges au passage :
+    - `onCancel` etait une flechee posee dans le JSX, donc recreee a chaque rendu, alors que
+      l'effet qui tient le `MediaRecorder` l'a en dependance. Un message recu pendant qu'on
+      parlait pouvait RELANCER l'enregistrement en cours de route. Rappels stabilises.
+    - Micro refuse : l'erreur remonte au composeur au lieu de s'afficher dans la barre. Sans
+      micro il n'y a pas d'enregistrement, donc pas d'etat a tenir — et garder la barre
+      laissait le bouton d'envoi promettre un vocal inexistant.
+
+  GRANDE CLOCHE (tuile « Sourdine » des actions rapides) : morphe elle aussi. `QuickAction`
+  accepte desormais un trace lucide (`morph`) en plus d'un composant (`icon`).
+  ⚠️ Les DEUX cloches du panneau sont VOLONTAIREMENT inversees : la tuile dit l'ETAT (comme
+    l'etoile qui se remplit), la ligne « Sourdine » plus bas annonce l'ACTION.
+
+  Verifie : 10 formes intermediaires micro->avion, temoin `data-*` retrouve apres l'envoi
+    (meme element), cycle complet appui->enregistrement->envoi->vocal dans le fil, 12 formes
+    pour la cloche dans les deux sens, `fill` et `stroke-width: 0px` calcules.
+  ⚠️ PIEGE DE TEST : le premier essai annoncait « la barre n'avance pas ». C'etait le test qui
+    cliquait avant que le fichier soit bufferise — attendre `canplay`. Le m4a venu du mobile se
+    lit tres bien dans Chromium (AAC supporte).
+  ⚠️ La cle i18n `voice.send` devient inutilisee (bouton supprime), laissee dans les 3 locales.
+
 [FAIT 06/09 - demande client] POUBELLE DES STORIES + premier MORPHING D'ICONE.
   POUBELLE : passee en ROUGE (seule action destructrice de l'ecran, au milieu de commandes
   blanches et neutres) et confirmee par `ConfirmDialog`. La story se met en PAUSE tant qu'on
