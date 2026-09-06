@@ -327,6 +327,31 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 06/09 - demande client] POUBELLE DES STORIES + premier MORPHING D'ICONE.
+  POUBELLE : passee en ROUGE (seule action destructrice de l'ecran, au milieu de commandes
+  blanches et neutres) et confirmee par `ConfirmDialog`. La story se met en PAUSE tant qu'on
+  decide — sinon elle defile pendant qu'on lit la question, et peut meme changer.
+  Le message dit que la suppression est DEFINITIVE et vaut aussi pour ceux qui l'ont deja vue.
+
+  MORPHICONS (`morphicons` 1.7.1, MIT, zero dependance) : la loupe de la recherche se
+  TRANSFORME en croix.
+  ⚠️ Il a fallu installer `lucide` EN PLUS de `lucide-react` : le morphing consomme les
+    DONNEES de l'icone (son `IconNode`), et `lucide-react` ne les expose pas — ses composants
+    ne portent que `$$typeof` et `render`.
+  ⚠️ UN SEUL bouton, qui PERSISTE dans les deux etats : c'est la condition d'un morphing.
+    Avant, la loupe et la croix etaient deux elements qu'`AnimatePresence` echangeait — l'un
+    sortait, l'autre entrait, il n'y avait rien a transformer.
+  ⚠️ `reducedMotion="user"` OBLIGATOIRE a chaque usage : la bibliotheque ignore
+    `prefers-reduced-motion` PAR DEFAUT (son mode « never »), ce qui contredirait le
+    `MotionConfig` pose a la racine.
+  Verifie : 12 formes intermediaires distinctes entre la loupe et la croix, en-tete a hauteur
+    constante, poubelle rouge (r=255 g=100 b=103), story en pause, Echap qui annule.
+  ⚠️ PIEGES DE TEST : Tailwind 4 exprime ses couleurs en LAB, pas en RGB — comparer des
+    chaines « rgb(...) » echoue ; passer par un canvas pour lire les canaux. Et la visionneuse
+    de stories est elle-meme `.fixed inset-0 z-50` : un selecteur de dialogue non qualifie
+    l'attrape aussi.
+  ⚠️ `npm install` ELAGUE playwright (installe en --no-save). A remettre systematiquement.
+
 [FAIT 06/09 - demande client] TROIS TRANSITIONS DE PLUS.
   1. BASCULE ENTRE LES PAGES (Discussions / Amis / Actus) : glissement horizontal dont le SENS
      suit l'ordre des destinations dans la barre — une transition toujours du meme cote ne dit
