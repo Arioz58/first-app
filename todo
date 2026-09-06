@@ -327,6 +327,29 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
+[FAIT 05/09 - demande client] BARRE DE NAVIGATION EN PILULE (3 destinations).
+  `components/NavRail.tsx` : Discussions · Amis · Stories, en pilule verticale a gauche de la
+  colonne. Les stories QUITTENT la bande horizontale de la liste (`StoriesBar.tsx` supprime,
+  remplace par `StoriesPage.tsx`), les amis quittent leur panneau en surimpression.
+  ⚠️ POURQUOI : ces trois vues occupaient le meme espace de facons differentes — une bande
+    posee en tete de liste, un panneau qui la recouvrait, et la vue par defaut. Rien ne disait
+    qu'il s'agissait de trois destinations de MEME RANG, ni comment passer de l'une a l'autre.
+  ⚠️ L'indicateur de la vue active est un `layoutId` : il GLISSE d'une icone a l'autre. En
+    rendre un par bouton et le montrer/cacher donnerait un clignotement sans lien visible entre
+    l'ancienne et la nouvelle position.
+  ⚠️ Il est pose DERRIERE l'icone : au premier plan il masquerait le glyphe pendant le trajet.
+  ⚠️ Les pastilles (non-lus, demandes d'ami) vivent sur la BARRE : c'est le seul endroit
+    visible depuis n'importe quelle vue. Le bouton « Amis » a donc quitte l'en-tete — deux
+    chemins vers le meme endroit, dont un seul indique ou l'on se trouve.
+  ⚠️ `FriendsPanel` : `onClose` devient OPTIONNEL et son positionnement change avec. En
+    destination il occupe la colonne (`flex-1`) ; en surimpression il reste `absolute inset-0`.
+    Superpose, il masquait le pied de colonne et la barre elle-meme.
+  ⚠️ La colonne de contenu est en `min-w-0` : sans cela un nom de conversation long elargirait
+    le conteneur flex au lieu d'etre tronque, et poussait la barre hors de l'ecran.
+  ⚠️ Le pied de colonne (vignette « Vous ») est COMMUN aux trois vues.
+  ⚠️ Les harnais de test qui visaient les stories dans la liste doivent d'abord se rendre sur
+    la destination (`nav button` n° 3).
+
 [FAIT 05/09 - BUG SIGNALE PAR LE CLIENT] Saut du fil au chargement de l'historique.
   Symptome : en remontant, quand les messages plus anciens arrivent, le fil « saute d'un coup
   plus bas dans la conversation ». Mesure : -1600 px de deplacement au moment de l'insertion.
