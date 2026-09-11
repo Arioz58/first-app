@@ -325,6 +325,84 @@ Pouvoir fermer le clavier quand on cherche un numero a ajouter (enfaite pouvoir 
   [A FAIRE] Une fois la variante retenue : garder la seule branche choisie, retirer l'entree de menu, supprimer `lib/headerStyle.ts` et les cles `header_style.*`. Marche a suivre en tete de `lib/headerStyle.ts`.
 
 ================================================================================
+RETOUR CLIENT DU 09/09/2026 (fichiers `retour_hakan` / `reponse_hakan`, supprimes une fois boucle)
+
+12 points remontes par Hakan apres avoir teste la version web. Ordre de travail annonce
+dans la reponse : notifications -> corrections d'affichage web -> fluidite a l'ouverture ->
+le reste (GIF, actions sur photo, mise a niveau du web).
+
+[FAIT 10/09, VERIFIE 11/09 - point 4] NOTIFICATIONS : ouvrir Nexa Web rendait son propre telephone MUET.
+  Symptome client : « je ne recois pas de notif quand quelqu'un m'envoie un message, je suis
+  oblige d'ouvrir l'application ». Apparu au moment ou il s'est mis a utiliser le web — ce
+  n'est pas une coincidence.
+  Cause : le serveur ne poussait qu'a qui n'etait « pas deja la ». Un onglet laisse ouvert,
+  meme en arriere-plan, meme sur un autre ecran, suffisait a compter comme present. Le meme
+  defaut frappait les demandes d'ami (`notify.service`, qui testait `isUserOnline`).
+  → chaque client DECLARE sa plateforme au handshake (`auth: { token, platform }`) :
+    `mobile` cote app (`lib/socket.ts`), `web` cote Next.js (`src/lib/socket.ts`).
+  → backend : `platform` lue dans le middleware d'auth du socket, sockets web exclus du calcul
+    « qui a deja la conversation ouverte », et nouvel export `isUserOnMobile(userId)` utilise
+    par `notify.service`.
+  ⚠️ `platform` vient du CLIENT donc elle se falsifie : elle ne sert QU'A decider d'un push,
+    jamais a autoriser quoi que ce soit. Le pire qu'on obtienne en mentant est de se priver de
+    ses propres notifications.
+  ⚠️ DEFAUT `mobile` quand le champ est absent : les builds DEJA INSTALLES (dont celui d'Hakan)
+    ne l'envoient pas, et les traiter comme du web les rendrait muets. Le defaut doit toujours
+    etre l'ancien comportement.
+  ⚠️ `resumeSocket` REECRIT `auth` en entier : n'y remettre que le jeton effacerait `platform`,
+    et le serveur retomberait sur son defaut a chaque retour au premier plan. Bug invisible en
+    test court, puisque le defaut est justement `mobile`.
+  ⚠️ NE PAS substituer `isUserOnMobile` a `isUserOnline` ailleurs : la PRESENCE (« en ligne /
+    vu le… ») et les ACCUSES DE RECEPTION restent sur `isUserOnline` — un navigateur connecte
+    est en ligne, et un message parvenu a un onglet est bel et bien parvenu.
+  → Consequence ASSUMEE : conversation ouverte sur l'ordinateur, le telephone s'allume AUSSI.
+    C'est ce que fait WhatsApp ; le serveur ne peut pas savoir quel ecran est regarde, et
+    manquer un message coute plus cher qu'une notification de trop.
+  [VERIFIE 11/09] UserB connecte sur le web ET sur iPhone, message envoye depuis UserA : la
+    notification arrive bien sur le telephone, Nexa Web ouvert.
+
+[A FAIRE - point 4 bis] TOASTER IN-APP (mobile ET web) quand un message arrive alors qu'on est
+  sur un autre ecran. Demande explicitement par le client, annonce dans la reponse. Rien n'existe
+  aujourd'hui dans les deux repos : le mobile n'a que des notifications LOCALES `expo-notifications`
+  pour les evenements sociaux, le web n'a que les notifications NAVIGATEUR (onglet en arriere-plan).
+
+[A FAIRE - points 1 et 9] AFFICHAGE WEB. (1) La conversation garde une colonne etroite au milieu
+  sur un ecran d'ordinateur. (9) Les photos verticales prises au telephone s'affichent en bande
+  etroite et haute au lieu d'etre elargies comme le fait WhatsApp. Annonces comme rapides.
+
+[A FAIRE - points 5 et 7] FLUIDITE A L'OUVERTURE : ecran vide ~2 s a la reouverture de l'app
+  (mobile), et latence au premier essai apres une prise de photo (destinataire absent de la liste).
+  Meme cause de fond : l'app REDEMANDE tout au serveur avant d'afficher quoi que ce soit, la ou
+  WhatsApp affiche d'abord ce qu'il a en memoire puis se met a jour en arriere-plan.
+  ⚠️ Ce n'est PAS une retouche : il faut donner une MEMOIRE LOCALE a l'application (cache
+  persistant de la liste des conversations et des dernieres pages de messages). Annonce au client
+  comme un chantier a chiffrer. Le plus important de la liste sur le long terme — l'ecart se
+  creusera avec le volume de messages et de medias.
+
+[EN ATTENTE CLIENT - point 2] Photos de profil disparues sur le telephone apres connexion web.
+  Verifie : les deux sessions sont independantes, se connecter sur le web ne touche pas celle du
+  telephone. Capture d'ecran demandee au client pour reproduire.
+
+[EN ATTENTE CLIENT - point 3] « Suivre la trace de WA ». Reponse envoyee : on reprend les USAGES
+  (fonctionnalites, habitudes) mais pas l'APPARENCE (agencement, couleurs, icones) — risque de mise
+  en demeure ou de retrait des stores, et handicap commercial pour l'offre business. Comparatif des
+  points ou on est aujourd'hui trop proches PROPOSE au client, pas encore demande.
+
+[A FAIRE - point 8] Cle GIPHY a configurer cote serveur (`GIPHY_API_KEY` sur Railway).
+  ⚠️ Ne pas oublier la REVOCATION de l'ancienne cle, deja presente dans l'historique git donc
+  compromise. Les builds mobiles deja installes appellent encore Giphy en direct : leurs GIFs
+  cesseront de fonctionner a la revocation, jusqu'au prochain build EAS.
+
+[DEJA PREVU - points 10, 11, 12] Actions sur une photo ouverte en grand (telecharger, epingler,
+  aller au message, reagir), icones d'en-tete d'une conversation web, et parite complete mobile→web
+  (profils, actus/stories, options des conversations). Deja dans les livrables web, cf. la section
+  CLIENT WEB ci-dessous. Point detaille a preparer pour le client (ce qui est en place, ce qui
+  reste, dans quel ordre).
+
+[REPONDU - point 6] Delais : fin 2026 tenus, engagement de prevenir immediatement en cas de risque.
+
+
+================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
 
 [FAIT 06/09 - demande client] VOCAUX WEB : lecteur maison, micro qui morphe en envoi.

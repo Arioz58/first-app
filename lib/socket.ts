@@ -16,7 +16,11 @@ export const connectSocket = async (): Promise<Socket> => {
   const token = await getAccessToken();
 
   socket = io(BASE_URL, {
-    auth: { token },
+    // ⚠️ `platform` dit au serveur à quel type d'appareil il parle : lui seul décide
+    // ensuite s'il faut pousser une notification. Un socket mobile ouvert signifie « app
+    // affichée » (elle se déconnecte en arrière-plan), un socket web ne signifie rien de
+    // tel — un onglet oublié rendait le téléphone muet.
+    auth: { token, platform: "mobile" },
     transports: ["websocket"],
     reconnection: true,
   });
@@ -55,7 +59,9 @@ export const resumeSocket = async () => {
   try {
     // Le jeton d'accès (15 min) a pu expirer pendant la veille : on relit celui en cours,
     // rafraîchi par `api.ts`, sinon le serveur rejette la connexion à l'authentification.
-    socket.auth = { token: await getAccessToken() };
+    // ⚠️ RÉÉCRIRE `auth` en entier : n'y remettre que le jeton effacerait `platform`, et
+    // le serveur retomberait sur son défaut à chaque retour au premier plan.
+    socket.auth = { token: await getAccessToken(), platform: "mobile" };
   } catch {
     // Lecture impossible : on tente avec le jeton précédent plutôt que de rester muet.
   }
