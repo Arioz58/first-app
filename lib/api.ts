@@ -3,6 +3,7 @@ import {
   clearTokens,
   getAccessToken,
   getRefreshToken,
+  getUserId,
   saveTokens,
 } from "./storage";
 
@@ -10,6 +11,49 @@ let sessionExpiredHandler: (() => void) | null = null;
 
 export const setSessionExpiredHandler = (handler: () => void) => {
   sessionExpiredHandler = handler;
+};
+
+/**
+ * Renouvelle le jeton d'accès à partir de celui de rafraîchissement.
+ *
+ * ⚠️ LA PROMESSE EN VOL EST PARTAGÉE. Plusieurs requêtes partent en parallèle au lancement
+ * d'un écran ; si le jeton vient d'expirer, elles reçoivent toutes un 401 en même temps et
+ * déclencheraient chacune leur propre renouvellement. Le serveur invalidant l'ancien jeton de
+ * rafraîchissement à chaque usage, la première réussirait et les suivantes DÉCONNECTERAIENT
+ * l'utilisateur. Le client web se protégeait déjà ainsi, pas le mobile.
+ *
+ * ⚠️ Exporté pour le socket, qui porte son jeton dans son handshake et doit pouvoir le
+ * renouveler lui-même — voir `lib/socket.ts`.
+ *
+ * ⚠️ Renvoie `null` sans effacer la session : un réseau coupé n'est pas une session expirée,
+ * et c'est à l'appelant de décider quoi en faire.
+ */
+let refreshing: Promise<string | null> | null = null;
+
+export const refreshAccessToken = async (): Promise<string | null> => {
+  if (refreshing) return refreshing;
+
+  refreshing = (async () => {
+    const refreshToken = await getRefreshToken();
+    if (!refreshToken) return null;
+    try {
+      const res = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      await saveTokens(data.accessToken, data.refreshToken, (await getUserId()) ?? "");
+      return data.accessToken as string;
+    } catch {
+      return null;
+    } finally {
+      refreshing = null;
+    }
+  })();
+
+  return refreshing;
 };
 
 type RequestOptions = {
@@ -38,32 +82,16 @@ export const apiRequest = async <T>(
   });
 
   if (res.status === 401 && auth) {
-    // Tenter un refresh uniquement pour les requêtes authentifiées
-    const refreshToken = await getRefreshToken();
-    if (refreshToken) {
-      const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
+    // Tenter un refresh uniquement pour les requêtes authentifiées.
+    const fresh = await refreshAccessToken();
+    if (fresh) {
+      headers["Authorization"] = `Bearer ${fresh}`;
+      const retry = await fetch(`${BASE_URL}${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
       });
-      if (refreshRes.ok) {
-        const data = await refreshRes.json();
-        const currentUserId = await import("./storage").then((m) =>
-          m.getUserId(),
-        );
-        await saveTokens(
-          data.accessToken,
-          data.refreshToken,
-          currentUserId ?? "",
-        );
-        headers["Authorization"] = `Bearer ${data.accessToken}`;
-        const retry = await fetch(`${BASE_URL}${path}`, {
-          method,
-          headers,
-          body: body ? JSON.stringify(body) : undefined,
-        });
-        return retry.json();
-      }
+      return retry.json();
     }
     await clearTokens();
     sessionExpiredHandler?.();

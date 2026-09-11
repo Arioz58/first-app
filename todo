@@ -457,6 +457,36 @@ le reste (GIF, actions sur photo, mise a niveau du web).
   → le web n'est pas concerne : son ecouteur est dans un `useEffect` avec nettoyage, et le
     nettoyage capture la bonne identite.
 
+[CORRIGE 11/09 - BUG DE FOND, signale par le client sur le WEB] Plus aucun message en temps
+reel : « je n'ai vu aucun toaster ni notification, et j'ai du RAFRAICHIR pour voir les
+nouveaux messages ». Anterieur aux bandeaux — ils n'ont fait que le rendre visible.
+  Diagnostic, en trois mesures et sans toucher au code :
+  1. sonde Node connectee en `platform: 'web'` → le serveur emet bien `conversation_updated`
+     AVEC son alerte. Le defaut etait donc cote client ;
+  2. sonde avec un jeton d'acces EXPIRE → « Token invalide », UNE seule tentative, puis plus
+     rien. socket.io NE RETENTE PAS apres un refus du middleware d'authentification ;
+  3. le jeton n'etait lu QU'A LA CREATION du socket (`auth` fige), et jamais renouvele.
+  → Le temps reel mourait donc en silence des que le jeton d'acces expirait (15 min) ET que
+    quelque chose forcait une reconnexion : veille, reseau, ou redemarrage du serveur — ce que
+    nodemon faisait a chaque modification du backend, d'ou le declenchement pendant les tests.
+    Recharger la page reparait, parce que le premier appel d'API renouvelle le jeton et que le
+    socket est alors recree : exactement le symptome decrit.
+  → Les DEUX clients ecoutent desormais `connect_error`, renouvellent le jeton et rappellent
+    `connect()`. Le web relit aussi le jeton sur `reconnect_attempt` (une requete d'API a pu le
+    renouveler entre-temps).
+  ⚠️ On ne renouvelle QUE si le jeton est expire : une erreur avec un jeton valide signifie
+    que le serveur est injoignable, il n'y a rien a renouveler — et c'est ce qui empeche la
+    boucle, le second passage trouvant un jeton frais.
+  → Correctif VERIFIE de bout en bout par une sonde : jeton expire → refus → renouvellement
+    via /auth/refresh → reconnexion → `conversation_updated` recu.
+  → Au passage, `refreshAccessToken` est extrait d'`apiRequest` cote mobile et PARTAGE SA
+    PROMESSE EN VOL, ce que seul le web faisait : plusieurs requetes parallele recevant le
+    meme 401 declenchaient chacune leur renouvellement, et le serveur invalidant l'ancien
+    jeton de rafraichissement a chaque usage, les suivantes DECONNECTAIENT l'utilisateur.
+    Bug latent, jamais diagnostique jusqu'ici.
+  ⚠️ L'echec etait TOTALEMENT MUET : aucun log, aucun ecran d'erreur. Les deux clients
+    tracent desormais « Connexion refusee » dans la console.
+
   [AJUSTE 11/09, retour client] LA PILE SE DEPLIE + ARRIVEE PLUS VIVE.
   Deux retours apres essai sur le mobile : « l'animation de disparition est parfaite », mais
   l'ARRIVEE paraissait lente, et la pile devait devenir explicite.

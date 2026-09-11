@@ -1,6 +1,21 @@
 import { io, Socket } from "socket.io-client";
+import { refreshAccessToken } from "./api";
 import { BASE_URL } from "./config";
 import { getAccessToken } from "./storage";
+
+/**
+ * ⚠️ Copie locale plutôt qu'un import : `app/_layout.tsx` porte la même, et la partager
+ * demanderait un module de plus pour six lignes. Un jeton illisible est traité comme expiré —
+ * c'est le cas le plus sûr, il déclenche un renouvellement au lieu d'un échec muet.
+ */
+const isTokenExpired = (token: string): boolean => {
+  try {
+    const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(base64)).exp * 1000 < Date.now();
+  } catch {
+    return true;
+  }
+};
 
 let socket: Socket | null = null;
 
@@ -27,6 +42,34 @@ export const connectSocket = async (): Promise<Socket> => {
 
   socket.on("connect", () => console.log("[Socket] Connecté"));
   socket.on("disconnect", () => console.log("[Socket] Déconnecté"));
+
+  /**
+   * Handshake refusé : on renouvelle le jeton et on RELANCE la connexion.
+   *
+   * ⚠️ MESURÉ le 11/09 sur le client web, qui a exactement le même défaut : socket.io ne
+   * retente PAS après un refus du middleware d'authentification. Une seule tentative, puis
+   * plus rien — le temps réel meurt en silence dès que le jeton d'accès expire (15 min) et
+   * que quelque chose force une reconnexion : réseau, veille, ou redémarrage du serveur.
+   *
+   * ⚠️ `resumeSocket` ne suffit pas : il ne joue qu'au retour au PREMIER PLAN. Une coupure
+   * survenue pendant que l'app est affichée n'était rattrapée par personne.
+   *
+   * ⚠️ On ne renouvelle QUE si le jeton est expiré. Une erreur de connexion avec un jeton
+   * valide veut dire que le serveur est injoignable, et il n'y a rien à renouveler — c'est
+   * aussi ce qui empêche la boucle, le second passage trouvant un jeton frais.
+   */
+  socket.on("connect_error", async (err) => {
+    const current = await getAccessToken();
+    if (current && !isTokenExpired(current)) {
+      console.warn("[Socket] Connexion refusée :", err.message);
+      return;
+    }
+    const fresh = await refreshAccessToken();
+    if (!fresh || !socket) return;
+    console.log("[Socket] Jeton renouvelé, reconnexion");
+    socket.auth = { token: fresh, platform: "mobile" };
+    socket.connect();
+  });
   socket.on("error", (err: { message: string }) =>
     console.warn("[Socket] Erreur:", err.message),
   );
