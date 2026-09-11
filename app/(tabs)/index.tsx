@@ -265,9 +265,15 @@ export default function ConversationsScreen() {
 
     // `conversation_updated` (room `user:`) et non `new_message` (room `conv:`) :
     // seul le premier arrive pour une conversation qu'on n'a pas ouverte.
-    socket.on(
-      'conversation_updated',
-      ({ conversationId, message }: { conversationId: string; message: Message }) => {
+    /**
+     * ⚠️ Écouteur NOMMÉ, retiré nommément au démontage. `socket.off('conversation_updated')`
+     * sans argument détache TOUS les écouteurs de l'événement — y compris celui de
+     * `app/_layout.tsx`, qui affiche les bandeaux d'alerte : quitter cet onglet rendait
+     * alors l'application muette jusqu'à son prochain lancement.
+     */
+    const onConversationUpdated = (
+      { conversationId, message }: { conversationId: string; message: Message },
+    ) => {
         /**
          * ⚠️ Un ALBUM ne compte qu'UNE fois. L'envoi de N médias émet N événements (un
          * message ne porte qu'une pièce jointe) alors que le destinataire ne verra qu'une
@@ -302,8 +308,8 @@ export default function ConversationsScreen() {
           };
           return sortConversations(updated);
         });
-      },
-    );
+    };
+    socket.on('conversation_updated', onConversationUpdated);
 
     socket.on('added_to_group', () => fetchConversations());
 
@@ -313,7 +319,7 @@ export default function ConversationsScreen() {
     socket.on('connect', () => fetchConversations());
 
     return () => {
-      socket.off('conversation_updated');
+      socket.off('conversation_updated', onConversationUpdated);
       socket.off('added_to_group');
       socket.off('connect');
     };

@@ -66,6 +66,7 @@ import type { ChatWallpaper } from '../../lib/chatWallpapers';
 import { bubbleGradient, resolveBubbleColor, shade } from '../../lib/bubbleColors';
 import { consumeScrollTarget } from '../../lib/chatNav';
 import { setActiveConversation } from '../../lib/unreadMessages';
+import { dismissToastsFor } from '../../lib/toasts';
 import { stopVoice, voiceSnapshot } from '../../lib/voicePlayback';
 // ⚠️ Ce KeyboardAvoidingView n'est PAS celui de React Native : il suit la position
 // réelle du clavier, mesurée nativement à chaque image. Celui de RN applique son
@@ -2446,6 +2447,10 @@ export default function ChatScreen() {
   // badge de l'onglet Discussion doit les ignorer.
   useEffect(() => {
     setActiveConversation(id);
+    // ⚠️ Son bandeau d'alerte n'a plus lieu d'être : on est dedans. Nécessaire même si le
+    // bandeau se ferme au tap, car on peut arriver ici par la liste, une recherche ou une
+    // notification — et il inviterait alors à ouvrir l'écran déjà ouvert.
+    dismissToastsFor(id);
     return () => setActiveConversation(null);
   }, [id]);
 

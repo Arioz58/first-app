@@ -20,12 +20,16 @@ import { registerForPushNotifications } from "../lib/notifications";
 // système ne réveille l'app pour une notification — à ce moment-là aucun composant n'a été
 // rendu, et une tâche non définie est simplement perdue.
 import { registerDeliveryReceiptTask } from "../lib/deliveryReceipt";
-import { connectSocket, pauseSocket, resumeSocket } from "../lib/socket";
+import { bindSocket, connectSocket, pauseSocket, resumeSocket } from "../lib/socket";
 import { hydrateLiveShares } from "../lib/liveLocation";
 import { clearTokens, getAccessToken, getRefreshToken } from "../lib/storage";
 import { initTheme, useThemeColors } from "../lib/theme";
 import { initHeaderStyle } from "../lib/headerStyle";
 import { VoiceMiniPlayer } from "../components/VoiceMiniPlayer";
+import { ToastStack } from "../components/ToastStack";
+import { showToast } from "../lib/toasts";
+import { getActiveConversation } from "../lib/unreadMessages";
+import { requestContactsSegment } from "../lib/tabsNav";
 import "./globals.css";
 
 // ⚠️ À appeler au niveau MODULE, jamais dans un composant ou un effet : sans cela, le splash
@@ -39,11 +43,70 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 // splash se retire sans transition (le correctif du blanc, lui, vaut pour les deux).
 SplashScreen.setOptions({ fade: true, duration: 250 });
 
-// Notif in-app locale (utilisateur en ligne → reçoit l'event socket plutôt qu'un push).
-const localNotify = (title: string, body: string) =>
-  Notifications.scheduleNotificationAsync({ content: { title, body }, trigger: null }).catch(
-    () => {},
-  );
+/**
+ * Alerte de la personne qui vient d'agir (demande d'ami envoyée, acceptée).
+ *
+ * ⚠️ Un BANDEAU (`showToast`) et non plus une notification locale programmée
+ * (`scheduleNotificationAsync`, jusqu'au 11/09) : une notification système émise alors que
+ * l'application est au premier plan dépend du `setNotificationHandler`, s'empile dans le
+ * centre de notifications et ne mène nulle part quand on la touche. Le bandeau, lui, ouvre
+ * l'écran concerné et disparaît de lui-même.
+ */
+const socialToast = (actor: { id: string; name: string; photoUrl?: string | null }, body: string) =>
+  showToast({
+    // Rattachée à la personne et non à une conversation : rien à refermer à l'ouverture d'un
+    // chat, la clé sert seulement à distinguer ces alertes des messages.
+    key: `friend:${actor.id}`,
+    title: actor.name,
+    body,
+    photoUrl: actor.photoUrl ?? null,
+    isGroup: false,
+    // Les demandes se traitent dans l'onglet Contacts, segment « Amis ».
+    href: "/(tabs)/search",
+    onOpen: () => requestContactsSegment("friends"),
+  });
+
+type Actor = { id: string; name: string; photoUrl?: string | null };
+
+type ConversationUpdated = {
+  conversationId: string;
+  message: { senderId: string };
+  /**
+   * Présent uniquement quand il y a matière à prévenir. C'est le SERVEUR qui tranche : lui
+   * seul connaît la sourdine de chaque membre, l'état d'une demande de message et le premier
+   * média d'un album. Sans ce champ, l'événement ne sert qu'à la liste des conversations.
+   */
+  alert?: { title: string; body: string; photoUrl: string | null; isGroup: boolean };
+};
+
+/**
+ * MESSAGE REÇU PENDANT QUE L'APPLICATION EST OUVERTE.
+ *
+ * ⚠️ Écouté au niveau de l'APPLICATION et non dans la liste des conversations : celle-ci
+ * n'est montée que sur son onglet, alors qu'un message peut arriver depuis n'importe quel
+ * écran — et c'est précisément le cas où il faut prévenir.
+ *
+ * ⚠️ `conversation_updated` (room `user:`) et non `new_message` (room `conv:`) : le second
+ * n'arrive qu'à ceux qui ont déjà la conversation ouverte, donc jamais à qui regarde
+ * ailleurs.
+ *
+ * ⚠️ Déclaré au niveau MODULE : l'identité de la fonction doit survivre aux rendus pour que
+ * le `off` ciblé retrouve le bon écouteur.
+ */
+const onConversationUpdated = (p: ConversationUpdated) => {
+  if (!p.alert) return;
+  // Conversation déjà sous les yeux : le message s'y affiche à l'instant, et un bandeau
+  // par-dessus masquerait ce qu'on est en train de lire.
+  if (getActiveConversation() === p.conversationId) return;
+  showToast({
+    key: p.conversationId,
+    title: p.alert.title,
+    body: p.alert.body,
+    photoUrl: p.alert.photoUrl,
+    isGroup: p.alert.isGroup,
+    href: `/chat/${p.conversationId}`,
+  });
+};
 
 const isTokenExpired = (token: string): boolean => {
   try {
@@ -199,16 +262,51 @@ export default function RootLayout() {
 
       connectSocket()
         .then((socket) => {
+          /**
+           * ⚠️ `bindSocket` et non `socket.on` : le socket survit au rechargement de ce
+           * module, et un écouteur rebranché sans retirer le précédent traite l'événement
+           * deux fois, puis trois (le même message affichait trois bandeaux). Voir
+           * `lib/socket.ts`.
+           *
+           * ⚠️ Ce qui suit n'a PAS de nettoyage : ces écouteurs vivent aussi longtemps que la
+           * session, comme le socket. C'est `bindSocket` qui garantit l'unicité, pas le cycle
+           * de vie du composant.
+           */
           // Notifications in-app temps réel (demandes d'amis) quand l'app est ouverte.
-          socket.off("friend_request_received");
-          socket.on("friend_request_received", (p: { from: { name: string } }) => {
-            localNotify(p.from.name, i18n.t("notifications.friend_request"));
+          bindSocket(socket, "friend_request_received", "root", (p: { from: Actor }) => {
+            socialToast(p.from, i18n.t("notifications.friend_request"));
             incrementPendingFriendRequests();
           });
-          socket.off("friend_request_accepted");
-          socket.on("friend_request_accepted", (p: { by: { name: string } }) => {
-            localNotify(p.by.name, i18n.t("notifications.friend_accepted"));
+          bindSocket(socket, "friend_request_accepted", "root", (p: { by: Actor }) => {
+            socialToast(p.by, i18n.t("notifications.friend_accepted"));
           });
+
+          /**
+           * MESSAGE REÇU PENDANT QUE L'APPLICATION EST OUVERTE.
+           *
+           * ⚠️ Écouté ICI, au niveau de l'application, et non dans la liste des
+           * conversations : celle-ci n'est montée que sur son propre onglet, alors qu'un
+           * message peut arriver depuis n'importe quel écran — et c'est précisément le cas
+           * où il faut prévenir.
+           *
+           * ⚠️ `conversation_updated` (room `user:`) et non `new_message` (room `conv:`) :
+           * le second n'arrive qu'à ceux qui ont la conversation ouverte, donc jamais à qui
+           * regarde ailleurs.
+           *
+           * ⚠️ C'est le SERVEUR qui décide s'il y a matière à alerter (champ `alert`) : lui
+           * seul connaît la sourdine de chaque membre, l'état d'une demande de message et le
+           * premier média d'un album. Sans alerte, l'événement ne sert qu'à la liste.
+           */
+          /**
+           * ⚠️ Branché sous un NOM (« root ») : la liste des conversations écoute le même
+           * événement pour une autre raison, et un `socket.off('conversation_updated')` sans
+           * argument détacherait TOUT — quitter l'onglet Discussion aurait emporté celui-ci
+           * avec lui, sans le moindre signe.
+           *
+           * ⚠️ La pastille des non-lus n'est PAS touchée ici : la liste s'en charge déjà, et
+           * la compter deux fois la ferait monter par pas de deux.
+           */
+          bindSocket(socket, "conversation_updated", "root", onConversationUpdated);
         })
         .catch(() => {});
       registerForPushNotifications()
@@ -267,6 +365,9 @@ export default function RootLayout() {
     {/* ⚠️ Hors du `Stack` : un vocal doit continuer d'être signalé quand on QUITTE la
         conversation où il joue — monté dans un écran, ce rappel disparaîtrait avec lui. */}
     <VoiceMiniPlayer />
+    {/* ⚠️ Hors du `Stack`, pour la même raison : une alerte annonce ce qui se passe
+        AILLEURS que sur l'écran courant, elle ne peut donc pas appartenir à un écran. */}
+    <ToastStack />
     <Stack screenOptions={{ contentStyle: { backgroundColor: themeColors.canvas } }}>
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

@@ -37,6 +37,38 @@ export const connectSocket = async (): Promise<Socket> => {
 export const getSocket = (): Socket | null => socket;
 
 /**
+ * Branche un écouteur en REMPLAÇANT celui posé sous le même nom.
+ *
+ * ⚠️ POURQUOI ce détour plutôt qu'un `socket.off(event, handler)` : le socket est un
+ * singleton qui SURVIT au rechargement des modules. Quand Fast Refresh réévalue un module, la
+ * fonction qu'il exporte change d'identité — `off` ne retrouve donc plus celle qui est
+ * réellement branchée, `on` en ajoute une seconde, et l'événement est traité deux fois. Puis
+ * trois. Symptôme constaté le 11/09 : le même message affichait trois bandeaux d'alerte.
+ *
+ * ⚠️ La table des écouteurs vit sur L'INSTANCE DU SOCKET, pas dans un module : c'est le seul
+ * endroit dont la durée de vie couvre celle du problème. Une variable de module serait
+ * remplacée en même temps que le reste.
+ *
+ * ⚠️ `name` identifie le POSTE D'ÉCOUTE, pas l'événement : deux écrans peuvent écouter
+ * `conversation_updated` pour des raisons différentes (la liste le compte, la racine en fait
+ * un bandeau) et ne doivent pas se chasser l'un l'autre.
+ */
+export const bindSocket = (
+  socket: Socket,
+  event: string,
+  name: string,
+  handler: (...args: never[]) => void,
+): void => {
+  const bound: Map<string, (...args: never[]) => void> =
+    ((socket as any).__bound ??= new Map());
+  const key = `${event}:${name}`;
+  const previous = bound.get(key);
+  if (previous) socket.off(event, previous as never);
+  bound.set(key, handler);
+  socket.on(event, handler as never);
+};
+
+/**
  * Ferme la connexion quand l'app passe en arrière-plan.
  *
  * Le serveur ne pousse une notification qu'aux utilisateurs qu'il croit hors ligne. Tant

@@ -33,6 +33,7 @@ import { unregisterPushToken } from '../../lib/notifications';
 import { disconnectSocket } from '../../lib/socket';
 import { requestContactsSegment } from '../../lib/tabsNav';
 import { setUnreadCounts } from '../../lib/unreadMessages';
+import { clearToasts } from '../../lib/toasts';
 import {
   clearCity,
   detectAndSaveCity,
@@ -217,6 +218,9 @@ export default function ProfileScreen() {
           await stopAllLiveShares();
           // Les non-lus du compte quitté ne doivent pas rester sur l'icône de l'app.
           setUnreadCounts({});
+          // Ni ses bandeaux d'alerte à l'écran, qui mèneraient à des conversations
+          // devenues inaccessibles.
+          clearToasts();
           disconnectSocket();
           await clearTokens();
           router.replace('/(auth)/welcome');

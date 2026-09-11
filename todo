@@ -361,10 +361,169 @@ le reste (GIF, actions sur photo, mise a niveau du web).
   [VERIFIE 11/09] UserB connecte sur le web ET sur iPhone, message envoye depuis UserA : la
     notification arrive bien sur le telephone, Nexa Web ouvert.
 
-[A FAIRE - point 4 bis] TOASTER IN-APP (mobile ET web) quand un message arrive alors qu'on est
-  sur un autre ecran. Demande explicitement par le client, annonce dans la reponse. Rien n'existe
-  aujourd'hui dans les deux repos : le mobile n'a que des notifications LOCALES `expo-notifications`
-  pour les evenements sociaux, le web n'a que les notifications NAVIGATEUR (onglet en arriere-plan).
+[FAIT 11/09 - point 4 bis] BANDEAUX D'ALERTE DANS L'APPLICATION (mobile ET web).
+  Demande du client : etre prevenu quand un message arrive alors qu'on est sur un autre ecran.
+  Reference d'animation donnee par le client : https://motion.dev/examples/react-toast-stack
+  (pile a transformations 3D + AnimatePresence), mais VENANT DU HAUT et non du bas.
+
+  ANIMATION — meme reglage des deux cotes, pour que les deux clients battent la meme mesure :
+  le plus recent devant (y=0, echelle 1), les precedents RECULENT (+11/12 px, -5 % d'echelle,
+  opacite 1 → 0.65 → 0.35), 3 visibles, 4 gardes. Entree et sortie VERS LE HAUT (70-80 px), la
+  ou arrivent les notifications du systeme — le principe tenu partout : une chose vient de la
+  ou elle est declenchee.
+  ⚠️ LE RESSORT NE PORTE QUE SUR LA TRANSLATION (`soft` du web : stiffness 200 / damping 22,
+  ζ ≈ 0.78). Echelle et opacite en DUREE : un ressort sur `scale` fait depasser la carte puis
+  revenir, ce qui rend son texte flou pendant tout le depassement — et un bandeau, c'est du texte.
+  → Glisser vers le haut = ecarter ; vers le bas le mouvement est amorti (il n'y a rien la-bas).
+    Mobile : tap ET pan tous deux en RNGH, composes en `Race` — un `Pressable` sous un
+    `GestureDetector` ne se declencherait plus (meme famille de conflit que l'appui long des
+    bulles). Web : `drag="y"` + `dragElastic` asymetrique.
+  ⚠️ Mobile, DEUX vues imbriquees : Moti pilote la pile (exterieure), Reanimated le glissement
+    au doigt (interieure). Sur la meme vue, les deux ecriraient le meme `transform` et le
+    dernier rendu effacerait la position du doigt a chaque image.
+  ⚠️ L'ombre est portee par la vue qui ENVELOPPE la surface en verre, pas par elle : sur iOS
+    une meme vue ne peut pas projeter une ombre ET rogner ses enfants (`overflow: hidden`).
+
+  UNE ALERTE PAR CONVERSATION, pas une par message (meme choix que le `tag` des notifications
+  du navigateur) : dix messages d'affilee empileraient dix bandeaux. Le contenu est remplace, un
+  compteur apparait (« 3 messages »), et le bandeau remonte en tete de pile.
+  ⚠️ Raviver GARDE L'IDENTIFIANT : en changer ferait sortir puis rentrer le bandeau
+  (`AnimatePresence` ne verrait pas le meme element), soit un clignotement a chaque message.
+
+  QUI DECIDE — LE SERVEUR. `conversation_updated` porte desormais un champ `alert`
+  { title, body, photoUrl, isGroup }, compose par `messageSummary` (helper extrait, partage avec
+  la notification push : la banniere du telephone et le bandeau disent forcement la meme chose).
+  ⚠️ Le champ est pose PAR MEMBRE, pas pour tout le monde : sont exclus l'EMETTEUR (ses autres
+  appareils), les conversations en SOURDINE, les DEMANDES de message non acceptees et les
+  medias SUIVANTS d'un album. Le client ne peut pas trancher : il ne connait pas forcement la
+  conversation concernee, et la sourdine est une donnee par membre.
+  ⚠️ Les champs ajoutes sont exactement ceux du push, rien de plus. Ne PAS y remettre l'objet
+  `sender` complet (telephone + jeton push) — c'est la fuite corrigee dans GET /conversations.
+  → `isFirstOfBatch` a du remonter AVANT l'emission : une requete de plus, mais seulement pour
+    les albums (`albumSize <= 1` court-circuite le compte).
+
+  ⚠️ PLUS DE PUSH QUAND L'APPLICATION MOBILE EST OUVERTE (regle changee le 11/09). Le critere
+  etait « a deja la conversation ouverte » (room `conv:`) ; or le `setNotificationHandler` de
+  l'app affiche les notifications MEME au premier plan, donc un message recu pendant qu'on est
+  sur un autre ecran aurait produit une banniere systeme EN PLUS du bandeau — deux alertes pour
+  un message. Le critere est desormais `isUserOnMobile` : application ouverte = bandeau,
+  application fermee ou en arriere-plan = notification systeme.
+  ⚠️ Ce raccourci n'est juste QUE parce que l'app ferme son socket en arriere-plan
+  (`pauseSocket`) : un socket mobile ouvert signifie « app affichee a l'ecran ». Si cette regle
+  changeait, les notifications disparaitraient en silence.
+
+  WEB : les deux canaux sont EXCLUSIFS selon `document.visibilityState` — onglet cache →
+  notification du navigateur (inchangee), onglet visible → bandeau, sauf si la conversation est
+  deja ouverte. Le `isMuted` local disparait, la regle etant desormais serveur (et plus complete).
+
+  Fichiers : mobile `lib/toasts.ts` + `components/ToastStack.tsx`, monte dans `app/_layout.tsx`
+  hors du `Stack` ; web `src/lib/toasts.ts` + `src/components/ToastStack.tsx`, monte dans
+  `src/app/chat/layout.tsx` (un layout survit aux navigations, une page non).
+  → les demandes d'ami passent AUSSI par le bandeau : `scheduleNotificationAsync` posait une
+    notification systeme qui s'empilait dans le centre de notifications et ne menait nulle part
+    au tap. Le bandeau ouvre l'onglet Contacts sur le segment « Amis ». `photoUrl` ajoute a
+    l'acteur cote serveur, sinon la meme demande s'affichait avec un portrait en push et une
+    initiale en bandeau.
+  → ouvrir une conversation retire son bandeau (`dismissToastsFor`), par quelque chemin qu'on y
+    arrive ; la deconnexion vide la pile (elle menerait a des conversations inaccessibles).
+  ⚠️ ECOUTEURS NOMMES des deux cotes du mobile : `socket.off('conversation_updated')` SANS
+    argument detache TOUS les ecouteurs de l'evenement — celui de la liste emportait celui du
+    layout en quittant l'onglet Discussion, et l'application devenait muette jusqu'au prochain
+    lancement. Corrige dans `app/(tabs)/index.tsx` et `app/_layout.tsx`.
+  → la pastille des non-lus reste alimentee par la LISTE et non par le layout : la compter aux
+    deux endroits la ferait monter par pas de deux.
+  ⚠️ Mobile : les bandeaux ne couvrent PAS les feuilles (`BottomSheet`), qui vivent dans un
+    `Modal`, donc dans une fenetre native au-dessus de tout l'arbre. Meme limite que le rappel
+    de lecture vocale. Assume.
+  [A VERIFIER] rendu sur ANDROID (le flou de `GlassSurface` y est remplace par une surface
+    translucide, et le retour haptique depend de l'appareil).
+
+  [CORRIGE 11/09] TROIS bandeaux pour UN message.
+  Diagnostique AVANT correctif, et le coupable n'etait pas celui qu'on croit :
+  → sonde ecrite pour reproduire le cas hors de l'app (deux clients socket.io en Node, un
+    jeton signe avec le JWT_SECRET local, un `send_message`) : le serveur emet UNE seule fois.
+    Le defaut etait donc cote client, et il ne fallait pas chercher dans la boucle d'emission.
+  → cause : les ECOUTEURS S'ACCUMULENT sur le socket. Il est un SINGLETON qui survit au
+    rechargement des modules ; Fast Refresh reevalue `app/_layout.tsx`, la fonction exportee
+    change d'identite, `socket.off(event, handler)` ne retrouve plus celle qui est reellement
+    branchee, et `on` en ajoute une seconde. Puis une troisieme.
+  → `bindSocket(socket, event, nom, handler)` dans `lib/socket.ts` : la table des ecouteurs
+    vit sur L'INSTANCE DU SOCKET (seul endroit dont la duree de vie couvre le probleme — une
+    variable de module serait remplacee en meme temps que le reste), et le `nom` designe le
+    POSTE D'ECOUTE et non l'evenement, pour que deux ecrans qui ecoutent le meme evenement
+    pour des raisons differentes ne se chassent pas l'un l'autre.
+  ⚠️ Les ecouteurs poses AVANT ce correctif ne sont pas dans la table : il faut RELANCER l'app
+    (pas un simple Fast Refresh) pour repartir d'un socket propre.
+  → le web n'est pas concerne : son ecouteur est dans un `useEffect` avec nettoyage, et le
+    nettoyage capture la bonne identite.
+
+  [AJUSTE 11/09, retour client] LA PILE SE DEPLIE + ARRIVEE PLUS VIVE.
+  Deux retours apres essai sur le mobile : « l'animation de disparition est parfaite », mais
+  l'ARRIVEE paraissait lente, et la pile devait devenir explicite.
+  → PILE DEPLIABLE. Chevron sur la carte du DESSUS, visible seulement s'il y a autre chose
+    dessous. Pile fermee : clic n'importe ou = conversation du bandeau du haut. Pile ouverte :
+    chaque bandeau mene a SA conversation. 3 visibles fermee, 5 au maximum une fois ouverte.
+  ⚠️ HAUTEUR DE CARTE IMPOSEE (64) et corps sur UNE ligne : deplier demande de savoir ou poser
+    chaque carte, et une hauteur MESUREE arriverait une image trop tard — la liste se deplierait
+    en deux temps. Une liste depliee est d'ailleurs un index, pas une lecture.
+  ⚠️ OUVRIR SUSPEND L'EXPIRATION (`pauseToastExpiry`) : sinon les entrees s'effacent une a une
+    pendant qu'on lit, et la ligne visee se derobe sous le doigt. D'ou un REPLI AUTOMATIQUE a
+    8 s — sans lui, une pile ouverte puis oubliee resterait indefiniment a l'ecran.
+  ⚠️ Mobile, le chevron doit declarer `blocksExternalGesture(tap de la carte)` : sans cette
+    relation explicite, l'arbitrage depend de l'ordre de montage et le parent (declare plus
+    haut) l'emporte — toucher le chevron ouvrirait la conversation. Web : `stopPropagation`.
+  ⚠️ Le drapeau « deplie » est REINITIALISE quand la pile se vide, et l'ajustement se fait
+    PENDANT LE RENDU (motif React) et non dans un effet : un `setState` en effet dessine une
+    image ouverte avant de se refermer (regle `react-hooks/set-state-in-effect` cote web).
+    Laisse a vrai, il ferait s'ouvrir toute seule la prochaine pile des sa deuxieme alerte.
+  → ARRIVEE, EN DEUX TEMPS (deux retours successifs du client le meme jour, qui ne visaient
+    PAS la meme chose) :
+    1. « trop lente » → ressort de `soft` (200/22) a 420/32, durees 220/180 → 150/130. L'entree
+       et la sortie partageaient pourtant le MEME ressort : la difference ne venait pas du
+       reglage mais de ce qu'on en voit. Un ressort sous-amorti approche sa cible sans jamais
+       l'atteindre tout a fait ; a la sortie le fondu efface la carte bien avant cette longue
+       fin, a l'entree on la regarde en entier. On raccourcit la QUEUE, pas le caractere.
+    2. « trop de rebondi » → 500/45, soit ζ = 45/(2·√500) ≈ 1.006, AMORTISSEMENT CRITIQUE :
+       plus une oscillation. Les ressorts communs du projet (`soft`, `snappy`, et le `bounce`
+       des bulles) valent ζ ≈ 0.78 ou moins, ou le depassement se lit comme du ressort — sur
+       une ALERTE, il donne l'impression qu'elle hesite avant de se poser.
+    3. « l'ouverture du V rebondit encore » → PLUS DE RESSORT DU TOUT, une COURBE
+       (`Easing.out(Easing.cubic)`, 240 ms ; `[0.33, 1, 0.68, 1]` cote web).
+       ⚠️ C'est la correction de fond, et le diagnostic ne se devine pas : le ressort
+       n'oscillait PLUS (ζ ≈ 1), donc ce qui se voyait n'etait pas un rebond mais sa QUEUE. Un
+       ressort s'approche de sa cible de facon ASYMPTOTIQUE — il ne s'arrete jamais
+       franchement, et met d'autant plus de temps que le trajet est long. Sur les 70 px d'une
+       arrivee la fin passe inapercue ; au DEPLIEMENT, la derniere carte parcourt plus de
+       200 px et la meme trainee se lit comme de l'elasticite. Une courbe, elle, s'arrete A LA
+       DATE PREVUE quelle que soit la distance.
+       ⚠️ Verifie dans `node_modules/moti/src/core/use-motify.ts` (`animationConfig`) avant de
+       toucher au reglage : Moti resout bien `transition[<nom de la prop>]`, donc le ressort
+       etait bien applique — l'hypothese « Moti ignore ma cle et retombe sur son ressort par
+       defaut (damping 10, ζ 0.5) » etait fausse.
+       ⚠️ NE PAS « retablir un ressort » ici en se reclamant du vocabulaire commun : il est
+       fait pour des objets qu'on manipule, ou le depassement se lit comme de la matiere. Une
+       alerte se pose, elle ne rebondit pas. Reglage PROPRE au composant, identique sur les
+       deux clients.
+  [CORRIGE 11/09, meme jour] UN BANDEAU PAR MESSAGE, et non un par conversation.
+  Symptome : le client ne voyait NI pile, NI chevron, NI liste — ni sur mobile ni sur le web.
+  Cause : la premiere version regroupait par conversation (le contenu etait remplace, un
+  compteur avancait). Ca paraissait raisonnable — c'est ce que fait le `tag` des notifications
+  du navigateur — mais la pile n'apparaissait alors JAMAIS en usage normal : il aurait fallu
+  recevoir des messages de plusieurs conversations DIFFERENTES dans la meme fenetre de cinq
+  secondes. Or l'empilement est precisement ce qu'on veut montrer.
+  → `showToast` n'agrege plus rien ; identifiants par COMPTEUR et non par horodatage (deux
+    messages d'un meme envoi arrivent dans la meme milliseconde et se remplaceraient en
+    silence). `MAX` borne deja la pile, donc le regroupement n'apportait aucune protection.
+  → `dismissToastsFor` retire TOUTES les alertes de la conversation qu'on ouvre, plus une seule.
+  → compteur « 3 messages » et cle i18n `toast.count` supprimes : plus rien a compter.
+  ⚠️ Les albums restent silencieux au-dela du premier media : c'est le SERVEUR qui ne pose
+    l'alerte que sur le premier (`isFirstOfBatch`), sans quoi dix photos donneraient dix
+    bandeaux malgre tout.
+    ⚠️ L'entree et la sortie partageaient le MEME ressort : la difference ne venait pas du
+    reglage mais de ce qu'on en voit. Un ressort sous-amorti approche sa cible sans jamais
+    l'atteindre tout a fait ; a la sortie le fondu efface la carte bien avant cette longue fin,
+    a l'entree on la regarde en entier. On raccourcit donc la QUEUE du mouvement, pas son
+    caractere — le rapport d'amortissement (ζ ≈ 0.78) est inchange.
 
 [A FAIRE - points 1 et 9] AFFICHAGE WEB. (1) La conversation garde une colonne etroite au milieu
   sur un ecran d'ordinateur. (9) Les photos verticales prises au telephone s'affichent en bande

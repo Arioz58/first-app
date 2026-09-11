@@ -82,4 +82,14 @@ export const setActiveConversation = (conversationId: string | null) => {
   if (conversationId) clearUnread(conversationId);
 };
 
+/**
+ * Conversation actuellement à l'écran.
+ *
+ * ⚠️ Lecture ponctuelle, pas un hook : elle sert à décider s'il faut afficher un bandeau
+ * d'alerte au moment où un message arrive (`app/_layout.tsx`). Un abonnement rendrait la
+ * racine de l'application à chaque changement de conversation, pour une valeur qu'elle ne
+ * fait que consulter.
+ */
+export const getActiveConversation = (): string | null => activeConversationId;
+
 export const useUnreadMessages = () => useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
