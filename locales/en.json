@@ -649,5 +649,13 @@
     "continue": "Continue",
     "find_friends": "Find my friends from my contacts",
     "revoke": "You can change all of this at any time in your phone settings."
+  },
+  "profile_error": {
+    "message": "Couldn't load your profile. Check your connection.",
+    "retry": "Try again"
+  },
+  "conversations_stale": {
+    "message": "Couldn't refresh",
+    "retry": "Retry"
   }
 }

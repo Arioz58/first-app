@@ -649,5 +649,13 @@
     "continue": "Devam",
     "find_friends": "Kişilerimden arkadaşlarımı bul",
     "revoke": "Tümünü istediğiniz zaman telefon ayarlarınızdan değiştirebilirsiniz."
+  },
+  "profile_error": {
+    "message": "Profiliniz yüklenemedi. Bağlantınızı kontrol edin.",
+    "retry": "Tekrar dene"
+  },
+  "conversations_stale": {
+    "message": "Güncellenemedi",
+    "retry": "Tekrar dene"
   }
 }

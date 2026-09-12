@@ -4,7 +4,8 @@ import * as ExpoLinking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -147,17 +148,46 @@ export default function ProfileScreen() {
   const [qrVisible, setQrVisible] = useState(false);
   const [themePref, setThemePrefState] = useState<ThemePref>('system');
 
-  useEffect(() => {
+  /**
+   * Chargement du profil.
+   *
+   * ⚠️ UN ÉCHEC NE DOIT PLUS ÊTRE SILENCIEUX (corrigé le 11/09, sur capture du client).
+   * Les deux appels avaient un `.catch(() => {})` et l'écran retombait sur ses valeurs par
+   * défaut : avatar « ? », nom vide, 0 ami / 0 groupe / 0 story, et surtout « Consentement non
+   * accordé » — alors qu'on ne savait rien du tout. L'écran n'affirmait pas « je n'ai pas pu
+   * charger », il affirmait des FAITS FAUX sur le compte.
+   */
+  const [failed, setFailed] = useState(false);
+
+  const load = useCallback(() => {
     apiRequest<User>('/users/me')
       .then((me) => {
         setUser(me);
+        setFailed(false);
         if (me.profile?.city) {
           setMyLocation({ city: me.profile.city, country: me.profile.country ?? null });
         }
       })
-      .catch(() => {})
+      .catch(() => setFailed(true))
       .finally(() => setLoading(false));
     apiRequest<Stats>('/users/me/stats').then(setStats).catch(() => {});
+  }, []);
+
+  /**
+   * ⚠️ AU FOCUS, et non une seule fois au montage. C'est la cause du profil vide signalé par
+   * le client : l'effet était en `[]`, donc si le tout premier chargement échouait — réseau
+   * mobile capricieux, serveur endormi, jeton en cours de renouvellement — rien ne le
+   * rejouait JAMAIS. Revenir sur l'onglet ne changeait rien, il fallait relancer
+   * l'application. Les trois autres onglets se rechargeaient déjà ainsi ; celui-ci était le
+   * seul à ne pas le faire.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
+  useEffect(() => {
     getThemePref().then(setThemePrefState);
   }, []);
 
@@ -346,6 +376,33 @@ export default function ProfileScreen() {
     return (
       <View className="flex-1 items-center justify-center bg-white dark:bg-zinc-950">
         <ActivityIndicator size="large" color={c.nexa} />
+      </View>
+    );
+  }
+
+  /**
+   * Chargement en échec et aucune donnée : on le DIT, au lieu de montrer un profil vide.
+   *
+   * ⚠️ Seulement quand `user` est absent. Si un rechargement échoue alors qu'on a déjà les
+   * informations, mieux vaut garder celles d'il y a une minute que remplacer un écran
+   * utilisable par un message d'erreur.
+   */
+  if (failed && !user) {
+    return (
+      <View className="flex-1 items-center justify-center gap-4 bg-white px-8 dark:bg-zinc-950">
+        <Ionicons name="cloud-offline-outline" size={44} color={c.muted} />
+        <Text className="text-center text-base text-gray-600 dark:text-gray-300">
+          {t('profile_error.message')}
+        </Text>
+        <TouchableOpacity
+          onPress={() => {
+            setLoading(true);
+            load();
+          }}
+          className="rounded-full bg-nexa px-6 py-3"
+        >
+          <Text className="font-semibold text-white">{t('profile_error.retry')}</Text>
+        </TouchableOpacity>
       </View>
     );
   }
