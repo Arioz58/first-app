@@ -555,9 +555,26 @@ nouveaux messages ». Anterieur aux bandeaux — ils n'ont fait que le rendre vi
     a l'entree on la regarde en entier. On raccourcit donc la QUEUE du mouvement, pas son
     caractere — le rapport d'amortissement (ζ ≈ 0.78) est inchange.
 
-[A FAIRE - points 1 et 9] AFFICHAGE WEB. (1) La conversation garde une colonne etroite au milieu
-  sur un ecran d'ordinateur. (9) Les photos verticales prises au telephone s'affichent en bande
-  etroite et haute au lieu d'etre elargies comme le fait WhatsApp. Annonces comme rapides.
+[FAIT 11/09 - points 1 et 9] AFFICHAGE WEB.
+  (1) « Sur PC la conversation est toujours en mode telephone ». Le fil etait plafonne a
+      `max-w-3xl`, soit 768 px : sur un ecran d'ordinateur, une colonne etroite au milieu avec
+      du vide de chaque cote. Porte a 1100 px.
+      ⚠️ UN PLAFOND EST GARDE, on ne passe pas en pleine largeur : au-dela, une bulle « moi »
+        et la suivante venue d'en face se retrouvent aux deux extremites de l'ecran et la
+        conversation cesse de se lire comme un echange. C'est aussi ce que fait WhatsApp Web.
+      ⚠️ LE COMPOSEUR A SUIVI, sinon il debordait des bulles qu'il prolonge. Son fond et son
+        lisere restent PLEINE LARGEUR — c'est une barre — mais son contenu s'aligne sur la
+        colonne, via un retrait lateral valant la moitie de l'espace excedentaire
+        (`px-[max(1rem,calc((100%-1100px)/2))]`). Sur un ecran etroit, rien ne change.
+  (9) « Le format de la photo est visible mais beaucoup en longueur ». Seule la HAUTEUR etait
+      contrainte (`max-h-80`) : une photo prise au telephone (9:16) voyait sa hauteur ramenee a
+      320 px, donc sa largeur a 180 — une bande etroite et haute. Une photo large, elle,
+      s'etalait sans limite.
+      → largeur fixee (320 px) et hauteur plafonnee (480 px) : les deux formats occupent
+        desormais une place comparable.
+      ⚠️ `object-contain` et NON `object-cover` : recadrer gagnerait quelques pixels sur les
+        formats extremes, au prix d'un sujet coupe sans prevenir.
+      → meme cadre pour les VIDEOS, qui souffraient du meme defaut.
 
 [EN COURS 11/09 - points 5 et 7] FLUIDITE A L'OUVERTURE — MEMOIRE LOCALE.
   Symptomes clients : ecran vide ~2 s a la reouverture de l'app, et destinataire absent au
