@@ -53,6 +53,64 @@ export const clearRecentSearches = async (): Promise<void> => {
 };
 
 // Fonds de conversation : map locale { conversationId → fond } (perso, non partagé).
+/**
+ * COPIE MÉMOIRE des réglages locaux de conversation.
+ *
+ * ⚠️ POURQUOI : ces réglages vivent dans SecureStore, dont la lecture est ASYNCHRONE. L'écran
+ * de conversation se peignait donc avec le fond par défaut, puis basculait sur le fond
+ * personnalisé une fois la lecture revenue. Invisible tant que le fil lui-même mettait une
+ * seconde à arriver ; flagrant depuis qu'il s'affiche instantanément — le fond est devenu la
+ * dernière chose à se mettre en place.
+ *
+ * ⚠️ Toutes les conversations tiennent dans UNE clé (une map), donc une seule lecture au
+ * démarrage suffit à rendre tous les réglages disponibles sans attente.
+ */
+let wallpapersCache: Record<string, ChatWallpaper> | null = null;
+let customizationsCache: Record<string, ConversationCustomization> | null = null;
+
+const parseMap = <T>(raw: string | null): Record<string, T> => {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, T>;
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * Charge les réglages locaux en mémoire. À appeler au démarrage, sous l'écran de lancement.
+ *
+ * ⚠️ Échec silencieux : sans ces réglages l'application est parfaitement utilisable, elle
+ * affiche simplement ses fonds par défaut. Rien qui justifie de retarder le lancement.
+ */
+export const hydrateLocalSettings = async (): Promise<void> => {
+  try {
+    const [w, c] = await Promise.all([
+      SecureStore.getItemAsync(CHAT_WALLPAPERS_KEY),
+      SecureStore.getItemAsync(CONV_CUSTOM_KEY),
+    ]);
+    wallpapersCache = parseMap<ChatWallpaper>(w);
+    customizationsCache = parseMap<ConversationCustomization>(c);
+  } catch {
+    wallpapersCache = {};
+    customizationsCache = {};
+  }
+};
+
+/**
+ * Lectures SYNCHRONES, pour le premier rendu.
+ *
+ * ⚠️ `null` si l'hydratation n'a pas eu lieu : l'appelant retombe alors sur la lecture
+ * asynchrone, et sur l'ancien comportement — un fond qui arrive après coup, jamais un écran
+ * cassé.
+ */
+export const getChatWallpaperSync = (conversationId: string): ChatWallpaper | null =>
+  wallpapersCache?.[conversationId] ?? null;
+
+export const getConversationCustomizationSync = (
+  conversationId: string,
+): ConversationCustomization => customizationsCache?.[conversationId] ?? {};
+
 export const getChatWallpaper = async (
   conversationId: string,
 ): Promise<ChatWallpaper | null> => {
@@ -80,6 +138,9 @@ export const setChatWallpaper = async (
   }
   if (wallpaper) map[conversationId] = wallpaper;
   else delete map[conversationId];
+  // ⚠️ La copie mémoire suit, sinon la lecture synchrone servirait l'ancien fond jusqu'au
+  // prochain lancement — on choisirait un fond, et le suivant le verrait disparaître.
+  wallpapersCache = map;
   await SecureStore.setItemAsync(CHAT_WALLPAPERS_KEY, JSON.stringify(map));
 };
 
@@ -120,6 +181,8 @@ export const setConversationCustomization = async (
   if (!next.bubbleColor) delete next.bubbleColor;
   if (Object.keys(next).length) map[conversationId] = next;
   else delete map[conversationId];
+  // Même raison que pour les fonds : la copie mémoire est la source des lectures synchrones.
+  customizationsCache = map;
   await SecureStore.setItemAsync(CONV_CUSTOM_KEY, JSON.stringify(map));
   return next;
 };

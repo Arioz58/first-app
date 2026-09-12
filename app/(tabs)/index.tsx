@@ -6,6 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../../lib/api';
+import { CACHE_CONVERSATIONS, readCache, writeCache } from '../../lib/cache';
 import { requestScrollToMessage } from '../../lib/chatNav';
 import { ROUND } from '../../lib/radius';
 import { getSocket } from '../../lib/socket';
@@ -149,8 +150,21 @@ const sortConversations = (list: Conversation[]) =>
 export default function ConversationsScreen() {
   const router = useRouter();
   const { t } = useTranslation();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
+  /**
+   * MÉMOIRE LOCALE : la liste s'affiche AVANT que le serveur ait répondu.
+   *
+   * ⚠️ Lue une seule fois, à l'initialisation de l'état (fonction passée à `useState`, donc
+   * évaluée au premier rendu et jamais rejouée). C'est tout l'intérêt : l'écran a quelque
+   * chose à peindre dès sa première image, là où il affichait un indicateur pendant tout
+   * l'aller-retour réseau — ~250 ms depuis Railway, davantage sur un réseau mobile chargé.
+   *
+   * ⚠️ L'indicateur de chargement ne subsiste que pour le PREMIER lancement, quand rien n'a
+   * encore été mis en cache (`null`). Avec un cache vide mais connu (`[]`), c'est l'écran
+   * « aucune conversation » qu'il faut montrer, pas une attente.
+   */
+  const cachedConversations = readCache<Conversation[]>(CACHE_CONVERSATIONS);
+  const [conversations, setConversations] = useState<Conversation[]>(cachedConversations ?? []);
+  const [loading, setLoading] = useState(cachedConversations === null);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [requestCount, setRequestCount] = useState(0);
@@ -217,6 +231,17 @@ export default function ConversationsScreen() {
   const searchReq = useRef(0);
   // L'écouteur socket est monté une seule fois : il lit l'id via une ref, pas via le state.
   const currentUserIdRef = useRef<string | null>(null);
+  /**
+   * Miroir de la liste, pour l'écouteur socket.
+   *
+   * ⚠️ Il est monté une seule fois : sans cette ref, il lirait indéfiniment la liste du
+   * premier rendu. Et c'est elle qui permet de décider AVANT l'updater, plutôt que dedans.
+   */
+  const convRef = useRef<Conversation[]>([]);
+  useEffect(() => {
+    convRef.current = conversations;
+  }, [conversations]);
+
   /** Albums déjà comptés — voir le handler `conversation_updated`. */
   const seenBatchesRef = useRef<Set<string>>(new Set());
 
@@ -242,6 +267,44 @@ export default function ConversationsScreen() {
       .then((r) => setRequestCount(r.length))
       .catch(() => {});
   };
+
+  /**
+   * Pastilles posées depuis le cache, au montage.
+   *
+   * ⚠️ Sans cela, le badge de l'onglet et celui de l'icône restaient à zéro le temps de
+   * l'aller-retour, puis sautaient à leur valeur : la liste s'affichait instantanément mais
+   * les compteurs, eux, trahissaient l'attente.
+   */
+  useEffect(() => {
+    if (!cachedConversations) return;
+    setUnreadCounts(
+      Object.fromEntries(
+        cachedConversations
+          .filter((c) => !c.archivedAt)
+          .map((c) => [c.id, c.unreadCount || (c.manualUnread ? 1 : 0)]),
+      ),
+    );
+    // ⚠️ Au MONTAGE seulement : `cachedConversations` ne change jamais (lu une fois), et
+    // rejouer ceci écraserait les compteurs tenus à jour par le socket.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * Le cache suit la liste AFFICHÉE, et pas seulement les réponses du serveur.
+   *
+   * ⚠️ C'était le défaut du premier jet : le cache n'était écrit que par
+   * `fetchConversations`, si bien qu'un message reçu par socket faisait avancer le compteur à
+   * l'écran mais pas sur le disque. Au lancement suivant, la mémoire locale annonçait donc
+   * « rien à lire » pour une conversation qui avait des non-lus — et le fil s'ouvrait en bas
+   * au lieu du repère de reprise.
+   *
+   * ⚠️ Rien n'est écrit tant que le premier chargement n'a pas eu lieu : on écraserait le
+   * cache avec la liste vide du tout premier rendu.
+   */
+  useEffect(() => {
+    if (loading) return;
+    writeCache(CACHE_CONVERSATIONS, conversations);
+  }, [conversations, loading]);
 
   useFocusEffect(
     useCallback(() => {
@@ -286,15 +349,32 @@ export default function ConversationsScreen() {
         const known = message.batchId && seenBatchesRef.current.has(message.batchId);
         if (message.batchId) seenBatchesRef.current.add(message.batchId);
 
+        /**
+         * ⚠️ LES EFFETS DE BORD SONT SORTIS DE L'UPDATER (11/09).
+         *
+         * `fetchConversations()` et `bumpUnread()` étaient appelés à l'intérieur du
+         * `setConversations(prev => …)`. React se réserve le droit de rejouer un updater
+         * pendant un rendu : le compteur de non-lus était alors modifié PENDANT le rendu
+         * d'un autre composant, et React le signalait — « Cannot update a component while
+         * rendering a different component », avec la barre d'onglets en cause puisque c'est
+         * elle qui affiche la pastille. Apparu sous une rafale de messages, là où plusieurs
+         * mises à jour se bousculent dans la même image.
+         *
+         * Un updater doit être PUR : il calcule le prochain état à partir du précédent, rien
+         * d'autre. Ce qui déclenche un ailleurs se décide avant lui.
+         */
+        const exists = convRef.current.some((c) => c.id === conversationId);
+        const fromMe = message.senderId === currentUserIdRef.current;
+        // Conversation inconnue (créée à l'instant) : on recharge la liste.
+        if (!exists) {
+          fetchConversations();
+          return;
+        }
+        if (!fromMe && !known) bumpUnread(conversationId);
+
         setConversations((prev) => {
           const idx = prev.findIndex((c) => c.id === conversationId);
-          // Conversation inconnue (créée à l'instant) : on recharge la liste.
-          if (idx === -1) {
-            fetchConversations();
-            return prev;
-          }
-          const fromMe = message.senderId === currentUserIdRef.current;
-          if (!fromMe && !known) bumpUnread(conversationId);
+          if (idx === -1) return prev;
           const updated = [...prev];
           updated[idx] = {
             ...updated[idx],

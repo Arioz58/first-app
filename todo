@@ -559,14 +559,136 @@ nouveaux messages ». Anterieur aux bandeaux — ils n'ont fait que le rendre vi
   sur un ecran d'ordinateur. (9) Les photos verticales prises au telephone s'affichent en bande
   etroite et haute au lieu d'etre elargies comme le fait WhatsApp. Annonces comme rapides.
 
-[A FAIRE - points 5 et 7] FLUIDITE A L'OUVERTURE : ecran vide ~2 s a la reouverture de l'app
-  (mobile), et latence au premier essai apres une prise de photo (destinataire absent de la liste).
-  Meme cause de fond : l'app REDEMANDE tout au serveur avant d'afficher quoi que ce soit, la ou
-  WhatsApp affiche d'abord ce qu'il a en memoire puis se met a jour en arriere-plan.
-  ⚠️ Ce n'est PAS une retouche : il faut donner une MEMOIRE LOCALE a l'application (cache
-  persistant de la liste des conversations et des dernieres pages de messages). Annonce au client
-  comme un chantier a chiffrer. Le plus important de la liste sur le long terme — l'ecart se
-  creusera avec le volume de messages et de medias.
+[EN COURS 11/09 - points 5 et 7] FLUIDITE A L'OUVERTURE — MEMOIRE LOCALE.
+  Symptomes clients : ecran vide ~2 s a la reouverture de l'app, et destinataire absent au
+  premier essai apres une prise de photo. MEME CAUSE : chaque ecran demandait TOUT au serveur
+  avant d'afficher quoi que ce soit, derriere un indicateur plein ecran.
+
+  MESURE AVANT CORRECTIF (11/09) — le serveur n'est PAS le coupable :
+    GET /conversations en LOCAL : 8 ms mediane (5 conversations).
+    Railway /health depuis la France : ~200 ms d'aller-retour, connexion chaude.
+    → l'attente est une attente RESEAU, incompressible, et elle grandira avec l'historique
+      (le COUNT des non-lus est fait par conversation).
+  → Donc on ne cherche PAS a accelerer le serveur : on cherche a avoir quelque chose a
+    MONTRER pendant que la requete voyage. C'est ce que fait WhatsApp.
+
+  [FAIT] PHASE 1 — `lib/cache.ts` + les trois ecrans qui bloquaient.
+  ⚠️ LECTURE SYNCHRONE OBLIGATOIRE : un premier rendu ne peut pas attendre une promesse, sinon
+    on deplace l'ecran vide au lieu de le supprimer. D'ou une copie MEMOIRE, remplie par
+    `hydrateCache()` pendant l'ecran de demarrage — le seul moment ou une lecture disque ne se
+    voit pas, puisqu'on attend deja le trousseau — et `readCache()` qui la lit sans attendre.
+  ⚠️ CLOISONNE PAR COMPTE (`cache/<userId>/`) : sans cela, changer de compte sur un meme
+    telephone montrerait les conversations du precedent pendant une seconde. C'est une fuite
+    entre comptes, pas un defaut d'affichage. `clearCache()` a la deconnexion EN PLUS.
+  ⚠️ Distinction `null` (rien en cache) / `[]` (cache vide) : la premiere demande un indicateur
+    de chargement, la seconde l'ecran « aucune conversation ». Les confondre ferait attendre
+    devant une liste qu'on sait vide.
+  ⚠️ Ecritures REGROUPEES (600 ms) : la liste est reecrite a chaque message recu, et une
+    ecriture disque par message serait du travail inutile sur un fichier aussitot remplace.
+  ⚠️ `expo-file-system/legacy`, deja installe → AUCUN REBUILD NATIF. SecureStore ne convient
+    pas (fait pour des secrets courts, et lent pour des listes entieres).
+  → ecrans branches : onglet Discussion (point 5), `ForwardSheet` (point 7 — c'est LUI que le
+    client voyait vide apres une photo), `chat/new`. Les pastilles partent aussi du cache,
+    sinon la liste s'affichait instantanement mais les compteurs trahissaient l'attente.
+  → en cas d'ECHEC reseau, on garde ce qui est affiche : hors ligne, une liste d'il y a cinq
+    minutes vaut mieux qu'un ecran vide, et le transfert reste possible.
+
+  [FAIT 11/09] PHASE 2 — OUVERTURE D'UNE CONVERSATION.
+    Mesure : l'ouverture enchainait TROIS requetes EN SERIE — `/users/me`, puis les
+    metadonnees, puis les messages. A 200 ms l'unite, 600 ms avant la premiere bulle.
+    → `/users/me` SUPPRIME : l'identifiant est dans le trousseau depuis la connexion. Un
+      aller-retour complet, en tete de file donc retardant tout le reste, pour redemander ce
+      qu'on savait deja. Repli sur l'appel reseau si le trousseau est vide — un fil qui ne
+      sait pas qui est « moi » afficherait toutes les bulles du mauvais cote.
+    → METADONNEES ET DERNIERE PAGE LANCEES ENSEMBLE. Elles etaient enchainees parce que le
+      choix de la page depend de `firstUnreadId`, que seules les metadonnees portent ; mais ce
+      repere n'existe que s'il RESTE des non-lus, cas minoritaire. On lance donc la derniere
+      page d'avance, quitte a l'abandonner s'il faut ouvrir ailleurs qu'en bas.
+      ⚠️ ABANDONNEE et non reutilisee dans ce cas : elle porte la fin de la conversation, alors
+      qu'il faut ouvrir sur le premier non-lu, parfois tres en amont.
+    [RETIRE 11/09 apres test] CACHE DU FIL — l'idee etait d'afficher les 30 derniers messages
+      avant toute reponse. RETIRE : il casse le defilement des que la conversation a des
+      non-lus. Diagnostic complet ci-dessous, a lire AVANT toute nouvelle tentative.
+
+  [DIAGNOSTIC 11/09 - pourquoi le cache du FIL ne peut pas etre pose naivement]
+    Symptomes rapportes : « la conversation saute tellement que je n'arrive pas a scroller
+    plus haut », et aucun bandeau de reprise affiche.
+    Sequence etablie en lisant `threadScroll.ts` (et NON en supposant) :
+      1. le cache pose 30 messages — la FIN de la conversation ;
+      2. l'effet d'ouverture ne trouve pas de repere (il le cherche dans `rows`, or le premier
+         non-lu est plus haut dans l'historique et n'est pas dans le cache) → `scroll.open(null)` ;
+      3. `onContentSizeChange` en mode `opening` SANS cible → `toBottom` → revele → mode
+         **`following`** ;
+      4. la fenetre `around` arrive (15 avant + 12 apres) et remplace le fil : ce contenu
+         n'est PAS la fin de la conversation ;
+      5. `onContentSizeChange` ligne 369 de `threadScroll.ts` : `if (mode === 'following')
+         toBottom(false)`. Le fil est projete au bas de la fenetre — et `toBottom` REJOUE via
+         `requestAnimationFrame` + un `setTimeout`, a chaque mesure. Chaque tentative de
+         remonter est donc annulee par un `scrollToEnd`.
+    ⚠️ CAUSE RACINE : le cache fait entrer le fil en mode `following` AVANT qu'on sache ou la
+      conversation doit s'ouvrir. Un contenu qui n'est pas la fin arrive ensuite dans un mode
+      qui, par definition, colle a la fin.
+    ⚠️ Mon « rattrapage » (`openDecidedRef = false`) etait une FAUSSE correction : il permet a
+      l'effet de se rejouer, mais ne remet pas `scroll` en mode `opening`. Et sa dependance est
+      `rows.length` — deux fils de longueur identique (30 en cache, 30 en page) ne le
+      declenchent meme pas.
+    → CONDITION POUR REESSAYER : ne poser le cache que si l'on est CERTAIN d'ouvrir en bas,
+      donc APRES la reponse des metadonnees — ce qui supprime l'essentiel du gain. Ou bien
+      donner a `threadScroll` un moyen explicite de repasser en `opening` et de tout invalider,
+      ce qui est une modification de la machine a etats, pas un ajout a cote.
+    → Les autres gains de la phase 2 sont CONSERVES et valides : `/users/me` supprime et les
+      deux requetes lancees ensemble, soit trois allers-retours ramenes a un (600 ms → 200 ms
+      avec la latence simulee).
+
+[CORRIGE 11/09 - BUG PREEXISTANT, signale pendant les tests] Impossible de remonter
+l'historique : le fil « saute plus bas » en boucle, MAIS seulement a certains endroits.
+
+  ⚠️ CE N'ETAIT PAS UNE REGRESSION. Verifie par `git stash` : le defaut se reproduit a
+  l'identique SANS le travail du jour. Trois hypotheses fausses ont ete ecartees AVANT de
+  trouver, chacune par la mesure et non par relecture :
+    - « le fil est recolle au bas » (mode `following`) → FAUX : la trace montre `anchored`
+      des 111 px et jusqu'au bout ;
+    - « une cible ramene le fil » → FAUX : aucune cible, aucun `toBottom` apres l'ouverture ;
+    - « le contenu est plus court que la fenetre » → FAUX : 2238 px pour 1060 px de fenetre.
+
+  CE QUE LA TRACE A MONTRE : la taille du contenu OSCILLE — 17360 → 25429 → 17360 — a nombre
+  de LIGNES CONSTANT (90). Ce n'est donc pas nous qui inserons : des cellules deja posees
+  changent de hauteur. Capture du saut : la distance au bas passe de 7919 a 6909 (1010 px de
+  recul) juste apres une rafale de `contentSize`.
+
+  ⚠️ CAUSE RACINE — `components/MessageText.tsx`. Pour savoir s'il fallait un « Voir plus », le
+  composant rendait le texte EN ENTIER, le mesurait (`onTextLayout`), puis le tronquait a 8
+  lignes. Sur les messages longs de la conversation de test :
+      8567 caracteres → ~4300 px le temps d'un rendu, puis 160 px
+      6 × 1203        → ~620 px chacun, puis 160 px
+      732             → ~380 px, puis 160 px
+  soit ~8000 px de depassement transitoire — exactement l'amplitude mesuree.
+  Dans une liste virtualisee ce n'est pas un detail d'affichage : en remontant, ces cellules
+  se montent, le contenu enfle AU-DESSUS du point de vue puis retombe, et la position part
+  avec. Le recyclage aggrave : chaque reutilisation d'une cellule rejoue le cycle.
+
+  → CORRECTIF : au-dela de `CLAMP_CHARS` (400) ou de 8 retours a la ligne, le texte est
+    TRONQUE DES LE PREMIER RENDU, sans mesure — il debordera de toute facon, la mesure
+    n'apprenait rien et coutait une cellule de 4300 px.
+  ⚠️ La mesure est CONSERVEE en deca : c'est la qu'elle est utile (une meme chaine n'occupe
+    pas le meme nombre de lignes selon la largeur, la langue et la taille de police), et la
+    qu'elle est sans danger — l'ecart de hauteur s'y compte en dizaines de pixels.
+  ⚠️ Seuil pris AVEC MARGE (400 et non 320) : la bulle la plus large tient ~40 caracteres par
+    ligne, donc 8 lignes ≈ 320. Au pire, un texte de 420 caracteres tenant en 8 lignes affiche
+    un « Voir plus » inutile — inoffensif. L'erreur inverse (tronquer sans le dire) serait
+    grave : du contenu deviendrait inaccessible.
+  ⚠️ LECON GENERALE : dans une liste virtualisee, TOUTE cellule dont la hauteur depend d'une
+    mesure faite apres le premier rendu deplace le fil. A verifier sur tout nouveau composant
+    de bulle.
+
+  [A FAIRE] PHASE 3 — le COUT SERVEUR, le vrai sujet a long terme souleve par le client
+    (« quand les utilisateurs auront beaucoup de messages »). `getUserConversations` fait un
+    COUNT par conversation a chaque chargement. A surveiller, puis a remplacer par un compteur
+    entretenu si la mesure le justifie — mesurer AVANT, un compteur derive des qu'un evenement
+    est manque (c'est la raison du choix initial).
+  ⚠️ EN DEV, LE GAIN NE SE VOIT PAS : le serveur local repond en 8 ms, il n'y a pas d'attente a
+    supprimer. Ce qui se verifie en local, c'est l'ABSENCE d'indicateur au 2e lancement. Le vrai
+    juge est le build EAS sur Railway.
 
 [EN ATTENTE CLIENT - point 2] Photos de profil disparues sur le telephone apres connexion web.
   Verifie : les deux sessions sont independantes, se connecter sur le web ne touche pas celle du

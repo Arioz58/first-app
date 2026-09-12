@@ -58,7 +58,10 @@ import {
   getChatWallpaper,
   setChatWallpaper,
   getConversationCustomization,
+  getConversationCustomizationSync,
   getConversationClearedAt,
+  getChatWallpaperSync,
+  getUserId,
   setConversationClearedAt,
   type ConversationCustomization,
 } from '../../lib/storage';
@@ -1982,9 +1985,24 @@ export default function ChatScreen() {
   const [header, setHeader] = useState<HeaderProfile | null>(null);
   // ⏳ Temporaire : variante d'apparence de l'en-tête en cours d'arbitrage (lib/headerStyle).
   const headerStyle = useHeaderStyle();
-  const [custom, setCustom] = useState<ConversationCustomization>({});
+  /**
+   * ⚠️ Réglages locaux lus SYNCHRONEMENT, depuis la copie mémoire chargée au démarrage.
+   *
+   * Le trousseau est asynchrone : l'écran se peignait avec le fond par défaut, puis basculait
+   * sur le fond personnalisé une fois la lecture revenue. Tant que le fil lui-même se faisait
+   * attendre, ça passait inaperçu ; depuis qu'il s'affiche instantanément, le fond était la
+   * dernière chose à se mettre en place — et ça se voyait.
+   *
+   * La lecture asynchrone reste faite juste après (voir plus bas) : elle ne sert qu'au cas où
+   * l'hydratation du démarrage n'aurait pas eu lieu.
+   */
+  const [custom, setCustom] = useState<ConversationCustomization>(() =>
+    getConversationCustomizationSync(id),
+  );
   const [clearedAt, setClearedAt] = useState<number | null>(null);
-  const [wallpaper, setWallpaper] = useState<ChatWallpaper | null>(null);
+  const [wallpaper, setWallpaper] = useState<ChatWallpaper | null>(() =>
+    getChatWallpaperSync(id),
+  );
   const [pickerOpen, setPickerOpen] = useState(false);
   // Présence + frappe (Phase B)
   const [online, setOnline] = useState(false);
@@ -2457,11 +2475,42 @@ export default function ChatScreen() {
   useEffect(() => {
     const init = async () => {
       try {
-        const me = await apiRequest<{ id: string }>('/users/me');
+        /**
+         * ⚠️ IDENTITÉ LUE EN LOCAL, plus par `GET /users/me`.
+         *
+         * C'était un aller-retour complet — en tête de file, donc retardant tout le reste —
+         * pour un identifiant déjà écrit dans le trousseau à la connexion. Sur Railway
+         * (~200 ms mesurés), c'était un tiers du temps d'ouverture d'une conversation dépensé
+         * à redemander ce qu'on savait déjà.
+         *
+         * Repli sur l'appel réseau si le trousseau est vide : ça ne devrait pas arriver dans
+         * une session valide, mais un fil qui ne sait pas qui est « moi » afficherait toutes
+         * les bulles du mauvais côté.
+         */
+        const me = {
+          id: (await getUserId()) ?? (await apiRequest<{ id: string }>('/users/me')).id,
+        };
         setCurrentUserId(me.id);
 
-        // Métadonnées de la conversation → identifier l'autre participant (conv directe).
+        /**
+         * ⚠️ MÉTADONNÉES ET DERNIÈRE PAGE DEMANDÉES ENSEMBLE.
+         *
+         * Elles étaient enchaînées parce que le choix de la page dépend de `firstUnreadId`,
+         * que seules les métadonnées portent. Mais ce repère n'existe que s'il RESTE des
+         * messages non lus — cas minoritaire : on rouvre le plus souvent une conversation
+         * qu'on vient de lire. On lance donc la dernière page tout de suite, et on ne paie
+         * une seconde requête que dans le cas où il faut vraiment ouvrir ailleurs qu'en bas.
+         *
+         * ⚠️ La page lancée d'avance est ABANDONNÉE s'il y a un repère de reprise, pas
+         * réutilisée : elle porte la fin de la conversation, alors qu'il faut ouvrir sur le
+         * premier message non lu, parfois très en amont.
+         */
+        const lastPagePromise = apiRequest<Message[]>(`/conversations/${id}/messages`).catch(
+          () => null,
+        );
+
         const meta = await apiRequest<ConvMeta>(`/conversations/${id}`);
+
         setConvType(meta.type);
         setGroupPhoto(meta.photoUrl ?? null);
         setEphemeralDuration(meta.ephemeralDuration);
@@ -2538,7 +2587,10 @@ export default function ChatScreen() {
               return page.messages;
             })()
           : await (async () => {
-              const page = await apiRequest<Message[]>(`/conversations/${id}/messages`);
+              // Déjà en vol depuis l'appel des métadonnées — on ne fait que la recueillir.
+              const page =
+                (await lastPagePromise) ??
+                (await apiRequest<Message[]>(`/conversations/${id}/messages`));
               // Page pleine = il reste probablement de l'historique ; page incomplète = on
               // tient déjà toute la conversation.
               hasOlderRef.current = page.length >= MESSAGES_PAGE;

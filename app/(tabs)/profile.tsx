@@ -34,6 +34,7 @@ import { disconnectSocket } from '../../lib/socket';
 import { requestContactsSegment } from '../../lib/tabsNav';
 import { setUnreadCounts } from '../../lib/unreadMessages';
 import { clearToasts } from '../../lib/toasts';
+import { clearCache } from '../../lib/cache';
 import {
   clearCity,
   detectAndSaveCity,
@@ -221,6 +222,10 @@ export default function ProfileScreen() {
           // Ni ses bandeaux d'alerte à l'écran, qui mèneraient à des conversations
           // devenues inaccessibles.
           clearToasts();
+          // ⚠️ La mémoire locale part AVEC le compte : elle contient ses conversations et le
+          // texte de ses derniers messages. Attendue, et avant d'effacer la session — le
+          // cache est cloisonné par identifiant, qu'il faut donc encore connaître.
+          await clearCache();
           disconnectSocket();
           await clearTokens();
           router.replace('/(auth)/welcome');

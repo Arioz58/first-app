@@ -22,7 +22,14 @@ import { registerForPushNotifications } from "../lib/notifications";
 import { registerDeliveryReceiptTask } from "../lib/deliveryReceipt";
 import { bindSocket, connectSocket, pauseSocket, resumeSocket } from "../lib/socket";
 import { hydrateLiveShares } from "../lib/liveLocation";
-import { clearTokens, getAccessToken, getRefreshToken } from "../lib/storage";
+import {
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  getUserId,
+  hydrateLocalSettings,
+} from "../lib/storage";
+import { BOOT_KEYS, hydrateCache } from "../lib/cache";
 import { initTheme, useThemeColors } from "../lib/theme";
 import { initHeaderStyle } from "../lib/headerStyle";
 import { VoiceMiniPlayer } from "../components/VoiceMiniPlayer";
@@ -249,6 +256,27 @@ export default function RootLayout() {
         } else {
           if (inAuth) router.replace("/(tabs)");
           authenticated = true;
+          /**
+           * MÉMOIRE LOCALE chargée ICI, sous l'écran de démarrage.
+           *
+           * ⚠️ ATTENDUE, comme le thème : c'est le seul moment où une lecture disque ne se
+           * voit pas, puisqu'on attend déjà le trousseau. Chargée après le premier rendu,
+           * elle arriverait trop tard — les écrans auraient déjà décidé d'afficher un
+           * indicateur de chargement, et on n'aurait fait que déplacer l'écran vide.
+           *
+           * ⚠️ Cloisonnée par compte : sans l'identifiant, on risquerait de montrer les
+           * conversations du compte précédent sur ce téléphone.
+           */
+          const me = await getUserId();
+          if (me) await hydrateCache(me, [...BOOT_KEYS]).catch(() => {});
+          /**
+           * ⚠️ Réglages locaux de conversation chargés ici aussi : ils vivent dans le
+           * trousseau, dont la lecture est asynchrone. L'écran de conversation se peignait
+           * donc avec le fond par défaut avant de basculer sur le fond personnalisé — défaut
+           * invisible tant que le fil lui-même se faisait attendre, flagrant depuis qu'il
+           * s'affiche instantanément.
+           */
+          await hydrateLocalSettings().catch(() => {});
         }
       } catch {
         // Trousseau illisible : mieux vaut rendre l'app, quitte à ce qu'un appel échoue

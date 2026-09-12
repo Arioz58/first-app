@@ -5,6 +5,7 @@ import { ActivityIndicator, Dimensions, FlatList, Pressable, Text, TextInput, Vi
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiRequest } from '../lib/api';
+import { CACHE_CONVERSATIONS, readCache } from '../lib/cache';
 import { getUserId } from '../lib/storage';
 import { ROUND } from '../lib/radius';
 import { useThemeColors } from '../lib/theme';
@@ -58,8 +59,19 @@ export function ForwardSheet({
   // l'écran, donc sous le *home indicator*. C'est au contenu de s'en occuper.
   const insets = useSafeAreaInsets();
   const [meId, setMeId] = useState<string | null>(null);
-  const [items, setItems] = useState<ConvItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  /**
+   * MÉMOIRE LOCALE : les destinataires sont là dès l'ouverture de la feuille.
+   *
+   * ⚠️ C'est le défaut signalé par le client après une photo — « je n'arrivais pas à voir mon
+   * destinataire, j'ai refait la manip et là je le vois ». La feuille redemandait la liste
+   * complète au serveur à chaque ouverture, derrière un indicateur : le temps de
+   * l'aller-retour (~250 ms depuis Railway, plus sur un réseau mobile), elle était vide.
+   * L'appel part toujours et corrige la liste, mais il n'y a plus d'attente pour agir.
+   */
+  const [items, setItems] = useState<ConvItem[]>(
+    () => readCache<ConvItem[]>(CACHE_CONVERSATIONS) ?? [],
+  );
+  const [loading, setLoading] = useState(readCache(CACHE_CONVERSATIONS) === null);
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<string[]>([]);
 
@@ -70,13 +82,18 @@ export function ForwardSheet({
     // ferait partir un transfert vers une conversation qu'on ne vise plus.
     setPicked([]);
     setQuery('');
-    setLoading(true);
+    // ⚠️ On ne repasse PAS `loading` à vrai quand la liste est déjà connue : ce serait
+    // remplacer des destinataires affichés et utilisables par un indicateur, à chaque
+    // ouverture. L'attente n'a lieu que la toute première fois.
+    if (readCache(CACHE_CONVERSATIONS) === null) setLoading(true);
     // L'identité est lue depuis le stockage local, comme partout ailleurs : elle sert à
     // écarter l'utilisateur courant des participants (voir `other`).
     getUserId().then(setMeId).catch(() => {});
     apiRequest<ConvItem[]>('/conversations')
       .then(setItems)
-      .catch(() => setItems([]))
+      // ⚠️ En cas d'échec on GARDE ce qui est affiché : hors ligne, une liste d'il y a cinq
+      // minutes vaut mieux qu'un écran vide, et le transfert reste possible.
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [visible]);
 

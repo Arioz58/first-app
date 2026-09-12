@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DismissKeyboard } from '../../components/DismissKeyboard';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
+import { CACHE_FRIENDS, readCache, writeCache } from '../../lib/cache';
 import { ROUND } from '../../lib/radius';
 
 const NEXA = '#1E40AF';
@@ -23,15 +24,22 @@ type Friend = { id: string; name: string; photoUrl: string | null };
 export default function NewChatScreen() {
   const router = useRouter();
   const { t } = useTranslation();
-  const [friends, setFriends] = useState<Friend[]>([]);
+  // MÉMOIRE LOCALE : la liste d'amis est affichée d'emblée, l'appel ne fait que la corriger.
+  // Le carnet d'amis bouge rarement — c'est le cas où un état d'il y a une heure est encore
+  // bon, et où faire attendre devant un écran vide est le plus injustifiable.
+  const cachedFriends = readCache<Friend[]>(CACHE_FRIENDS);
+  const [friends, setFriends] = useState<Friend[]>(cachedFriends ?? []);
   const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(cachedFriends === null);
   // Empêche un double POST si l'utilisateur tape deux fois sur la même ligne.
   const [opening, setOpening] = useState<string | null>(null);
 
   useEffect(() => {
     apiRequest<Friend[]>('/friends')
-      .then(setFriends)
+      .then((list) => {
+        setFriends(list);
+        writeCache(CACHE_FRIENDS, list);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
