@@ -690,9 +690,51 @@ l'historique : le fil « saute plus bas » en boucle, MAIS seulement a certains 
     supprimer. Ce qui se verifie en local, c'est l'ABSENCE d'indicateur au 2e lancement. Le vrai
     juge est le build EAS sur Railway.
 
-[EN ATTENTE CLIENT - point 2] Photos de profil disparues sur le telephone apres connexion web.
-  Verifie : les deux sessions sont independantes, se connecter sur le web ne touche pas celle du
-  telephone. Capture d'ecran demandee au client pour reproduire.
+[CORRIGE 11/09 - point 2] « Plus de photo de profil » sur le telephone.
+  La capture du client a tout dit, et ce n'etait PAS un probleme d'avatar : c'est l'onglet
+  « Vous » ENTIER qui etait vide — avatar « ? », nom absent, 0 ami / 0 groupe / 0 story, ville
+  « non renseignee », et « Consentement non accorde » alors qu'il a forcement consenti a
+  l'inscription. Ce sont les valeurs PAR DEFAUT de l'ecran : le profil n'avait jamais ete
+  charge.
+  ⚠️ DEUX defauts qui se combinent :
+    a) les deux appels (`/users/me`, `/users/me/stats`) avaient un `.catch(() => {})`. Un echec
+       etait donc totalement silencieux, et l'ecran n'affichait pas « je n'ai pas pu charger »
+       mais des FAITS FAUX sur le compte ;
+    b) l'effet etait en `[]` — chargement UNE SEULE FOIS, au montage. Si ce premier appel
+       echouait (reseau mobile, serveur endormi, jeton en cours de renouvellement), plus rien
+       ne le rejouait JAMAIS : revenir sur l'onglet ne changeait rien, il fallait relancer
+       l'application. L'onglet « Vous » etait le SEUL des quatre a ne pas se recharger au
+       focus — les trois autres le faisaient deja.
+  → `useFocusEffect` + etat d'echec explicite avec un bouton « Reessayer », affiche uniquement
+    quand on n'a AUCUNE donnee (un rechargement rate alors qu'on a deja le profil doit garder
+    l'ecran utilisable plutot que de le remplacer par une erreur).
+  ⚠️ Le lien avec « je me suis connecte sur le web » etait une COINCIDENCE : les deux sessions
+    sont bien independantes. C'est le reseau au moment du scan qui a fait echouer l'appel.
+
+[CORRIGE 11/09] « Parfois je dois rafraichir la page Discussion pour voir les nouveaux
+messages » (mobile ET web).
+  ⚠️ `connect` est le SEUL evenement ecoute a trois endroits : la liste des conversations,
+  l'ecran de conversation, et `lib/socket`. Or le chat faisait `socket.off('connect')` SANS
+  argument a sa fermeture — ce qui detache TOUS les ecouteurs. Ouvrir puis quitter une
+  conversation emportait donc celui de la LISTE, qui la recharge a la reconnexion : a partir
+  de la, un retour d'arriere-plan ou un reseau retrouve ne mettait plus rien a jour. Le
+  « parfois » tenait a ce qu'il fallait avoir ouvert une conversation au moins une fois.
+  → les deux ecouteurs sont NOMMES et retires nommement.
+  ⚠️ TROISIEME bug de cette famille en une journee (apres les trois bandeaux et celui-ci) :
+    `socket.off(evenement)` sans handler est a bannir. Utiliser `bindSocket` (`lib/socket.ts`)
+    ou un handler nomme.
+
+[A FAIRE - Mois 5, SECURITE] ROTATION DES JETONS DE RAFRAICHISSEMENT — inexistante.
+  Constate le 11/09 en verifiant un commentaire : `POST /auth/refresh` se contente de verifier
+  la signature et de renvoyer un nouvel ACCES. Le jeton de rafraichissement n'est ni fait
+  tourner, ni invalide, ni stocke — il reste donc valable 7 jours, et un vol permet de
+  fabriquer des acces pendant tout ce temps sans que rien ne le detecte ni ne l'interrompe.
+  ⚠️ Les commentaires des DEUX clients affirmaient le contraire (« le serveur invalide l'ancien
+  jeton a chaque usage ») : corriges, car un raisonnement de securite bati sur une rotation
+  qui n'existe pas est pire que pas de commentaire du tout.
+  → A prevoir : stockage des jetons de rafraichissement (table + revocation), rotation a chaque
+    usage, detection de rejeu.
+
 
 [EN ATTENTE CLIENT - point 3] « Suivre la trace de WA ». Reponse envoyee : on reprend les USAGES
   (fonctionnalites, habitudes) mais pas l'APPARENCE (agencement, couleurs, icones) — risque de mise

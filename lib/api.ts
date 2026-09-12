@@ -18,9 +18,15 @@ export const setSessionExpiredHandler = (handler: () => void) => {
  *
  * ⚠️ LA PROMESSE EN VOL EST PARTAGÉE. Plusieurs requêtes partent en parallèle au lancement
  * d'un écran ; si le jeton vient d'expirer, elles reçoivent toutes un 401 en même temps et
- * déclencheraient chacune leur propre renouvellement. Le serveur invalidant l'ancien jeton de
- * rafraîchissement à chaque usage, la première réussirait et les suivantes DÉCONNECTERAIENT
- * l'utilisateur. Le client web se protégeait déjà ainsi, pas le mobile.
+ * déclencheraient chacune leur propre renouvellement — autant d'allers-retours inutiles, au
+ * pire moment, celui où l'écran attend déjà.
+ *
+ * ⚠️ CE N'EST PAS une protection contre la déconnexion, contrairement à ce que laissaient
+ * entendre les commentaires des deux clients : `POST /auth/refresh` se contente de VÉRIFIER la
+ * signature du jeton de rafraîchissement et de renvoyer un nouvel accès. Il ne le fait pas
+ * tourner et n'invalide pas l'ancien — deux renouvellements simultanés réussissent donc tous
+ * les deux (vérifié dans `auth.service.ts` le 11/09). Ne pas se fier à une rotation qui
+ * n'existe pas : elle reste à faire, et elle est notée au `todo` pour le Mois 5.
  *
  * ⚠️ Exporté pour le socket, qui porte son jeton dans son handshake et doit pouvoir le
  * renouveler lui-même — voir `lib/socket.ts`.
