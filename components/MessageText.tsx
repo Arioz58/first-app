@@ -24,6 +24,41 @@ const URL_RE = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
 const CLAMP_LINES = 8;
 
 /**
+ * Longueur au-delà de laquelle le texte est TRONQUÉ D'EMBLÉE, sans être mesuré.
+ *
+ * ⚠️ POURQUOI (bug diagnostiqué le 11/09, préexistant) : pour savoir s'il fallait un
+ * « Voir plus », ce composant rendait d'abord le texte EN ENTIER, le mesurait, puis le
+ * tronquait. Sur un message de 8 567 caractères — il y en a dans les conversations de test —
+ * la bulle faisait environ 4 000 px le temps d'un rendu, avant de retomber à 160.
+ *
+ * Dans une liste virtualisée, ce n'est pas un détail d'affichage : en remontant l'historique,
+ * ces cellules se montent, la taille du contenu enfle de plusieurs milliers de pixels puis
+ * retombe, et la position du fil part avec. Mesuré : des variations de 8 000 px et un fil
+ * ramené 1 000 px plus bas à chaque tentative de remonter — le défilement devenait
+ * impossible dans les zones contenant de longs messages.
+ *
+ * ⚠️ 400 caractères et non 300 : la bulle la plus large tient une quarantaine de caractères
+ * par ligne, donc huit lignes en font environ 320. En prenant un peu de marge, on ne tronque
+ * d'emblée que des textes qui déborderont à coup sûr. Entre les deux, la mesure reste faite —
+ * mais sur un texte assez court pour que l'écart de hauteur se compte en dizaines de pixels,
+ * pas en milliers.
+ */
+const CLAMP_CHARS = 400;
+
+/**
+ * Ce texte débordera-t-il à coup sûr, sans avoir besoin de le rendre pour le savoir ?
+ *
+ * ⚠️ Les RETOURS À LA LIGNE comptent autant que la longueur : cent caractères répartis sur
+ * vingt lignes débordent, alors qu'aucun seuil de longueur ne l'aurait vu.
+ */
+const certainlyOverflows = (text: string): boolean => {
+  if (text.length > CLAMP_CHARS) return true;
+  let breaks = 0;
+  for (const c of text) if (c === '\n' && ++breaks >= CLAMP_LINES) return true;
+  return false;
+};
+
+/**
  * Découpe un fragment selon les marqueurs de formatage.
  *
  * ⚠️ Le marqueur ne compte que s'il ENCADRE du texte et n'est pas collé à un caractère de
@@ -104,9 +139,17 @@ export function MessageText({
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  // ⚠️ Mesuré et non deviné à partir de la longueur : une même chaîne occupe un nombre de
-  // lignes différent selon la largeur de la bulle, la langue et la taille de police système.
-  const [overflows, setOverflows] = useState(false);
+  /**
+   * Débordement CONSTATÉ à la mesure — pour les textes assez courts pour qu'on se permette
+   * de les rendre en entier.
+   *
+   * ⚠️ La mesure reste nécessaire là où elle est sûre : une même chaîne occupe un nombre de
+   * lignes différent selon la largeur de la bulle, la langue et la taille de police système.
+   * On ne la remplace pas par une estimation, on lui retire seulement les cas où elle coûtait
+   * une cellule de 4 000 px (voir `CLAMP_CHARS`).
+   */
+  const [measured, setMeasured] = useState(false);
+  const overflows = measured || certainlyOverflows(content);
 
   const nodes: React.ReactNode[] = [];
   let last = 0;
@@ -136,12 +179,18 @@ export function MessageText({
       <Text
         className={className}
         numberOfLines={clamped ? CLAMP_LINES : undefined}
-        // ⚠️ Ne se déclenche pas quand `numberOfLines` est posé : on mesure donc une seule
-        // fois, tant qu'on ne sait pas encore s'il y a débordement.
+        /**
+         * ⚠️ Mesure faite UNIQUEMENT sur les textes qu'on accepte de rendre en entier : au
+         * delà de `CLAMP_CHARS`, `overflows` est déjà vrai, la bulle est tronquée dès le
+         * premier rendu et il n'y a plus rien à mesurer.
+         *
+         * ⚠️ Ne se déclenche pas quand `numberOfLines` est posé : on mesure donc une seule
+         * fois, tant qu'on ne sait pas encore s'il y a débordement.
+         */
         onTextLayout={
           collapsible && !overflows
             ? (e) => {
-                if (e.nativeEvent.lines.length > CLAMP_LINES) setOverflows(true);
+                if (e.nativeEvent.lines.length > CLAMP_LINES) setMeasured(true);
               }
             : undefined
         }
