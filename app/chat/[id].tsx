@@ -2226,6 +2226,15 @@ export default function ChatScreen() {
   const openDecidedRef = useRef(false);
 
   /**
+   * Écouteur de reconnexion, gardé pour pouvoir le retirer LUI et pas les autres.
+   *
+   * ⚠️ Il est créé à l'intérieur d'une fonction asynchrone : le nettoyage de l'effet ne peut
+   * pas le voir autrement, et c'est bien pour ça que le code retirait jusqu'ici TOUS les
+   * écouteurs de `connect` — celui de la liste des conversations avec.
+   */
+  const reconnectHandlerRef = useRef<(() => void) | null>(null);
+
+  /**
    * Message à rejoindre dès que la fenêtre chargée autour de lui aura été rendue.
    *
    * ⚠️ En deux temps, obligatoirement : la ligne n'existe qu'après le rendu qui suit le
@@ -2893,7 +2902,13 @@ export default function ChatScreen() {
          * là où un garde temporel serait une devinette.
          */
         let initialConnectPending = !socket.connected;
-        socket.on('connect', () => {
+        /**
+         * ⚠️ NOMMÉ, et retiré nommément au démontage : `socket.off('connect')` sans argument
+         * détachait aussi celui de la liste des conversations, qui la recharge à la
+         * reconnexion. Quitter une conversation rendait donc la liste sourde jusqu'au
+         * prochain lancement.
+         */
+        const onReconnect = () => {
           // Toujours rejoindre la room : c'est vrai des deux cas.
           socket.emit('join_conversation', id);
           if (initialConnectPending) {
@@ -2933,7 +2948,9 @@ export default function ChatScreen() {
             replaceMessages(history.reverse());
             apiRequest(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
           })().catch(() => {});
-        });
+        };
+        socket.on('connect', onReconnect);
+        reconnectHandlerRef.current = onReconnect;
       } catch {
         router.replace('/(tabs)');
       }
@@ -2956,7 +2973,9 @@ export default function ChatScreen() {
       socket?.off('group_updated');
       socket?.off('live_location');
       socket?.off('live_location_ended');
-      socket?.off('connect');
+      // ⚠️ CIBLÉ : sans le handler, on détacherait aussi celui de la liste des conversations.
+      if (reconnectHandlerRef.current) socket?.off('connect', reconnectHandlerRef.current);
+      reconnectHandlerRef.current = null;
       // On arrête proprement notre propre indicateur de frappe.
       if (typingStopRef.current) clearTimeout(typingStopRef.current);
       if (peerTypingRef.current) clearTimeout(peerTypingRef.current);

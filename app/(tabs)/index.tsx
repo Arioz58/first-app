@@ -147,6 +147,12 @@ const sortConversations = (list: Conversation[]) =>
     return +new Date(b.lastMessageAt) - +new Date(a.lastMessageAt);
   });
 
+/**
+ * Délai avant le réessai automatique d'une mise à jour en échec. Assez long pour qu'une
+ * micro-coupure soit passée, assez court pour que la liste ne reste pas périmée sous les yeux.
+ */
+const RETRY_DELAY = 2500;
+
 export default function ConversationsScreen() {
   const router = useRouter();
   const { t } = useTranslation();
@@ -245,9 +251,32 @@ export default function ConversationsScreen() {
   /** Albums déjà comptés — voir le handler `conversation_updated`. */
   const seenBatchesRef = useRef<Set<string>>(new Set());
 
+  /**
+   * Dernière mise à jour en échec.
+   *
+   * ⚠️ Jusqu'au 11/09, l'échec était avalé par un `catch` vide : la liste gardait ses données
+   * — c'est bien — mais SANS rien réessayer ni le dire. Elle pouvait donc rester périmée
+   * jusqu'au prochain passage sur l'onglet, sans que l'utilisateur comprenne pourquoi ses
+   * nouveaux messages n'apparaissaient pas. C'était le dernier chemin par lequel il fallait
+   * encore « rafraîchir à la main ».
+   */
+  const [staleError, setStaleError] = useState(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * La fonction de chargement, atteinte par référence pour le réessai.
+   *
+   * ⚠️ Le réessai ne peut PAS appeler `fetchConversations` directement : une fonction qui se
+   * rappelle elle-même n'est plus analysable par l'outillage des hooks, qui la réclame alors
+   * comme dépendance dans les deux endroits qui l'utilisent — deux avertissements pour un
+   * appel différé. Passer par une référence garde la fonction stable aux yeux de React.
+   */
+  const fetchRef = useRef<() => void>(() => {});
+
   const fetchConversations = async () => {
     try {
       const data = await apiRequest<Conversation[]>('/conversations');
+      setStaleError(false);
       setConversations(sortConversations(data));
       // Le badge de l'onglet suit la liste : le serveur fait foi à chaque rechargement.
       // Les archives en sont exclues, et un « non lu » posé à la main compte pour un.
@@ -259,6 +288,22 @@ export default function ConversationsScreen() {
         ),
       );
     } catch {
+      setStaleError(true);
+      /**
+       * UN seul réessai programmé, après quelques secondes.
+       *
+       * ⚠️ Une seule tentative et non une boucle : la plupart des échecs sont des
+       * micro-coupures que ce délai suffit à couvrir, alors qu'un serveur réellement
+       * injoignable ferait tourner des requêtes dans le vide — sur batterie, et sans rien
+       * résoudre. Si ce second essai échoue aussi, la main revient à l'utilisateur par le
+       * bandeau.
+       */
+      if (!retryTimerRef.current) {
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null;
+          fetchRef.current();
+        }, RETRY_DELAY);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -305,6 +350,13 @@ export default function ConversationsScreen() {
     if (loading) return;
     writeCache(CACHE_CONVERSATIONS, conversations);
   }, [conversations, loading]);
+
+  // ⚠️ Dans un effet et non pendant le rendu : React 19 interdit d'écrire une ref au rendu,
+  // la valeur pouvant être celle d'un rendu abandonné. Sans dépendances : la fonction est
+  // recréée à chaque rendu, la référence doit suivre.
+  useEffect(() => {
+    fetchRef.current = fetchConversations;
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -396,12 +448,21 @@ export default function ConversationsScreen() {
     // Reconnexion (retour au premier plan, réseau retrouvé) : les `conversation_updated`
     // émis pendant la coupure sont perdus. `useFocusEffect` ne rejoue pas au retour
     // d'arrière-plan — l'écran n'a jamais perdu le focus — d'où ce rechargement.
-    socket.on('connect', () => fetchConversations());
+    /**
+     * ⚠️ ÉCOUTEUR NOMMÉ, retiré nommément. `socket.off('connect')` sans argument détache TOUS
+     * les écouteurs de l'événement — et `connect` est le seul qu'écoutent trois endroits à la
+     * fois (cet écran, l'écran de conversation, `lib/socket`). Quitter une conversation
+     * emportait donc celui-ci, et la liste cessait de se recharger à la reconnexion : c'est le
+     * « parfois je dois rafraîchir pour voir les nouveaux messages » signalé le 11/09. Le
+     * « parfois » tenait à ce qu'il fallait avoir ouvert puis quitté une conversation.
+     */
+    const onReconnect = () => fetchConversations();
+    socket.on('connect', onReconnect);
 
     return () => {
       socket.off('conversation_updated', onConversationUpdated);
       socket.off('added_to_group');
-      socket.off('connect');
+      socket.off('connect', onReconnect);
     };
   }, []);
 
@@ -949,6 +1010,27 @@ export default function ConversationsScreen() {
         ListHeaderComponent={
           <>
             {/* Les stories ont migré vers l'onglet Actus (updates.tsx). */}
+            {/* ⚠️ Un bandeau et non un écran d'erreur : la liste affichée reste juste et
+                utilisable, seule sa FRAÎCHEUR est en cause. La remplacer par une erreur
+                ferait perdre l'accès aux conversations pour un défaut de mise à jour. */}
+            {staleError && (
+              <TouchableOpacity
+                className="flex-row items-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-950/40"
+                onPress={() => {
+                  setStaleError(false);
+                  fetchConversations();
+                }}
+              >
+                <Ionicons name="cloud-offline-outline" size={16} color="#B45309" />
+                <Text className="flex-1 text-[13px] text-amber-800 dark:text-amber-200">
+                  {t('conversations_stale.message')}
+                </Text>
+                <Text className="text-[13px] font-semibold text-amber-900 dark:text-amber-100">
+                  {t('conversations_stale.retry')}
+                </Text>
+              </TouchableOpacity>
+            )}
+
             {filter === 'all' && requestCount > 0 && (
               <TouchableOpacity
                 className="flex-row items-center px-4 py-3.5 border-b border-gray-100 dark:border-zinc-800"
