@@ -807,10 +807,30 @@ morte. Mobile ET web.
   en demeure ou de retrait des stores, et handicap commercial pour l'offre business. Comparatif des
   points ou on est aujourd'hui trop proches PROPOSE au client, pas encore demande.
 
-[A FAIRE - point 8] Cle GIPHY a configurer cote serveur (`GIPHY_API_KEY` sur Railway).
-  ⚠️ Ne pas oublier la REVOCATION de l'ancienne cle, deja presente dans l'historique git donc
-  compromise. Les builds mobiles deja installes appellent encore Giphy en direct : leurs GIFs
-  cesseront de fonctionner a la revocation, jusqu'au prochain build EAS.
+[FAIT 13/09 - point 8] Cle GIPHY regeneree et ANCIENNE REVOQUEE, `GIPHY_API_KEY` posee sur
+Railway et en local.
+  ⚠️ L'ancienne etait bien compromise, et le depot `first-app` est PUBLIC : elle etait donc
+  lisible par n'importe qui sur GitHub. Verifie par empreinte — la cle qui tournait encore en
+  local etait EXACTEMENT celle de l'historique (meme SHA256 tronque). Revocation confirmee :
+  l'ancienne renvoie desormais 401 chez Giphy, la nouvelle repond 200 (tendances ET recherche).
+  ⚠️ La note « les builds deja installes appellent Giphy en direct » etait PERIMEE : le build
+  d'Hakan passe par le proxy — son message « cle non configuree » venait du 503 de NOTRE
+  serveur, pas de son telephone. La revocation n'a donc rien casse chez lui, et poser la
+  variable sur Railway repare ses GIFs.
+  ⚠️ PIEGE rencontre, a retenir : `nodemon` ne surveille PAS le `.env`. Apres changement de
+  cle, le serveur continue avec l'ancienne EN MEMOIRE — il faut le relancer a la main. Idem
+  cote Railway : changer la variable ne suffit pas si le service ne redemarre pas.
+  ⚠️ ET le cache Redis des tendances (`giphy:trending`, TTL 10 min) MASQUE le probleme : les
+  tendances repondaient encore, servies depuis une reponse obtenue avec l'ancienne cle, alors
+  que la recherche echouait en 502. Pour verifier une rotation de cle, passer par une RECHERCHE
+  (`?q=`) qui ne touche pas le cache — ou vider `giphy:trending`.
+  → Astuce de verification : le `cid` present dans les URL de medias Giphy est en base64 et
+    contient l'empreinte de la cle utilisee. C'est ce qui permet de prouver QUELLE cle a servi.
+  ⚠️ Reecrire l'historique git n'aurait servi a RIEN : le depot est public depuis des mois, la
+  cle est deja dans les clones et les caches GitHub. Seule la revocation compte. C'est
+  exactement la raison d'etre du proxy du 05/09 — pouvoir tourner une cle sans republier l'app.
+  [A CONFIRMER] le proxy de PRODUCTION (Railway) : non testable d'ici, le jeton doit etre signe
+  avec le JWT_SECRET de prod. A valider en ouvrant le selecteur de GIF depuis un build EAS.
 
 [DEJA PREVU - points 10, 11, 12] Actions sur une photo ouverte en grand (telecharger, epingler,
   aller au message, reagir), icones d'en-tete d'une conversation web, et parite complete mobile→web
