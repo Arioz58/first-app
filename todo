@@ -880,12 +880,58 @@ Railway et en local.
       troncature s'y voit d'autant plus. 16 caracteres proposes. Une seule constante a changer.
     ⚠️ Le libelle « Vous » (4 caracteres) n'est jamais tronque : il n'y a rien a couper.
 
-[A FAIRE - points 11 et 12] Icones d'en-tete d'une conversation web (boutons d'appel + menu « ⋮ »)
-  et parite mobile→web. ⚠️ INVENTAIRE FAIT le 13/09 : le point 12 est deja LARGEMENT couvert —
-  `UserProfileDialog`, `DetailsPanel`, `StoriesPage`, `StoryViewer`, `PrivacyPanel`,
-  `MediaGalleryView` existent. L'en-tete web a deja retour, nom (ouvre les details) et recherche ;
-  manquent les boutons d'appel (grises, comme sur mobile — les appels sont Mois 4) et le menu.
-  Point detaille a preparer pour le client (ce qui est en place, ce qui reste, dans quel ordre).
+[FAIT 13/09 - point 11] EN-TETE DE CONVERSATION WEB : deux boutons d'appel + menu « ⋮ ».
+  Appels DESACTIVES avec « Disponible prochainement » (Mois 4), et masques en GROUPE — un appel
+  de groupe n'est pas au programme. Menu : infos du contact/groupe, recherche, sourdine,
+  ephemeres.
+  ⚠️ Rien n'y est reimplemente : sourdine et ephemeres appellent les memes fonctions et la meme
+    boite que le panneau de details. La sourdine rafraichit la liste (`loadConvSettings`), sans
+    quoi son icone y resterait a l'ancien etat.
+  ⚠️ Blocage et signalement volontairement PAS dans le menu : ils portent une confirmation et
+    des consequences (l'amitie est rompue, les demandes en cours annulees). A un clic, ils
+    deviendraient trop faciles a declencher par erreur ; l'entree « Infos » y mene.
+
+[FAIT 13/09 - point 12] PARITE MOBILE→WEB. ⚠️ INVENTAIRE PAR FONCTION et non par nom de
+  composant — l'erreur du 04/09, qui avait cru des fonctionnalites absentes en cherchant les
+  noms des fichiers MOBILES dans le web.
+  DEJA A PARITE : conversations (liste, filtres, archives, epingler/favori/sourdine), chat
+  complet (citations, reactions, transfert, edition, suppression, epingles, favoris, ephemeres,
+  albums, vocaux, GIF, documents, apercus de liens, accuses), details de conversation, groupes
+  (creation, membres, roles), stories (lecture + creation), profils des autres, amis, demandes
+  d'ami et de messages, confidentialite, bloques, theme, langue, notifications, connexion par QR,
+  recherche par numero.
+  LIVRE LE 13/09 :
+    1. EDITER SON PROFIL (nom, photo, bio) — etait « reserve au mobile ». ⚠️ Champ fichier remis
+       a zero apres chaque choix, sinon rechoisir LE MEME fichier ne declenche aucun evenement.
+       `photoUrl: null` pour effacer (pas une chaine vide) ; un nom vide est refuse, la bio non.
+       Le profil reste la propriete du PARENT (la liste l'a charge pour sa vignette).
+    2. ENVOYER UNE POSITION — carte Leaflet/OSM (aucune cle), repere fixe au centre, adresse
+       resolue par NOTRE serveur (`GET /geocode/reverse`), et a la reception une carte chargee
+       SEULEMENT au clic. Detail dans le commit web et le module backend.
+    3. MON QR DE PROFIL — encode `nexa://user/<id>`, le format du mobile, verifie contre
+       l'expression reguliere du scanner. Fond blanc en dur meme en sombre.
+    4. SUGGESTIONS D'AMIS — une LISTE et non l'orbite animee du mobile (geste tactile pense pour
+       un telephone). Echec de chargement absorbe SEPAREMENT : c'est la seule des trois listes
+       dont l'absence n'empeche rien.
+  ⚠️ Les pilules d'onglets du panneau Amis : a quatre, la rangee ne tient plus et le texte se
+    coupait DANS le bouton. Insecables + `shrink-0` + rangee defilante — vaut quelle que soit la
+    largeur du panneau ET la langue.
+  ⚠️ TON : le mobile TUTOIE, le web VOUVOIE (31 libelles verifies). Ne pas recopier un texte du
+    mobile sans l'adapter — c'est ainsi qu'une exception s'installe.
+
+[A FAIRE - parite web, EN ATTENTE DE DECISION] Trois sujets qui demandent un arbitrage AVANT de
+  coder, et non du travail :
+  1. POSITION EN DIRECT : absente du web (ni envoi ni lecture).
+  2. FOND DE CONVERSATION et 3. EFFACER LA CONVERSATION : ce sont aujourd'hui des reglages
+     LOCAUX au telephone (trousseau). Les porter tels quels donnerait deux reglages independants
+     — un fond choisi sur l'ordinateur n'apparaitrait pas sur le telephone, une conversation
+     « effacee » d'un cote resterait intacte de l'autre. Pour que ce soit coherent il faut les
+     passer COTE SERVEUR, et le sort d'« Effacer » est de toute facon deja a trancher avant la
+     production (voir la section Securite).
+  HORS PERIMETRE, definitivement : repertoire telephonique (un navigateur n'a pas acces au
+  carnet d'adresses) et appels (Mois 4, des deux cotes).
+  [A FAIRE] Le RETOUR DETAILLE promis au client dans le mail du 09/09 : ce qui est en place, ce
+  qui reste, dans quel ordre. L'inventaire ci-dessus en est la matiere.
 
 [REPONDU - point 6] Delais : fin 2026 tenus, engagement de prevenir immediatement en cas de risque.
 
