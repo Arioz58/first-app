@@ -11,6 +11,16 @@ import {
  * Le serveur n'a pas pu être joint pour renouveler la session. ⚠️ À traiter comme une panne
  * réseau ordinaire — surtout PAS comme une déconnexion : la session est peut-être intacte.
  */
+/**
+ * Effacer la discussion POUR MOI — l'historique est masqué côté SERVEUR, la conversation reste.
+ *
+ * ⚠️ Remplace l'horodatage local du 30 juillet (`setConversationClearedAt`) : celui-ci vivait
+ * dans le trousseau, donc une réinstallation ou un second appareil faisait réapparaître toute
+ * la conversation — alors qu'« effacer » promet le contraire. Le web n'avait rien non plus.
+ */
+export const clearConversation = (conversationId: string) =>
+  apiRequest(`/conversations/${conversationId}/clear`, { method: 'POST' });
+
 export const NETWORK_UNAVAILABLE = "NETWORK_UNAVAILABLE";
 
 let sessionExpiredHandler: (() => void) | null = null;

@@ -20,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomSheet from '../../components/BottomSheet';
 import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
 import { UserAvatar } from '../../components/UserAvatar';
-import { apiRequest } from '../../lib/api';
+import { apiRequest, clearConversation } from '../../lib/api';
 import { ROUND } from '../../lib/radius';
 import { requestScrollToMessage } from '../../lib/chatNav';
 import {
@@ -34,7 +34,6 @@ import {
   getConversationCustomization,
   getUserId,
   setChatWallpaper,
-  setConversationClearedAt,
   setConversationCustomization,
   type ConversationCustomization,
 } from '../../lib/storage';
@@ -368,7 +367,14 @@ export default function ConversationDetailsScreen() {
         text: t('details.clear_chat'),
         style: 'destructive',
         onPress: async () => {
-          await setConversationClearedAt(conversationId, Date.now());
+          // ⚠️ Côté SERVEUR depuis le 13/09 : l'effacement suit le compte et non l'appareil.
+          try {
+            await clearConversation(conversationId);
+          } catch {
+            // Hors ligne : rien n'est effacé, et mieux vaut ne rien promettre. L'écran
+            // reste ouvert, l'utilisateur peut réessayer.
+            return;
+          }
           router.back();
         },
       },

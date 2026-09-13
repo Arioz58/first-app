@@ -30,7 +30,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Linking from 'expo-linking';
 import { AudioModule } from 'expo-audio';
 import i18n from '../../lib/i18n';
-import { apiRequest } from '../../lib/api';
+import { apiRequest, clearConversation } from '../../lib/api';
 import { connectSocket, getSocket } from '../../lib/socket';
 import { toUploadableImage, uploadFile } from '../../lib/upload';
 import { MessageMedia } from '../../components/MessageMedia';
@@ -62,7 +62,6 @@ import {
   getConversationClearedAt,
   getChatWallpaperSync,
   getUserId,
-  setConversationClearedAt,
   type ConversationCustomization,
 } from '../../lib/storage';
 import type { ChatWallpaper } from '../../lib/chatWallpapers';
@@ -3937,6 +3936,13 @@ export default function ChatScreen() {
   // ⚠️ Mémoïsé : sans cela, une conversation « effacée » (horodatage local) reconstruisait
   // le tableau à CHAQUE rendu, donc `rows` avec, donc `data` changeait d'identité et la
   // liste se re-rendait entièrement — à chaque frappe dans la zone de saisie comprise.
+  /**
+   * ⚠️ VESTIGE, volontairement conservé : l'effacement est passé côté serveur le 13/09, qui
+   * filtre déjà tout ce qu'il renvoie. Ce filtre ne sert plus qu'aux effacements faits AVANT
+   * cette date, dont la seule trace est cet horodatage local — sans lui, les conversations
+   * qu'un utilisateur croyait effacées réapparaîtraient à la mise à jour. Il pourra
+   * disparaître quand le parc aura tourné.
+   */
   const visibleMessages = useMemo(
     () =>
       clearedAt
@@ -4151,9 +4157,21 @@ export default function ChatScreen() {
         text: t('details.clear_chat'),
         style: 'destructive',
         onPress: async () => {
-          const ts = Date.now();
-          await setConversationClearedAt(id, ts);
-          setClearedAt(ts);
+          /**
+           * ⚠️ Côté SERVEUR depuis le 13/09 : l'effacement suit le COMPTE et non l'appareil.
+           * Auparavant un horodatage local — une réinstallation ou un second appareil
+           * faisait réapparaître toute la conversation, alors qu'« effacer » promet le
+           * contraire.
+           */
+          try {
+            await clearConversation(id);
+          } catch {
+            // Hors ligne : rien n'a été effacé, ne pas vider l'écran comme si ça l'était.
+            return;
+          }
+          // Vidé tout de suite, sans attendre un rechargement : le serveur ne renverra
+          // plus rien de toute façon.
+          setMessages([]);
         },
       },
     ]);

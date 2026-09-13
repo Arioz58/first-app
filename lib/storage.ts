@@ -202,6 +202,13 @@ export const getConversationClearedAt = async (
   }
 };
 
+/**
+ * ⚠️ PLUS AUCUN APPELANT depuis le 13/09 : « Effacer la discussion » est passé côté serveur
+ * (`POST /conversations/:id/clear`), pour que l'effacement suive le compte et non l'appareil.
+ * Conservée uniquement parce que `getConversationClearedAt` doit continuer de LIRE ce qui a
+ * été écrit avant — sans quoi les conversations effacées jusque-là réapparaîtraient à la mise
+ * à jour. Ne plus l'appeler ; supprimer les deux quand le parc aura tourné.
+ */
 export const setConversationClearedAt = async (
   conversationId: string,
   timestamp: number,

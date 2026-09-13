@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { apiRequest } from '../../lib/api';
+import { apiRequest, clearConversation } from '../../lib/api';
 import { CACHE_CONVERSATIONS, readCache, writeCache } from '../../lib/cache';
 import { requestScrollToMessage } from '../../lib/chatNav';
 import { ROUND } from '../../lib/radius';
@@ -16,7 +16,7 @@ import {
   setConversationUnread,
   setUnreadCounts,
 } from '../../lib/unreadMessages';
-import { getUserId, setConversationClearedAt } from '../../lib/storage';
+import { getUserId } from '../../lib/storage';
 import {
   createCustomFilter,
   deleteCustomFilter,
@@ -868,7 +868,11 @@ export default function ConversationsScreen() {
         text: t('details.clear_chat'),
         style: 'destructive',
         onPress: () => {
-          setConversationClearedAt(conv.id, Date.now()).catch(() => {});
+          // ⚠️ Côté SERVEUR depuis le 13/09 : l'effacement suit le compte, pas l'appareil.
+          // On recharge ensuite, le serveur faisant foi sur ce qui reste visible.
+          clearConversation(conv.id)
+            .then(() => fetchConversations())
+            .catch(() => {});
         },
       },
     ]);
