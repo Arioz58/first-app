@@ -145,6 +145,15 @@ export default function RootLayout() {
   const checkedRef = useRef(false);
   // Conversation à ouvrir dès que le navigateur existe (voir `open` ci-dessous).
   const pendingChat = useRef<Record<string, string> | null>(null);
+  /**
+   * « Suis-je déjà dans le parcours de connexion ? », lisible depuis le handler de session
+   * expirée — lui est posé une fois pour toutes et ne verrait jamais changer une valeur
+   * d'état ni les segments capturés à sa création.
+   */
+  const inAuthRef = useRef(false);
+  useEffect(() => {
+    inAuthRef.current = segments[0] === "(auth)";
+  }, [segments]);
 
   // Ouverture depuis une notification. Sans cela, taper une notification de message
   // se contentait de lancer l'app sur son dernier écran, sans mener à la conversation.
@@ -211,7 +220,18 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    setSessionExpiredHandler(() => router.replace("/(auth)/welcome"));
+    /**
+     * ⚠️ SANS EFFET si l'on est DÉJÀ dans le parcours de connexion.
+     *
+     * Une requête d'un écran qu'on vient de quitter peut échouer bien après coup : sans ce
+     * garde, elle renvoyait à l'accueil quelqu'un en train de s'inscrire, et le ramenait
+     * à la première étape à chaque tentative. C'est le fond du problème du 12/09 — le
+     * réessai en boucle de la liste des conversations n'en était que le déclencheur.
+     */
+    setSessionExpiredHandler(() => {
+      if (inAuthRef.current) return;
+      router.replace("/(auth)/welcome");
+    });
     // Un partage de position peut avoir survécu à la fermeture de l'app : on reprend le
     // suivi là où il en était, plutôt que de le laisser figé jusqu'à son échéance.
     hydrateLiveShares().catch(() => {});

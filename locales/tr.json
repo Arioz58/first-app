@@ -656,6 +656,7 @@
   },
   "conversations_stale": {
     "message": "Güncellenemedi",
-    "retry": "Tekrar dene"
+    "retry": "Tekrar dene",
+    "reconnected": "Bağlantı yeniden kuruldu"
   }
 }

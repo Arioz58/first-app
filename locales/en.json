@@ -656,6 +656,7 @@
   },
   "conversations_stale": {
     "message": "Couldn't refresh",
-    "retry": "Retry"
+    "retry": "Retry",
+    "reconnected": "Back online"
   }
 }

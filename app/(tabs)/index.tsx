@@ -148,10 +148,11 @@ const sortConversations = (list: Conversation[]) =>
   });
 
 /**
- * Délai avant le réessai automatique d'une mise à jour en échec. Assez long pour qu'une
- * micro-coupure soit passée, assez court pour que la liste ne reste pas périmée sous les yeux.
+ * Durée d'affichage de la confirmation « connexion rétablie ».
+ * Assez pour être lue, assez court pour ne pas encombrer la liste — elle annonce un retour
+ * à la normale, pas un problème.
  */
-const RETRY_DELAY = 2500;
+const BACK_ONLINE_MS = 3000;
 
 export default function ConversationsScreen() {
   const router = useRouter();
@@ -260,23 +261,62 @@ export default function ConversationsScreen() {
    * nouveaux messages n'apparaissaient pas. C'était le dernier chemin par lequel il fallait
    * encore « rafraîchir à la main ».
    */
-  const [staleError, setStaleError] = useState(false);
-  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   /**
-   * La fonction de chargement, atteinte par référence pour le réessai.
+   * Bandeau de connexion : `offline` (rouge) → `back` (vert, bref) → rien.
    *
-   * ⚠️ Le réessai ne peut PAS appeler `fetchConversations` directement : une fonction qui se
-   * rappelle elle-même n'est plus analysable par l'outillage des hooks, qui la réclame alors
-   * comme dépendance dans les deux endroits qui l'utilisent — deux avertissements pour un
-   * appel différé. Passer par une référence garde la fonction stable aux yeux de React.
+   * ⚠️ Trois états et non un booléen : « tout va bien » et « la connexion vient de revenir »
+   * ne s'affichent pas pareil, et la confirmation doit s'effacer d'elle-même. Un booléen
+   * n'aurait pas su distinguer un chargement réussi ORDINAIRE — qui ne doit RIEN afficher —
+   * d'un retour après coupure.
    */
-  const fetchRef = useRef<() => void>(() => {});
+  const [banner, setBanner] = useState<'offline' | 'back' | null>(null);
+  /**
+   * ⚠️ Une ref en plus de l'état : les écouteurs du socket sont posés une seule fois et ne
+   * verraient jamais l'état changer. C'est elle qui dit s'il y a eu coupure, donc s'il y a
+   * lieu d'afficher la confirmation verte.
+   */
+  const wasOfflineRef = useRef(false);
+  const backTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ⚠️ Annulé au démontage : un minuteur qui survit à son écran est exactement ce qui a
+  // rendu l'onboarding impraticable le 12/09.
+  useEffect(
+    () => () => {
+      if (backTimerRef.current) clearTimeout(backTimerRef.current);
+      backTimerRef.current = null;
+    },
+    [],
+  );
+
+  /** Coupure constatée : bandeau rouge, et la confirmation en attente est annulée. */
+  const showOffline = () => {
+    if (backTimerRef.current) {
+      clearTimeout(backTimerRef.current);
+      backTimerRef.current = null;
+    }
+    wasOfflineRef.current = true;
+    setBanner('offline');
+  };
 
   const fetchConversations = async () => {
     try {
       const data = await apiRequest<Conversation[]>('/conversations');
-      setStaleError(false);
+      /**
+       * ⚠️ La confirmation verte n'est montrée QUE si l'on revenait d'une coupure : sinon
+       * elle clignoterait à chaque chargement réussi — au démarrage, à chaque retour sur
+       * l'onglet — pour annoncer une bonne nouvelle que personne n'attendait.
+       */
+      if (wasOfflineRef.current) {
+        wasOfflineRef.current = false;
+        setBanner('back');
+        if (backTimerRef.current) clearTimeout(backTimerRef.current);
+        backTimerRef.current = setTimeout(() => {
+          backTimerRef.current = null;
+          setBanner(null);
+        }, BACK_ONLINE_MS);
+      } else {
+        setBanner(null);
+      }
       setConversations(sortConversations(data));
       // Le badge de l'onglet suit la liste : le serveur fait foi à chaque rechargement.
       // Les archives en sont exclues, et un « non lu » posé à la main compte pour un.
@@ -288,22 +328,21 @@ export default function ConversationsScreen() {
         ),
       );
     } catch {
-      setStaleError(true);
       /**
-       * UN seul réessai programmé, après quelques secondes.
+       * AUCUN réessai automatique : on affiche le bandeau, et c'est l'utilisateur qui
+       * relance (décision du 12/09).
        *
-       * ⚠️ Une seule tentative et non une boucle : la plupart des échecs sont des
-       * micro-coupures que ce délai suffit à couvrir, alors qu'un serveur réellement
-       * injoignable ferait tourner des requêtes dans le vide — sur batterie, et sans rien
-       * résoudre. Si ce second essai échoue aussi, la main revient à l'utilisateur par le
-       * bandeau.
+       * ⚠️ Une relance périodique s'acharnerait précisément quand il ne faut pas : si c'est
+       * le SERVEUR qui faiblit, chaque client le rappellerait toutes les quelques secondes —
+       * et `GET /conversations` fait un COUNT par conversation. Une panne se transformerait
+       * en martèlement par ses propres clients, au pire moment.
+       *
+       * ⚠️ Le rattrapage, lui, est déclenché par un ÉVÉNEMENT et non par une interrogation
+       * répétée : quand le socket se reconnecte, une seule requête part (`onReconnect`). Et
+       * si elle n'aboutit pas, le bandeau reste — appuyer dessus, tirer la liste ou revenir
+       * sur l'écran relance à la main.
        */
-      if (!retryTimerRef.current) {
-        retryTimerRef.current = setTimeout(() => {
-          retryTimerRef.current = null;
-          fetchRef.current();
-        }, RETRY_DELAY);
-      }
+      showOffline();
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -350,13 +389,6 @@ export default function ConversationsScreen() {
     if (loading) return;
     writeCache(CACHE_CONVERSATIONS, conversations);
   }, [conversations, loading]);
-
-  // ⚠️ Dans un effet et non pendant le rendu : React 19 interdit d'écrire une ref au rendu,
-  // la valeur pouvant être celle d'un rendu abandonné. Sans dépendances : la fonction est
-  // recréée à chaque rendu, la référence doit suivre.
-  useEffect(() => {
-    fetchRef.current = fetchConversations;
-  });
 
   useFocusEffect(
     useCallback(() => {
@@ -456,13 +488,101 @@ export default function ConversationsScreen() {
      * « parfois je dois rafraîchir pour voir les nouveaux messages » signalé le 11/09. Le
      * « parfois » tenait à ce qu'il fallait avoir ouvert puis quitté une conversation.
      */
-    const onReconnect = () => fetchConversations();
+    /**
+     * Nature de la dernière déconnexion, pour décider quoi faire à la reconnexion.
+     *
+     * ⚠️ `connect` ne dit PAS d'où l'on revient : le retour d'arrière-plan et le retour du
+     * réseau produisent le même événement, alors qu'ils demandent l'inverse l'un de l'autre.
+     * Seule la raison de la coupure les sépare.
+     */
+    let pausedByUs = false;
+
+    /**
+     * RECONNEXION — on recharge, quelle qu'ait été la cause de la coupure.
+     *
+     * ⚠️ Ce n'est PAS du polling, et la distinction est tout l'objet de la décision du
+     * 12/09 : on n'interroge jamais le serveur pour savoir s'il répond. Le socket, lui,
+     * retente de lui-même (c'est son fonctionnement, avec un délai qui s'allonge jusqu'à
+     * 5 s) — on se contente d'écouter son succès. Le coût ajouté est UNE requête, au moment
+     * exact où elle a une chance d'aboutir.
+     *
+     * Ce rattrapage est nécessaire dans les deux cas de coupure : les `conversation_updated`
+     * émis pendant l'absence sont perdus, et `useFocusEffect` ne rejoue pas au retour
+     * d'arrière-plan — l'écran n'a jamais perdu le focus. C'est le « je dois rafraîchir pour
+     * voir les nouveaux messages » signalé le 11/09.
+     *
+     * ⚠️ PAS de garde « ne pas recharger si on vient de le faire » : un délai arbitraire
+     * ferait SAUTER un rattrapage légitime, laissant un trou dans la liste — cette fois sans
+     * bandeau pour le dire. Il causerait le défaut qu'il prétend éviter, pour économiser une
+     * requête. Si des rafales apparaissaient vraiment, la réponse serait un delta côté
+     * serveur, pas une temporisation.
+     *
+     * → Le bandeau passe au VERT (« connexion rétablie ») puis s'efface de lui-même. S'il
+     *   échoue (serveur revenu mais en erreur), le rouge reste et la main revient à
+     *   l'utilisateur.
+     */
+    const onReconnect = () => {
+      pausedByUs = false;
+      fetchConversations();
+    };
     socket.on('connect', onReconnect);
+
+    /**
+     * PERTE DE CONNEXION → bandeau, immédiatement.
+     *
+     * ⚠️ C'est le SEUL moyen d'avertir sans réessai automatique : tant qu'aucune requête ne
+     * part, aucune ne peut échouer — couper le Wi-Fi ne produisait donc rien, et le bandeau
+     * n'arrivait qu'au geste suivant (retour sur l'onglet, tirer pour rafraîchir). Le socket,
+     * lui, s'en aperçoit tout de suite : on se sert de son état plutôt que d'interroger le
+     * serveur pour découvrir qu'il est injoignable.
+     *
+     * ⚠️ `io client disconnect` est IGNORÉ : c'est NOTRE propre `pauseSocket()` au passage en
+     * arrière-plan. Sans ce test, revenir sur l'app afficherait un bandeau d'erreur alors que
+     * tout va bien. Les autres raisons (`transport close`, `ping timeout`, `transport error`)
+     * sont des coupures subies.
+     *
+     * → Le bandeau se lève tout seul au retour : `onReconnect` recharge, et un chargement
+     *   réussi le fait passer au vert, puis disparaître.
+     */
+    const onDisconnect = (reason: string) => {
+      if (reason === 'io client disconnect') {
+        pausedByUs = true;
+        return;
+      }
+      pausedByUs = false;
+      showOffline();
+    };
+    socket.on('disconnect', onDisconnect);
+
+    /**
+     * ÉCHEC DE RECONNEXION au retour d'arrière-plan.
+     *
+     * ⚠️ Le trou que ni `connect` ni `disconnect` ne couvrent : si le réseau tombe PENDANT
+     * que l'application est en arrière-plan, notre propre coupure a déjà eu lieu (sans
+     * bandeau, à juste titre) et la reconnexion échoue — il n'y a donc aucune déconnexion à
+     * signaler, et jamais de connexion. La liste restait périmée sans le dire.
+     *
+     * ⚠️ Conditionné à `pausedByUs` : un échec à la connexion INITIALE ne veut rien dire ici
+     * (la liste vient d'être chargée en HTTP par `useFocusEffect`, elle est fraîche), et le
+     * socket retente de lui-même après avoir renouvelé son jeton. Sans ce test, un simple
+     * jeton expiré au lancement aurait collé un bandeau d'erreur sur une liste à jour.
+     *
+     * → La pause est CONSOMMÉE au passage : dès qu'un bandeau s'affiche, plus aucune requête
+     *   ne part sans geste de l'utilisateur. C'est la règle, et elle n'a pas d'exception.
+     */
+    const onConnectError = () => {
+      if (!pausedByUs) return;
+      pausedByUs = false;
+      showOffline();
+    };
+    socket.on('connect_error', onConnectError);
 
     return () => {
       socket.off('conversation_updated', onConversationUpdated);
       socket.off('added_to_group');
       socket.off('connect', onReconnect);
+      socket.off('disconnect', onDisconnect);
+      socket.off('connect_error', onConnectError);
     };
   }, []);
 
@@ -1013,21 +1133,46 @@ export default function ConversationsScreen() {
             {/* ⚠️ Un bandeau et non un écran d'erreur : la liste affichée reste juste et
                 utilisable, seule sa FRAÎCHEUR est en cause. La remplacer par une erreur
                 ferait perdre l'accès aux conversations pour un défaut de mise à jour. */}
-            {staleError && (
+            {banner && (
               <TouchableOpacity
-                className="flex-row items-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-950/40"
-                onPress={() => {
-                  setStaleError(false);
-                  fetchConversations();
-                }}
+                className={
+                  banner === 'offline'
+                    ? 'flex-row items-center gap-2 px-4 py-2.5 bg-red-50 dark:bg-red-950/40'
+                    : 'flex-row items-center gap-2 px-4 py-2.5 bg-green-50 dark:bg-green-950/40'
+                }
+                /**
+                 * ⚠️ Le bandeau rouge N'EST PAS masqué avant la tentative : il ne part qu'au
+                 * succès. L'effacer d'abord le faisait clignoter hors ligne — disparu puis
+                 * revenu aussitôt, l'échec étant immédiat — ce qui se lit comme un bug plutôt
+                 * que comme un essai.
+                 *
+                 * ⚠️ Le vert n'est PAS actionnable : il annonce un retour à la normale, il n'y
+                 * a rien à réessayer. Il s'efface seul au bout de `BACK_ONLINE_MS`.
+                 */
+                disabled={banner === 'back'}
+                onPress={() => fetchConversations()}
               >
-                <Ionicons name="cloud-offline-outline" size={16} color="#B45309" />
-                <Text className="flex-1 text-[13px] text-amber-800 dark:text-amber-200">
-                  {t('conversations_stale.message')}
+                <Ionicons
+                  name={banner === 'offline' ? 'cloud-offline-outline' : 'cloud-done-outline'}
+                  size={16}
+                  color={banner === 'offline' ? '#B91C1C' : '#15803D'}
+                />
+                <Text
+                  className={
+                    banner === 'offline'
+                      ? 'flex-1 text-[13px] text-red-800 dark:text-red-200'
+                      : 'flex-1 text-[13px] text-green-800 dark:text-green-200'
+                  }
+                >
+                  {banner === 'offline'
+                    ? t('conversations_stale.message')
+                    : t('conversations_stale.reconnected')}
                 </Text>
-                <Text className="text-[13px] font-semibold text-amber-900 dark:text-amber-100">
-                  {t('conversations_stale.retry')}
-                </Text>
+                {banner === 'offline' && (
+                  <Text className="text-[13px] font-semibold text-red-900 dark:text-red-100">
+                    {t('conversations_stale.retry')}
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
 

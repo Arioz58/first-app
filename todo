@@ -771,6 +771,81 @@ messages » (mobile ET web).
 
 [REPONDU - point 6] Delais : fin 2026 tenus, engagement de prevenir immediatement en cas de risque.
 
+[FAIT 12-13/09] ONBOARDING EN BOUCLE, puis refonte du comportement HORS LIGNE (mobile).
+
+  SYMPTOME : a l'etape 1 de l'onboarding, « Continuer » ramenait aussitot a l'etape 1, en
+  boucle. Diagnostique par TRACE et non par lecture (trois hypotheses fausses ecartees avant) :
+  le module n'etait pas recharge, rien ne naviguait en arriere — c'est le handler
+  SESSION_EXPIRED qui partait en rafale. Seconde trace sur le chemin des requetes : l'appelant
+  etait `GET /conversations`, donc la LISTE, depuis un ecran pourtant demonte.
+
+  CAUSE — le reessai ajoute la veille (commit 72b2bdf) etait faux sur trois plans :
+    1. NON BORNE. `if (!retryTimerRef.current)` n'empeche que deux minuteurs SIMULTANES, il ne
+       compte pas les tentatives ; la ref etant remise a null juste avant de rappeler, chaque
+       echec en reprogrammait un autre. Le commentaire promettait « un seul reessai ».
+    2. NE S'ARRETAIT PAS sur session morte : apres un 401, `apiRequest` efface les jetons, donc
+       les tentatives suivantes partaient SANS jeton, echouaient pareil, et rappelaient le
+       handler — qui renvoyait a welcome a chaque fois.
+    3. SURVIVAIT AU DEMONTAGE (aucun cleanup). L'ecran etait mort, sa boucle tournait encore.
+  ⚠️ Jamais livre au client : introduit le 12/09, corrige le 12/09.
+
+  CORRECTIF RETENU — le reessai automatique est SUPPRIME (constante, minuteur, `fetchRef`).
+  ⚠️ PREMIERE VERSION REFUSEE au test, et la lecon vaut d'etre gardee : j'avais BORNE le
+    reessai a une tentative. Or cette boucle servait ACCIDENTELLEMENT de reprise reseau —
+    bandeau immediat a la coupure, liste a jour des le retour. La borner cassait les deux.
+    Retour de Berke : « je veux que le fix soit uniquement sur le onboarding ».
+
+  COMPORTEMENT HORS LIGNE, tel que decide avec le client interne :
+    → COUPURE = bandeau immediat, pose par l'etat du SOCKET et non par une requete qui echoue.
+      ⚠️ Sans reessai, un « echec » n'existe que s'il y a une requete : couper le Wi-Fi ne
+      produisait donc RIEN, et le bandeau n'arrivait qu'au geste suivant. Le socket, lui, le
+      sait deja — on lit son etat au lieu d'interroger le serveur pour decouvrir qu'il est
+      injoignable.
+      ⚠️ `io client disconnect` IGNORE : c'est notre propre `pauseSocket()` en arriere-plan.
+      Sans ce test, revenir sur l'app affichait un bandeau alors que tout va bien.
+    → `connect_error` conditionne a une pause en cours : comble le trou ou le reseau tombe
+      PENDANT l'arriere-plan (ni `disconnect` ni `connect` ne passent — la liste restait
+      perimee sans le dire). Conditionne, car un echec a la connexion INITIALE ne dit rien :
+      la liste vient d'etre chargee en HTTP, et un simple jeton expire aurait colle un bandeau
+      sur une liste a jour.
+    → RECONNEXION = rechargement automatique, UNE requete. ⚠️ Ce n'est PAS du polling : on
+      n'interroge jamais le serveur pour savoir s'il repond, le socket retente de lui-meme
+      (backoff jusqu'a 5 s) et on ecoute son succes. Distinction a garder en tete, c'est elle
+      qui a fait hesiter.
+      ⚠️ PAS de garde « ne pas recharger si on vient de le faire » : un delai arbitraire ferait
+      SAUTER un rattrapage legitime, laissant un trou dans la liste sans bandeau pour le dire —
+      il causerait le defaut qu'il pretend eviter. Meme lecon que la « fenetre de suivi » de
+      2,5 s retiree de `threadScroll`. Si des rafales apparaissaient, la reponse serait un
+      DELTA serveur, pas une temporisation.
+    → REPLI MANUEL conserve : bandeau, tirer la liste, revenir sur l'ecran, rouvrir l'app.
+    ⚠️ Le bandeau n'est plus masque AVANT la tentative : il ne part qu'au succes. L'effacer
+      d'abord le faisait clignoter hors ligne (echec immediat), ce qui se lit comme un bug.
+
+  DEFENSE DE FOND (`app/_layout.tsx`) : le handler SESSION_EXPIRED ne renvoie plus a l'accueil
+  quelqu'un DEJA dans le parcours de connexion. N'IMPORTE quel ecran pouvait reproduire le
+  symptome, pas seulement la liste. Couvre aussi une course reelle : `clearTokens()` repete
+  pouvait effacer les jetons tout juste obtenus a l'inscription.
+
+  BACKEND — `pingInterval`/`pingTimeout` a 10 s (defauts socket.io : 25 s + 20 s).
+  ⚠️ Deux sortes de coupures, une seule pose probleme : un serveur qu'on ARRETE ferme
+  proprement ses connexions (detection immediate) ; un reseau qui DISPARAIT (tunnel, Wi-Fi
+  coupe, mode avion) n'envoie rien, et seul l'arret des battements le demasque — jusqu'a 45 s
+  avec les defauts. C'est ce qui retardait le bandeau.
+  ⚠️ Ne pas descendre beaucoup plus bas : `pingTimeout` doit absorber une latence degradee,
+  sinon on deconnecte des clients joignables. Le cout ne pese que pendant l'usage actif, l'app
+  fermant son socket en arriere-plan.
+
+  [A FAIRE - WEB] RIEN de tout ceci n'est porte cote web, et les TROIS mecanismes y manquent
+  (verifie le 13/09) : aucun bandeau, aucun rechargement a la reconnexion, aucun rattrapage au
+  retour d'onglet — la liste ne vit QUE des `conversation_updated`. Consequence : une coupure
+  de dix secondes suffit a ce que les messages arrives pendant restent invisibles jusqu'a un
+  F5, sans que rien ne le signale. C'est la forme residuelle du « je dois rafraichir » du
+  client. Decision du 13/09 : on finalise le MOBILE d'abord, puis on porte l'ensemble au web
+  avec le reste de la parite (points 10-12).
+  ⚠️ Le correctif du 11/09 (socket mort en silence sur jeton expire) est bien en place des
+  deux cotes : c'etait la cause principale, elle est reglee. Ne pas confondre les deux.
+
+
 
 ================================================================================
 CLIENT WEB — ECART AVEC LE MOBILE (analyse du 04/09/2026)
