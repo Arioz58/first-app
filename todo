@@ -759,6 +759,32 @@ messages » (mobile ET web).
     `socket.off(evenement)` sans handler est a bannir. Utiliser `bindSocket` (`lib/socket.ts`)
     ou un handler nomme.
 
+[FAIT 13/09] DECONNEXIONS A TORT : un renouvellement qui n'aboutit pas n'est PAS une session
+morte. Mobile ET web.
+  Symptome : deconnexions frequentes avec OTP a refaire, et dans les logs, apres inactivite,
+  un « [push] Echec enregistrement du jeton : SESSION_EXPIRED ».
+  CAUSE : `refreshAccessToken` renvoyait `null` dans TROIS cas indistinguables — pas de jeton,
+  serveur qui REFUSE le jeton, et requete qui N'ABOUTIT PAS (reseau, 5xx, serveur en train de
+  redemarrer). Les deux clients effacaient la session dans les trois cas. Il suffisait donc
+  qu'un renouvellement parte pendant un redemarrage (nodemon en dev, deploiement Railway en
+  prod) pour deconnecter DEFINITIVEMENT quelqu'un dont la session etait valide 7 jours.
+  ⚠️ Le commentaire annoncait l'INVERSE des deux cotes (« un reseau coupe n'est pas une session
+  expiree, c'est a l'appelant de decider quoi en faire ») — or l'appelant ne faisait aucune
+  distinction. MEME FAMILLE que le reessai « borne a une tentative » du matin : un commentaire
+  qui decrit une intention que le code ne realise pas. Quand un commentaire affirme une
+  garantie, aller verifier qu'elle existe.
+  → `RefreshResult` = ok | refused | unreachable, dans les DEUX `lib/api.ts`. Seul `refused`
+    efface la session ; `unreachable` leve `NETWORK_UNAVAILABLE`, traite comme une panne reseau
+    ordinaire — session INTACTE, la prochaine requete retentera.
+  ⚠️ Un 5xx est classe `unreachable` et NON `refused` : sinon un 502 de la passerelle pendant
+    un deploiement deconnecterait TOUS les utilisateurs d'un coup.
+  → `refreshAccessToken` reste exporte en facade (string | null) pour les deux sockets, qui
+    n'ont pas besoin de la distinction : en cas d'echec ils ne touchent a rien et laissent leur
+    propre mecanique de reconnexion reessayer plus tard.
+  → Cote mobile, `fetchConversations` est repassee en `useCallback` au passage : la ref
+    `fetchRef` qui la gardait hors des dependances n'existait que pour le reessai automatique,
+    supprime le matin meme.
+
 [A FAIRE - Mois 5, SECURITE] ROTATION DES JETONS DE RAFRAICHISSEMENT — inexistante.
   Constate le 11/09 en verifiant un commentaire : `POST /auth/refresh` se contente de verifier
   la signature et de renvoyer un nouvel ACCES. Le jeton de rafraichissement n'est ni fait
@@ -769,6 +795,11 @@ messages » (mobile ET web).
   qui n'existe pas est pire que pas de commentaire du tout.
   → A prevoir : stockage des jetons de rafraichissement (table + revocation), rotation a chaque
     usage, detection de rejeu.
+  ⚠️ PIEGE A ANTICIPER DES LA CONCEPTION : la rotation fragilise les cas limites. Si le client
+    est tue entre la RECEPTION du nouveau jeton et son ENREGISTREMENT, l'ancien est deja
+    invalide cote serveur et l'utilisateur se retrouve deconnecte sans rien avoir fait. Parade
+    usuelle : une courte periode de grace sur le jeton precedent. C'est le meme genre de faux
+    positif que celui corrige le 13/09 — le prevoir AVANT, pas apres le premier signalement.
 
 
 [EN ATTENTE CLIENT - point 3] « Suivre la trace de WA ». Reponse envoyee : on reprend les USAGES

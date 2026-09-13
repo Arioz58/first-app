@@ -289,16 +289,22 @@ export default function ConversationsScreen() {
   );
 
   /** Coupure constatée : bandeau rouge, et la confirmation en attente est annulée. */
-  const showOffline = () => {
+  const showOffline = useCallback(() => {
     if (backTimerRef.current) {
       clearTimeout(backTimerRef.current);
       backTimerRef.current = null;
     }
     wasOfflineRef.current = true;
     setBanner('offline');
-  };
+  }, []);
 
-  const fetchConversations = async () => {
+  /**
+   * ⚠️ Mémoïsée : elle est utilisée par deux effets, qui la réclament en dépendance. Sa seule
+   * dépendance est `showOffline`, elle-même stable — l'ajouter ne rejoue donc aucun effet.
+   * (Jusqu'au 13/09, une ref `fetchRef` tenait ce rôle ; elle n'existait que pour le réessai
+   * automatique, supprimé depuis.)
+   */
+  const fetchConversations = useCallback(async () => {
     try {
       const data = await apiRequest<Conversation[]>('/conversations');
       /**
@@ -350,7 +356,7 @@ export default function ConversationsScreen() {
     apiRequest<unknown[]>('/conversations/requests')
       .then((r) => setRequestCount(r.length))
       .catch(() => {});
-  };
+  }, [showOffline]);
 
   /**
    * Pastilles posées depuis le cache, au montage.
@@ -403,7 +409,7 @@ export default function ConversationsScreen() {
       fetchCustomFilters()
         .then(setCustomFilters)
         .catch(() => {});
-    }, []),
+    }, [fetchConversations]),
   );
 
   useEffect(() => {
@@ -584,7 +590,9 @@ export default function ConversationsScreen() {
       socket.off('disconnect', onDisconnect);
       socket.off('connect_error', onConnectError);
     };
-  }, []);
+    // ⚠️ `fetchConversations` et `showOffline` sont STABLES (mémoïsées sans dépendance
+    // changeante) : les déclarer ici ne rebranche donc pas les écouteurs à chaque rendu.
+  }, [fetchConversations, showOffline]);
 
   const getConvName = (conv: Conversation) => {
     if (conv.type === 'group') return conv.name ?? t('chat.group');

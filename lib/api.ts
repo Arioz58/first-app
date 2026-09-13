@@ -7,6 +7,12 @@ import {
   saveTokens,
 } from "./storage";
 
+/**
+ * Le serveur n'a pas pu être joint pour renouveler la session. ⚠️ À traiter comme une panne
+ * réseau ordinaire — surtout PAS comme une déconnexion : la session est peut-être intacte.
+ */
+export const NETWORK_UNAVAILABLE = "NETWORK_UNAVAILABLE";
+
 let sessionExpiredHandler: (() => void) | null = null;
 
 export const setSessionExpiredHandler = (handler: () => void) => {
@@ -34,32 +40,66 @@ export const setSessionExpiredHandler = (handler: () => void) => {
  * ⚠️ Renvoie `null` sans effacer la session : un réseau coupé n'est pas une session expirée,
  * et c'est à l'appelant de décider quoi en faire.
  */
-let refreshing: Promise<string | null> | null = null;
+/**
+ * Pourquoi un renouvellement a échoué — la distinction qui évite de déconnecter à tort.
+ *
+ * ⚠️ `refused` et `unreachable` ne veulent PAS dire la même chose et n'appellent pas la même
+ * réaction. Jusqu'au 13/09 les deux renvoyaient `null`, et l'appelant effaçait la session dans
+ * les deux cas : une requête de renouvellement qui n'aboutissait pas — réseau coupé, serveur
+ * en train de redémarrer — déconnectait pour de bon un utilisateur dont la session était
+ * parfaitement valide, l'obligeant à refaire un code SMS.
+ */
+type RefreshResult =
+  | { status: "ok"; token: string }
+  | { status: "refused" }
+  | { status: "unreachable" };
 
-export const refreshAccessToken = async (): Promise<string | null> => {
+let refreshing: Promise<RefreshResult> | null = null;
+
+const refreshSession = async (): Promise<RefreshResult> => {
   if (refreshing) return refreshing;
 
   refreshing = (async () => {
     const refreshToken = await getRefreshToken();
-    if (!refreshToken) return null;
+    // Pas de jeton du tout : il n'y a rien à renouveler, et rien à attendre d'un réessai.
+    if (!refreshToken) return { status: "refused" as const };
     try {
       const res = await fetch(`${BASE_URL}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refreshToken }),
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        /**
+         * ⚠️ Un 5xx n'est PAS un refus du jeton : c'est le serveur qui est en peine
+         * (redémarrage, déploiement, passerelle). Le traiter comme une session morte
+         * déconnecterait tout le monde à chaque mise en production.
+         */
+        return { status: res.status >= 500 ? "unreachable" : "refused" } as const;
+      }
       const data = await res.json();
       await saveTokens(data.accessToken, data.refreshToken, (await getUserId()) ?? "");
-      return data.accessToken as string;
+      return { status: "ok" as const, token: data.accessToken as string };
     } catch {
-      return null;
+      // La requête n'a pas abouti : on ne sait RIEN de la validité de la session.
+      return { status: "unreachable" as const };
     } finally {
       refreshing = null;
     }
   })();
 
   return refreshing;
+};
+
+/**
+ * Façade pour le socket, qui n'a besoin que du jeton.
+ *
+ * ⚠️ Il n'a pas à distinguer les deux échecs : en cas d'échec il ne touche à rien et laisse
+ * sa propre mécanique de reconnexion réessayer plus tard.
+ */
+export const refreshAccessToken = async (): Promise<string | null> => {
+  const result = await refreshSession();
+  return result.status === "ok" ? result.token : null;
 };
 
 type RequestOptions = {
@@ -89,9 +129,9 @@ export const apiRequest = async <T>(
 
   if (res.status === 401 && auth) {
     // Tenter un refresh uniquement pour les requêtes authentifiées.
-    const fresh = await refreshAccessToken();
-    if (fresh) {
-      headers["Authorization"] = `Bearer ${fresh}`;
+    const refreshed = await refreshSession();
+    if (refreshed.status === "ok") {
+      headers["Authorization"] = `Bearer ${refreshed.token}`;
       const retry = await fetch(`${BASE_URL}${path}`, {
         method,
         headers,
@@ -99,6 +139,19 @@ export const apiRequest = async <T>(
       });
       return retry.json();
     }
+    /**
+     * ⚠️ RENOUVELLEMENT NON ABOUTI : on n'efface RIEN.
+     *
+     * On ne sait pas si la session est morte — la requête n'est simplement jamais arrivée.
+     * Effacer les jetons ici déconnectait pour de bon un utilisateur parfaitement valide,
+     * qui devait refaire un code SMS : il suffisait que le serveur redémarre pendant le
+     * renouvellement. L'appel échoue donc comme n'importe quelle panne réseau, et la
+     * prochaine requête retentera avec la session intacte.
+     */
+    if (refreshed.status === "unreachable") {
+      throw new Error(NETWORK_UNAVAILABLE);
+    }
+    // Refus explicite du serveur : la session est bel et bien morte.
     await clearTokens();
     sessionExpiredHandler?.();
     throw new Error("SESSION_EXPIRED");
