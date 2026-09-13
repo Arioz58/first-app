@@ -1859,7 +1859,15 @@ un navigateur), position en direct, QR de profil.
   ⚠️ AVANT LA PROD : `AllowedOrigins` ne doit contenir QUE les domaines reels du site, jamais `*` — une origine ouverte laisserait n'importe quel site televerser dans le bucket avec une URL signee volee. Retirer `localhost` et ajouter le domaine de production au deploiement.
   → symptome trompeur : l'erreur remontait comme « Echec de l'envoi du message vocal », ce qui faisait chercher du cote du format audio. Les messages d'erreur d'upload remontent desormais le code S3 (`SignatureDoesNotMatch`, `AccessDenied`…), qui est la seule information exploitable.
 
-[A FAIRE - Mois 5, FORMAT DES VOCAUX WEB] Un vocal enregistre depuis Chrome/Firefox arrive en WebM/Opus — lisible par les navigateurs et par Android, mais PAS par le lecteur natif d'iOS.
+[REQUALIFIE 13/09 - FORMAT DES VOCAUX WEB] ⚠️ LA NOTE CI-DESSOUS ETAIT ALARMISTE. Mesure du
+13/09 : AUCUN vocal en base n'est en WebM — tous sont en `audio/mp4` (extension .m4a), y compris
+ceux enregistres le jour meme depuis le web. Le navigateur de test accepte donc `audio/mp4`, et
+le repli WebM ne se declenche pas. Ecoute VERIFIEE sur iPhone REEL (et non sur simulateur, qui
+s'appuie en partie sur les codecs de macOS et ne prouve rien pour un appareil).
+  → Le risque subsiste, mais restreint : il ne concerne que les navigateurs qui REFUSENT
+    `audio/mp4` (cela depend du navigateur ET du systeme). A reverifier si un testeur signale un
+    vocal muet sur iPhone ; la parade reste le transcodage serveur ou un lecteur JS.
+  Note d'origine (02/09) : Un vocal enregistre depuis Chrome/Firefox arrive en WebM/Opus — lisible par les navigateurs et par Android, mais PAS par le lecteur natif d'iOS.
   ⚠️ Constate le 02/09 en livrant l'enregistrement web : ces navigateurs ne savent pas encoder en MP4, et `MediaRecorder` n'offre pas le choix. Le client tente d'abord `audio/mp4` (Safari l'accepte) et ne retombe sur WebM que contraint.
   → REFUSER le WebM reviendrait a priver Chrome et Firefox — la majorite des postes — de messages vocaux. L'accepter laisse un cas ou un vocal envoye depuis Chrome ne s'ecoute pas sur iPhone. On a choisi de l'accepter.
   → issues possibles : transcodage cote serveur (ffmpeg a l'upload, ou a la volee), ou lecteur JS sur iOS. A trancher avec le client selon la repartition reelle des navigateurs.
