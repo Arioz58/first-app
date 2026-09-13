@@ -835,15 +835,30 @@ messages » (mobile ET web).
   sinon on deconnecte des clients joignables. Le cout ne pese que pendant l'usage actif, l'app
   fermant son socket en arriere-plan.
 
-  [A FAIRE - WEB] RIEN de tout ceci n'est porte cote web, et les TROIS mecanismes y manquent
-  (verifie le 13/09) : aucun bandeau, aucun rechargement a la reconnexion, aucun rattrapage au
-  retour d'onglet — la liste ne vit QUE des `conversation_updated`. Consequence : une coupure
-  de dix secondes suffit a ce que les messages arrives pendant restent invisibles jusqu'a un
-  F5, sans que rien ne le signale. C'est la forme residuelle du « je dois rafraichir » du
-  client. Decision du 13/09 : on finalise le MOBILE d'abord, puis on porte l'ensemble au web
-  avec le reste de la parite (points 10-12).
-  ⚠️ Le correctif du 11/09 (socket mort en silence sur jeton expire) est bien en place des
-  deux cotes : c'etait la cause principale, elle est reglee. Ne pas confondre les deux.
+  [FAIT 13/09 - WEB] Porte a l'identique apres validation du mobile. Avant ca, les TROIS
+  mecanismes manquaient cote web : aucun bandeau, aucun rechargement a la reconnexion, aucun
+  rattrapage au retour d'onglet — la liste ne vivait QUE des `conversation_updated`. Une
+  coupure de dix secondes suffisait donc a ce que les messages arrives pendant restent
+  invisibles jusqu'a un F5, sans que rien ne le signale : c'etait la forme residuelle du
+  « je dois rafraichir » du client.
+  → `src/components/ConversationList.tsx` (etat a trois valeurs, ecouteurs connect /
+    disconnect / connect_error, bandeau sous l'en-tete, minuteur annule au demontage),
+    `src/components/icons.ts` (IconOffline / IconOnline), `conversations_stale` dans les
+    trois locales. Meme duree de confirmation qu'en mobile (3 s) : les deux clients doivent
+    battre la meme mesure.
+  ⚠️ DEUX ecarts assumes avec le mobile :
+    1. la condition du `connect_error` differe. Le mobile teste « revient-on d'une mise en
+       pause volontaire ? » — le web ne fermant JAMAIS son socket en arriere-plan, cette
+       notion n'y existe pas. Il teste donc « le socket a-t-il deja reussi a se connecter ? ».
+       Meme objectif : ne pas coller un bandeau d'erreur sur une liste fraiche parce qu'un
+       jeton expirait a l'ouverture.
+    2. deux chemins de repli au lieu de quatre (bandeau + rechargement de page ; le mobile
+       ajoute le swipe et le retour sur l'onglet). L'equivalent web serait `visibilitychange`,
+       ECARTE : une requete a chaque va-et-vient entre onglets du navigateur.
+  ⚠️ Le correctif du 11/09 (socket mort en silence sur jeton expire) etait deja en place des
+  deux cotes : c'etait la cause principale, elle etait reglee. Ne pas confondre les deux.
+  ⚠️ Serveur de dev Next a REDEMARRER apres l'ajout des cles i18n, sinon erreur d'hydratation
+  sans rapport avec le code (piege deja connu, cf. CLAUDE.md).
 
 
 
