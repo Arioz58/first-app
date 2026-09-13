@@ -31,6 +31,23 @@ export type Quote = {
  * « Photo », sinon la citation serait une barre colorée vide et on ne saurait pas à quoi la
  * réponse répond.
  */
+/** Au-delà, le nom de l'auteur cité est abrégé. */
+const QUOTE_NAME_MAX = 8;
+
+/**
+ * Nom de l'auteur cité, abrégé.
+ *
+ * ⚠️ Troncature EXPLICITE et non laissée à `numberOfLines` : la largeur du bloc dépend de la
+ * bulle, donc de la longueur de la RÉPONSE — un même nom apparaissait entier ou coupé selon
+ * ce qu'on venait d'écrire, ce qui rendait l'aperçu imprévisible. Une limite fixe donne le
+ * même rendu partout. Même règle et même valeur que sur le web (`QuotedPreview.tsx`).
+ *
+ * ⚠️ Le caractère « … » et non trois points : c'est UN caractère, il occupe moins de place et
+ * ne se coupe jamais.
+ */
+export const shortQuoteName = (name: string): string =>
+  name.length > QUOTE_NAME_MAX ? `${name.slice(0, QUOTE_NAME_MAX)}…` : name;
+
 export const quoteSummary = (
   q: Quote,
   t: (k: string, o?: any) => string,
@@ -82,7 +99,7 @@ export function QuotedMessage({
   const { t } = useTranslation();
   const { icon, label } = quoteSummary(quote, t);
   const mine = quote.senderId === currentUserId;
-  const author = mine ? t('chat.quote_you') : quote.sender?.name || '';
+  const author = mine ? t('chat.quote_you') : shortQuoteName(quote.sender?.name || '');
   const thumb =
     quote.mediaUrl && (quote.mediaType === 'image' || quote.mediaType === 'gif')
       ? quote.mediaUrl

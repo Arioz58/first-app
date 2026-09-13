@@ -832,11 +832,60 @@ Railway et en local.
   [A CONFIRMER] le proxy de PRODUCTION (Railway) : non testable d'ici, le jeton doit etre signe
   avec le JWT_SECRET de prod. A valider en ouvrant le selecteur de GIF depuis un build EAS.
 
-[DEJA PREVU - points 10, 11, 12] Actions sur une photo ouverte en grand (telecharger, epingler,
-  aller au message, reagir), icones d'en-tete d'une conversation web, et parite complete mobile→web
-  (profils, actus/stories, options des conversations). Deja dans les livrables web, cf. la section
-  CLIENT WEB ci-dessous. Point detaille a preparer pour le client (ce qui est en place, ce qui
-  reste, dans quel ordre).
+[FAIT 13/09 - point 10] ACTIONS SUR UNE PHOTO OUVERTE EN GRAND (web).
+  La visionneuse n'offrait que : compteur, fermer, precedent/suivant. Elle propose desormais
+  reagir (les 6 reactions rapides), repondre, transferer, favori, epingler, aller au message et
+  telecharger.
+  ⚠️ Les actions sont PASSEES, pas reimplementees : la visionneuse ne parle pas au serveur, elle
+    appelle les memes fonctions que le menu contextuel d'une bulle. Une seconde implementation
+    aurait duplique les mises a jour optimistes, et les deux chemins auraient fini par diverger.
+  ⚠️ REPONDRE et TRANSFERER ferment la visionneuse (le champ de saisie et la fenetre de transfert
+    sont derriere elle) ; reagir / favori / epingler la laissent ouverte.
+  ⚠️ Le TRANSFERT depuis la visionneuse ne reprend PAS l'album, contrairement au transfert depuis
+    le fil. Depuis une bulle on designe une bulle (et n'envoyer qu'une image sur cinq serait faux,
+    cf. le correctif du 02/09) ; depuis la visionneuse on regarde UNE photo, et embarquer ses
+    voisines serait surprenant. Meme geste, deux intentions selon l'endroit d'ou il part.
+  ⚠️ TELECHARGEMENT par `fetch` puis blob, et non par un `<a download>` : cet attribut est IGNORE
+    pour une autre origine — le navigateur se contenterait d'ouvrir l'image dans un onglet, et les
+    medias viennent de S3. Repli : ouverture dans un nouvel onglet si la requete echoue.
+    ⚠️ CORS de S3 autorise `http://localhost:3001` : AJOUTER l'origine du web deploye le jour de
+      la mise en ligne, sinon le telechargement tombera systematiquement sur le repli.
+  ⚠️ La remise a zero de la palette de reactions se fait PENDANT LE RENDU et non dans un effet
+    (`react-hooks/set-state-in-effect`, erreur de lint) : un effet s'execute apres la peinture, on
+    verrait une image du media suivant avec la palette du precedent encore ouverte.
+
+[FAIT 13/09 - retour Berke] APERCU DU MESSAGE CITE : le web ne montrait ni icone ni vignette.
+  Repondre a une photo affichait « Piece jointe », sans le moindre indice de LAQUELLE.
+  ⚠️ AUCUN changement serveur : `MESSAGE_SELECT.replyTo` porte deja `mediaUrl`, `mediaType` et
+    `fileName`, et le MOBILE s'en servait deja. Il ne manquait que le rendu cote web.
+  → `src/components/QuotedPreview.tsx` : UN SEUL composant pour les DEUX emplacements (dans la
+    bulle, et au-dessus du champ de saisie), comme `QuotedMessage.tsx` sur mobile. Il y avait ici
+    deux rendus separes — c'est exactement ainsi que deux apercus finissent par resumer le meme
+    message de deux facons.
+  → libelles REPRIS TELS QUELS des locales mobiles (`chat.quote_*`) plutot que reecrits : les deux
+    clients doivent dire la meme chose dans les trois langues.
+  → vignette pour les seules images et GIF : une video n'a pas d'affiche prete a servir (il
+    faudrait la decoder), un document n'a rien a montrer — son nom de fichier est plus parlant.
+  → au passage, le cas « Vous » (se repondre a soi-meme) n'existait PAS cote web : il affichait le
+    nom de l'utilisateur. Le mobile le gerait deja.
+  [FAIT, demande Berke] NOM DE L'AUTEUR CITE ABREGE a 8 caracteres + « … », meme regle et meme
+    constante des deux cotes (`shortQuoteName`).
+    ⚠️ Troncature EXPLICITE et non laissee au CSS / `numberOfLines` : la largeur du bloc depend de
+      la bulle, donc de la longueur de la REPONSE — un meme nom apparaissait entier ou coupe selon
+      ce qu'on venait d'ecrire.
+    ⚠️ RESERVE SIGNALEE au client, non tranchee : a 8 caracteres, deux personnes partageant un
+      prefixe deviennent indistinguables (« Mohammed Ali » et « Mohammed Bakr » → « Mohammed… »),
+      ce qui est genant en GROUPE, la ou la citation sert precisement a savoir a qui l'on repond.
+      Et le nom complet de l'expediteur est affiche juste au-dessus de la bulle, donc la
+      troncature s'y voit d'autant plus. 16 caracteres proposes. Une seule constante a changer.
+    ⚠️ Le libelle « Vous » (4 caracteres) n'est jamais tronque : il n'y a rien a couper.
+
+[A FAIRE - points 11 et 12] Icones d'en-tete d'une conversation web (boutons d'appel + menu « ⋮ »)
+  et parite mobile→web. ⚠️ INVENTAIRE FAIT le 13/09 : le point 12 est deja LARGEMENT couvert —
+  `UserProfileDialog`, `DetailsPanel`, `StoriesPage`, `StoryViewer`, `PrivacyPanel`,
+  `MediaGalleryView` existent. L'en-tete web a deja retour, nom (ouvre les details) et recherche ;
+  manquent les boutons d'appel (grises, comme sur mobile — les appels sont Mois 4) et le menu.
+  Point detaille a preparer pour le client (ce qui est en place, ce qui reste, dans quel ordre).
 
 [REPONDU - point 6] Delais : fin 2026 tenus, engagement de prevenir immediatement en cas de risque.
 
