@@ -556,6 +556,24 @@ nouveaux messages ». Anterieur aux bandeaux — ils n'ont fait que le rendre vi
     caractere — le rapport d'amortissement (ζ ≈ 0.78) est inchange.
 
 [FAIT 11/09 - points 1 et 9] AFFICHAGE WEB.
+  [COMPLETE 13/09] ⚠️ L'elargissement de la COLONNE (1) ne suffisait pas, et Berke l'a releve
+    tout de suite : « qu'est-ce qui change alors ? ». Les bulles restaient plafonnees a
+    `max-w-[min(32rem,80%)]` — 80 % d'un conteneur de 1100 px valant 880, le `min` retenait
+    TOUJOURS 512 px. Elargir la colonne les avait donc seulement ECARTEES, avec du vide au
+    milieu. Erreur d'analyse de ma part le 11/09.
+    → bulles portees a 37.5rem (600 px). Et PAS davantage : a la taille de police du fil,
+      600 px font ~80 caracteres par ligne, la limite haute du lisible (plage confortable
+      45-75). Ma proposition initiale de 640 px etait trop large — une bulle plus large serait
+      moins lisible, pas plus « bureau ». Le texte n'etait pas le vrai sujet.
+    → cadre des medias 20rem x 30rem (320x480) → 25rem x 36rem (400x576) : c'est LA que se
+      jouait le « sur PC on dirait un telephone ». Une photo verticale passait a ~270x480, un
+      timbre-poste au milieu de 1100 px ; elle occupe desormais 324x576 (+44 % de surface).
+    ⚠️ LES DEUX VALEURS du cadre doivent bouger ENSEMBLE : une photo verticale est limitee par
+      sa HAUTEUR, n'elargir que le cadre ne l'aurait pas agrandie d'un pixel. Piege exact du
+      correctif du 11/09, ou seule la hauteur etait contrainte.
+    [A VERIFIER a l'oeil] les ALBUMS ne sont pas touches : tuiles de 128 px de haut, et leur
+      grille n'a AUCUNE largeur maximale (elle se dimensionne sur son contenu). Inoffensif tant
+      que la colonne faisait 768 px, moins sur 1100. Regarder une conversation qui en contient.
   (1) « Sur PC la conversation est toujours en mode telephone ». Le fil etait plafonne a
       `max-w-3xl`, soit 768 px : sur un ecran d'ordinateur, une colonne etroite au milieu avec
       du vide de chaque cote. Porte a 1100 px.
