@@ -314,6 +314,8 @@
     "title": "Confidentialité",
     "everyone": "Tout le monde",
     "friends": "Mes amis",
+    "friends_except": "Mes amis, sauf…",
+    "friends_except_count": "Mes amis, sauf {{count}}",
     "nobody": "Personne",
     "friends_of_friends": "Amis d'amis",
     "section_visibility": "Qui peut voir",
@@ -328,7 +330,11 @@
     "friend_requests": "Demandes d'ami",
     "location_enabled": "Partager ma localisation",
     "read_receipts": "Accusés de lecture",
-    "read_receipts_hint": "Désactivé, vos lectures ne sont plus signalées — et vous ne voyez plus celles des autres. Les accusés de réception restent actifs."
+    "read_receipts_hint": "Désactivé, vos lectures ne sont plus signalées — et vous ne voyez plus celles des autres. Les accusés de réception restent actifs.",
+    "except_title": "Masquer à ces personnes",
+    "except_hint": "Elles ne verront pas : {{field}}",
+    "except_no_friends": "Tu n'as encore aucun ami à écarter.",
+    "except_done": "Terminé"
   },
   "friends": {
     "title": "Amis",

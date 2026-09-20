@@ -314,6 +314,8 @@
     "title": "Privacy",
     "everyone": "Everyone",
     "friends": "My friends",
+    "friends_except": "My friends, except…",
+    "friends_except_count": "My friends, except {{count}}",
     "nobody": "Nobody",
     "friends_of_friends": "Friends of friends",
     "section_visibility": "Who can see",
@@ -328,7 +330,11 @@
     "friend_requests": "Friend requests",
     "location_enabled": "Share my location",
     "read_receipts": "Read receipts",
-    "read_receipts_hint": "When off, your reads are no longer reported — and you no longer see other people's. Delivery receipts stay on."
+    "read_receipts_hint": "When off, your reads are no longer reported — and you no longer see other people's. Delivery receipts stay on.",
+    "except_title": "Hide from these people",
+    "except_hint": "They won't see: {{field}}",
+    "except_no_friends": "You don't have any friends to exclude yet.",
+    "except_done": "Done"
   },
   "friends": {
     "title": "Friends",
