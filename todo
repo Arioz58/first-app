@@ -2032,3 +2032,118 @@ s'appuie en partie sur les codecs de macOS et ne prouve rien pour un appareil).
   - 28/07 Actus : suggestions d'amis en orbite animee.
   - 29/07 mode sombre (auto systeme + choix manuel dans le Profil) ; refonte de l'onglet « Vous » (stats, QR de profil, sections en cartes) ; scheme de l'app renomme firstapp → nexa.
   - 30-31/07 refonte visuelle du chat : barre de saisie en verre + clavier synchronise nativement, flou progressif en haut du fil, bulles en degrade avec heure, albums (plusieurs medias d'un meme envoi), vocaux (onde + vitesse de lecture), visionneuse de documents in-app.
+
+[A FAIRE - Mois 6, avant mise en production] ADOPTION DU CYCLE DE VIE UISCENE (iOS).
+  Decouvert le 15/09/2026 en mettant a jour Xcode : iOS 27 REFUSE DE LANCER toute app liee au
+  SDK 27 qui n'adopte pas `UIScene`. L'app se construit, s'installe, se signe — puis meurt au
+  demarrage sur un `EXC_BREAKPOINT` dans
+  `_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`, avant meme d'atteindre le
+  JavaScript. Rien a voir avec Metro ni avec notre code.
+  ⚠️ NI React Native (jusqu'a 0.87) NI Expo (jusqu'au SDK 57) ne l'implementent : monter de SDK
+  ne reglerait donc RIEN. C'est a l'app de l'adopter.
+  ⚠️ Declarer `UIApplicationSceneManifest` dans app.json NE SUFFIT PAS : la fenetre doit etre
+  CREEE depuis la `UIWindowScene`, donc le demarrage de React Native doit passer dans un
+  `SceneDelegate`. A empaqueter en config plugin, sinon `expo prebuild` l'efface.
+  → contournement de reference : issue expo#50179 (plugin qui pose le SceneDelegate).
+  CONTOURNEMENT ACTUEL (15/09) : on compile avec le SDK 26.5 (Xcode 26.6), ou la regle ne
+  s'applique pas. Une app SDK 26 tourne sans probleme SUR iOS 27 — c'est seulement le SDK DE
+  LIAISON qui declenche le verrou. Tenable tant qu'Apple accepte le SDK 26 a la soumission ;
+  ce ne sera pas eternel, d'ou cet item.
+
+[NOTE OUTILLAGE 15/09/2026] Xcode 27 : trois ecueils, et pourquoi on est revenu a Xcode 26.6.
+  Contexte : une mise a jour de Xcode (27.0) a rendu tout build local impossible. Trois causes
+  DISTINCTES empilees derriere un seul symptome, chacune masquant la suivante.
+  1. `Simulator.app` N'EXISTE PLUS dans Xcode 27 (remplace par `DeviceHub.app`, identifiant
+     `com.apple.dt.Devices`), et les apps sont passees de `Contents/Developer/Applications/` a
+     `Contents/Applications/`. Le CLI Expo cherche encore l'ancien nom et conclut « Simulator
+     is most likely not installed », en conseillant un `xcode-select` qui n'a rien a voir —
+     message DOUBLEMENT trompeur, l'installation etant parfaitement saine.
+     ⚠️ Le correctif amont (expo#46757) N'EXISTE PAS pour le SDK 54 : la branche 54 n'a plus
+     rien publie depuis janvier 2026. Patch local applique sur 3 fichiers de
+     `node_modules/expo/node_modules/@expo/cli` (detection, comptage du processus, activation
+     de la fenetre), ecrit pour tolerer LES DEUX mondes. ⚠️ Vit dans node_modules : efface par
+     tout `npm install`. Sauvegardes dans le scratchpad de la session. A figer avec
+     patch-package le jour ou l'on repasse sur Xcode 27.
+  2. Xcode 27 REFUSE tout `IPHONEOS_DEPLOYMENT_TARGET` < 15.0. Deux bundles de RESSOURCES le
+     declarent encore dans leur podspec et n'heritent donc pas du 15.1 du Podfile :
+     `react-native-maps-ReactNativeMapsPrivacy` (11.0) et `SDWebImage-SDWebImage` (9.0).
+     Parade = boucle `post_install` alignant toutes les cibles. ⚠️ Perdu a chaque prebuild
+     (ios/ est regenere) : la forme durable est `expo-build-properties` (0.14.8 pour le SDK 54).
+  3. Le verrou UIScene (voir l'item precedent) — le seul des trois qui ne se contourne pas.
+  ⚠️ PIEGE DE DIAGNOSTIC : `xcrun simctl list` affichait les simulateurs iOS 27 comme
+  disponibles, mais `xcodebuild` les refuse — un Xcode ne construit QUE pour des runtimes
+  <= son SDK. Les deux outils ne repondent pas a la meme question : verifier avec
+  `xcodebuild -showdestinations`, jamais avec `simctl`.
+  ⚠️ Le formateur d'Expo annonce « 0 error(s) » JUSTE AVANT d'echouer : les vraies erreurs
+  sont dans le log brut (`.expo/xcodebuild.log`). Ne jamais lire la sortie a travers un `tail`.
+  ETAT AU 15/09 : Xcode 26.6 (SDK iOS 26.5) dans `/Applications/Xcode-26.app`, runtime
+  simulateur iOS 26.5 installe, runtime iOS 27 supprime. ⚠️ `/Applications/Xcode.app` (la 27)
+  a ete PARTIELLEMENT supprime et est donc inutilisable : le finir au `sudo rm -rf`, et passer
+  par une reinstallation propre si l'on y revient un jour.
+
+[FAIT 15-19/09 - RETOUR CLIENT, points 1 et 4] LE BANDEAU ROUGE « MISE A JOUR IMPOSSIBLE », ET
+LE TEMPS REEL QUI MOURAIT DERRIERE.
+  SYMPTOMES rapportes par Hakan le 15/09, comptes comme deux problemes distincts, et qui n'en
+  faisaient qu'un et demi : (1) un bandeau rouge a l'ouverture de l'application, MOBILE ET WEB,
+  disparaissant seul au bout d'une dizaine de secondes ; (4) un message envoye du telephone
+  n'arrivait pas sur le web sans recharger la page.
+
+  CAUSE COMMUNE — le bandeau ne mentait pas tout a fait : quelque chose etait bien casse, mais
+  le bandeau se declenchait AUSSI quand tout allait bien. Trois defauts empiles.
+
+  1. MOBILE, `lib/api.ts` — AUCUN RENOUVELLEMENT DE JETON N'ABOUTISSAIT. `POST /auth/refresh`
+     ne renvoie QUE `accessToken` (il n'y a pas de rotation), mais on appelait
+     `saveTokens(access, data.refreshToken /* undefined */, …)` : `SecureStore.setItemAsync`
+     refuse une valeur qui n'est pas une chaine, l'exception partait dans le `catch`, et le
+     renouvellement etait rapporte `unreachable` ALORS QUE LE SERVEUR AVAIT REPONDU. D'ou un
+     socket qui ne se reconnectait jamais apres un passage en arriere-plan, et une session
+     finalement effacee. → `saveAccessToken()` (`lib/storage.ts`), ecrit le seul jeton d'acces.
+     ⚠️ Le WEB faisait deja ce test (`src/lib/api.ts`) : seul le mobile etait touche. Ne pas
+     « harmoniser » les deux en supprimant la condition.
+
+  2. LES DEUX CLIENTS — UN `connect_error` N'EST PAS UNE COUPURE. Le jeton d'acces vit quinze
+     minutes ; au retour d'arriere-plan (mobile) ou sur un onglet laisse ouvert (web), le
+     serveur refuse le handshake, le client renouvelle et se reconnecte. C'est un passage
+     OBLIGE. Or chaque liste de conversations en tirait elle-meme ses conclusions, a partir des
+     evenements bruts, et comptait ce refus pour une panne → le bandeau rouge, sur une
+     application parfaitement saine. Le cas avait ete prevu au LANCEMENT (« un simple jeton
+     expire n'est pas une panne ») et oublie au RETOUR, alors que c'est le meme evenement.
+     → `lib/connection.ts` des DEUX cotes : `lib/socket.ts` — le seul a savoir s'il a tente un
+     renouvellement et s'il a abouti — publie son verdict, l'ecran le LIT. La coupure n'est
+     declaree que dans deux cas : jeton valide et pourtant refuse (rien a renouveler, le serveur
+     est hors d'atteinte), ou renouvellement qui echoue.
+     ⚠️ Forme differente sur le web : un ABONNEMENT et non un hook, parce que
+     `react-hooks/set-state-in-effect` y est une ERREUR et refuse un `setState` pose dans le
+     corps d'un effet. Meme forme que l'ecouteur socket qu'il remplace.
+     ⚠️ COURSE A L'OUVERTURE, mesuree le 16/09 : `connectSocket` et le premier chargement de la
+     liste partent ENSEMBLE ; si le jeton stocke est deja expire, c'est la requete HTTP qui le
+     renouvelle PENDANT le handshake. On se retrouvait avec un refus (tentative partie avec
+     l'ancien) et un jeton en memoire tout frais — lu comme « valide et pourtant refuse », donc
+     comme une panne, et le socket restait MORT (socket.io ne retente pas apres un refus du
+     middleware). On compare desormais le jeton AVEC LEQUEL la tentative est partie
+     (`socket.auth`) a celui en memoire, et l'on retente avec le neuf.
+     → c'est le chemin le plus frequent sur le WEB (tout onglet rouvert plus de quinze minutes
+       apres), et c'est la MOITIE du point 4 : plus de socket, donc plus rien en direct.
+  2b. MOBILE, `resumeSocket` — RENOUVELER AVANT DE TENTER plutot qu'apres le refus. `api.ts`
+     n'a rien rafraichi pendant l'absence (aucune requete n'est partie), donc le jeton relu est
+     expire : on ouvrait une connexion qu'on savait vouee au refus pour la rattraper juste
+     apres. D'ou une dizaine de secondes de temps reel perdu a chaque retour.
+
+  3. WEB, `app/chat/[id]/page.tsx` — LES ROOMS APPARTIENNENT A L'ANCIEN SOCKET. L'autre moitie
+     du point 4, et elle survivait aux deux correctifs precedents. `join_conversation` n'etait
+     emis qu'au MONTAGE. Le serveur ne rejoint de lui-meme que `user:<id>` au handshake
+     (verifie dans `src/lib/socket.ts`), et `new_message` part dans `conv:<id>` : apres toute
+     reconnexion, le fil OUVERT restait muet pendant que la liste, elle, se mettait a jour.
+     Symptome exact du client — « je dois recharger la page ». → ecouteur `connect` nomme qui
+     rejoint la room et rattrape les messages manques (`newerCursor` sur le dernier message
+     VENU DU SERVEUR, un brouillon local n'etant pas un curseur), sans rattrapage si le fil est
+     ouvert au milieu de l'historique. Le mobile le faisait deja.
+     ⚠️ Ecouteur NOMME et retire nommement : un `socket.off('connect')` sans argument
+     detacherait aussi celui de la liste.
+
+  A TESTER (rien n'a encore tourne sur appareil ni dans un navigateur) :
+    - mobile : mettre l'app en arriere-plan > 15 min, revenir → aucun bandeau, et les messages
+      recus pendant l'absence sont la ;
+    - web : laisser un onglet ouvert > 15 min, envoyer un message depuis le telephone → il doit
+      arriver dans le fil OUVERT sans rechargement ;
+    - les deux : couper le Wi-Fi → bandeau rouge, le retablir → vert « Connexion retablie ».
