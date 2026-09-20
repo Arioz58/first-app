@@ -2413,3 +2413,129 @@ profil.
   charge pour tout le monde — masquer par destinataire demanderait d'emettre socket par socket.
   A trancher : soit on retire le champ du select et l'on recompose l'image du push a part, soit
   on assume. Meme question pour l'image du push elle-meme, qui ignore aussi `privacyPhoto`.
+
+[FAIT 20/09 - RETOUR CLIENT] SONS D'ENVOI ET DE RECEPTION (mobile + web).
+  Trois des quatre demandes du client. La quatrieme — « gerer le son selon le TYPE de
+  notification » — attend toujours sa reponse : un son different par type (message, groupe,
+  demande d'ami) ou simplement pouvoir choisir le son ? Ne pas coder avant de savoir.
+
+  ⚠️ SONS FINALEMENT FOURNIS PAR BERKE (`send.mp3` / `receive.mp3`), apres deux essais
+  fabriques ici. Ce sont les siens qui sont en place, sous `assets/sounds/*.mp3` et
+  `public/sounds/*.mp3` — les memes des deux cotes.
+    mesure : 600 ms (dont ~400 de silence en fin), 48 kHz stereo, pic -4,9 dBFS (envoi) et
+    -3,6 dBFS (reception).
+    ⚠️ TROP FORTS A L'USAGE (constate par Berke le 20/09), une dizaine de dB au-dessus d'un son
+    d'interface. BAISSES A LA LECTURE et non dans les fichiers : `GAIN_ENVOI` 0,39 et
+    `GAIN_RECEPTION` 0,34 dans les deux `lib/sounds.ts`, ce qui les ramene tous deux vers
+    -13 dBFS de pic.
+    → Les fichiers restent ceux qu'il a fournis, octet pour octet : un MP3 reencode perd en
+      qualite a chaque passage, et le reglage tient desormais en une valeur a changer.
+    → DEUX gains et non un : les deux fichiers ne sortaient pas au meme niveau (-4,9 et -3,6),
+      et un son RECU plus fort que celui qu'on declenche soi-meme s'entend comme une alerte.
+    ⚠️ Echelle LINEAIRE en amplitude : 0,39 n'est pas « 39 % du volume » mais environ -8 dB,
+    soit a peu pres deux fois moins fort a l'oreille.
+    ⚠️ Le gain est repose A CHAQUE lecture : le lecteur est reutilise, et rien ne garantit que
+    le systeme n'a pas touche a son volume entre-temps (appel entrant, duck audio).
+    ⚠️ Les 400 ms de silence final sont sans consequence : l'element audio est simplement
+    occupe plus longtemps, et un second envoi le repositionne a zero.
+
+  CE QUI AVAIT ETE FABRIQUE AVANT, garde ici comme repli documente :
+  ⚠️ PREMIERE VERSION : des notes (« ping »). Berke a aime le principe mais demande des WOOSH —
+  refaits le 20/09, et c'est un tout autre materiau : du BRUIT passe dans un filtre passe-bande
+  dont la frequence centrale GLISSE. C'est ce glissement qui fait entendre un deplacement d'air
+  plutot qu'un sifflement ; une note, elle, n'a qu'une hauteur fixe.
+  Filtre a variables d'etat (Chamberlin), coefficients recalcules a chaque echantillon, donc la
+  bande bouge en continu. Glissement EXPONENTIEL : l'oreille entend les hauteurs en rapport,
+  pas en ecart. Enveloppe en gonflement (30 %) puis extinction, bords exactement a zero.
+    envoi    : 190 ms, 450 -> 3000 Hz (montant : quelque chose qui part)
+    reception: 256 ms, 3000 -> 405 Hz (descendant : quelque chose qui arrive)
+  Tous normalises a -14 dBFS de pic, pour que le choix se fasse sur le caractere et non sur le
+  volume. `random.seed(7)` : le meme woosh est refabriquable a l'identique.
+  ⚠️ TROIS VARIANTES fabriquees, gardees dans le scratchpad de la session :
+    a_court 140 ms 700->2800 (sec)  |  b_moyen 190 ms 450->3000 (INSTALLEE)  |
+    c_ample 270 ms 320->2100 (souffle, plus doux)
+  ⚠️ Rien n'est emprunte : pas de licence a justifier le jour de la mise en production.
+  ⚠️ MEMES FICHIERS des deux cotes (`assets/sounds/` et `public/sounds/`) : un son qui differe
+  d'un appareil a l'autre ne s'entend pas comme la meme application.
+
+  ⚠️ LE SON ACCOMPAGNE LE GESTE, jamais l'echo du serveur — a cote de l'haptique existante.
+  Le jouer a la confirmation le decrocherait du tap, et pour un media il n'arriverait qu'une
+  fois le televersement fini, plusieurs secondes plus tard.
+
+  ⚠️ RECEPTION : UN SEUL point d'appel de chaque cote, celui ou le serveur a deja tranche
+  (champ `alert` de `conversation_updated`). Il n'est joint que s'il y a matiere a prevenir :
+  jamais a l'emetteur, ni en sourdine, ni sur une demande de message, ni sur les medias
+  suivants d'un album. Le rejouer depuis l'ecran de conversation obligerait a refaire ce tri.
+  → joue AUSSI quand la conversation est deja ouverte (comme WhatsApp) : seul le BANDEAU n'a
+    pas lieu d'etre, le message s'affichant deja sous les yeux.
+  → mobile : l'application est forcement a l'ecran a ce moment (le socket ferme en
+    arriere-plan), donc aucun risque de doublon avec la notification systeme.
+
+  REGLAGE LOCAL a l'appareil, comme le theme : SecureStore sur mobile, `localStorage` sur le
+  web. Interrupteur dans Preferences (mobile) et dans « Vous » (web). `SettingRow` du profil
+  mobile accepte desormais un interrupteur, qui REMPLACE la valeur et le chevron — une ligne
+  qui porterait les deux annoncerait deux commandes pour un seul reglage.
+
+  ⚠️ A SURVEILLER, iOS : `enterPlaybackMode()` (appele apres tout vocal) pose
+  `playsInSilentMode: true` GLOBALEMENT. Tant qu'aucun vocal n'a ete lu ou enregistre, le son
+  d'interface respecte l'interrupteur silencieux du telephone ; apres, il sonnera meme en
+  silencieux. A reprendre si le client le remarque — il faudrait une session audio distincte
+  pour les sons d'interface.
+  ⚠️ Navigateurs : la lecture est REFUSEE tant que la page n'a recu aucune interaction. Le
+  tout premier message recu sur un onglet qu'on n'a pas touche sera donc muet. La promesse est
+  avalee, rien ne casse.
+  ⚠️ Onglet cache : on ne touche PAS au drapeau `silent` de la notification du navigateur. Si
+  un jour le son se dedouble sur un systeme qui sonne deja, c'est une ligne a changer.
+
+  PAS VERIFIE : LE SON LUI-MEME. Je ne peux pas l'ecouter — la mesure dit qu'il est propre et
+  discret, elle ne dit pas s'il est agreable. C'est a Berke de trancher, et les parametres
+  ci-dessus permettent de le refabriquer autrement (plus grave, plus court, moins fort).
+  Verifie en revanche : l'interrupteur apparait et bascule (capture du simulateur), Metro sert
+  bien le .wav, le serveur web sert les deux fichiers (200, bonnes tailles), tsc/lint/build.
+
+[FAIT 21/09 - demande client, ⚠️ REBUILD NATIF REQUIS] LE SON DE L'APP SUR LES NOTIFICATIONS
+PUSH.
+  « je veux que le son receive se joue lorsqu'on recoit une notification push aussi ».
+
+  ⚠️ CE N'EST PAS LE MEME MECANISME que le son joue dans l'app, et c'est tout l'enjeu : quand
+  la notification arrive, l'APPLICATION NE TOURNE PAS. C'est le systeme qui joue, et il ne sait
+  lire qu'un fichier DEJA PRESENT sur l'appareil. Le serveur n'en transmet donc que le NOM ; le
+  fichier, lui, doit etre embarque a la compilation.
+
+  TROIS PIECES, aucune ne suffit seule :
+    1. `app.json` → plugin `expo-notifications`, cle `sounds: ["./assets/sounds/notification.wav"]`.
+       Le plugin copie le fichier dans le bundle iOS (ressource du projet Xcode) et dans
+       `android/app/src/main/res/raw`. VERIFIE en lisant le plugin, pas suppose.
+    2. `lib/notifications.ts` → canal Android `messages` portant `sound: "notification"`.
+    3. `src/lib/push.ts` (backend) → `sound: 'notification.wav'` et `channelId: 'messages'`.
+
+  ⚠️ NOUVEAU CANAL ANDROID, et pas une modification de l'ancien : Android REFUSE de changer le
+  son d'un canal deja cree — le reglage appartient a l'utilisateur une fois le canal pose, et
+  `setNotificationChannelAsync` sur un identifiant existant ignore le nouveau son SANS RIEN
+  DIRE. Les appareils ayant deja installe l'app seraient restes sur le son systeme. L'ancien
+  canal `default` est supprime, sinon deux entrees cohabiteraient dans les reglages Android.
+  ⚠️ Verifie avant de le supprimer : plus AUCUNE notification locale ne s'en sert, elles ont
+  ete remplacees par des bandeaux le 11/09.
+
+  ⚠️ LE NOM S'ECRIT DIFFEREMMENT DES DEUX COTES : iOS cherche un FICHIER (`notification.wav`),
+  Android une RESSOURCE (`notification`, sans extension). Les deux formes sont correctes, ce
+  n'est pas une incoherence.
+
+  ⚠️ FORMAT : iOS n'accepte pour un son de notification que du PCM lineaire (ou MA4 / µ-law /
+  a-law) en .wav/.aiff/.caf, et REFUSE le MP3. Le fichier fourni par Berke est donc converti :
+  `notification.wav`, PCM 16 bits, 44,1 kHz, mono, 600 ms.
+  ⚠️ LE GAIN EST CUIT DANS LE FICHIER (0,34, pic a -13 dBFS), contrairement a la lecture dans
+  l'app ou il est applique a la volee : le systeme joue le fichier tel quel, on n'a aucune prise
+  dessus au moment ou il sonne. Sans cela, les notifications auraient sonne au niveau d'origine
+  — celui que Berke a justement trouve trop fort.
+
+  PAS DE DOUBLON POSSIBLE avec le son joue dans l'app : le serveur ne pousse qu'a qui n'a
+  AUCUNE app mobile ouverte, et `playReceived()` ne part que du socket, qui n'existe qu'au
+  premier plan. Les deux chemins s'excluent par construction.
+
+  ⚠️ A TESTER SUR APPAREIL REEL, ET APRES REBUILD. Le push ne fonctionne pas sur simulateur, et
+  le fichier n'entre dans l'app qu'a la compilation :
+      npx expo prebuild -p ios --clean   (⚠️ `--clean` obligatoire, cf. @bacons/apple-targets)
+      puis build EAS ou `npx expo run:ios --device`
+  Tant que le rebuild n'est pas fait, le son envoye n'existe pas sur l'appareil et iOS retombe
+  silencieusement sur le son systeme — rien ne casse, mais rien ne change non plus.
