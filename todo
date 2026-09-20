@@ -2315,3 +2315,101 @@ WhatsApp (web).
   ⚠️ Les listes de `FriendsPanel` et du Repertoire sont VIDES sur le simulateur de dev : leur
   retrait n'a donc pas pu etre constate a l'oeil, seulement le fait que les ecrans se rendent.
   Le cas signale, lui, a bien ete verifie a l'ecran.
+
+[FAIT 20/09 - RETOUR CLIENT] CONFIDENTIALITE : « MES AMIS, SAUF… » (mobile + web + serveur).
+  Demande : « j'ai besoin que l'utilisateur puisse definir les gens qu'il souhaite pas voir sa
+  photo, sa bio ou autre, un peu comme le principe de WA ». Le reste de sa remarque (tout le
+  monde / mes amis / personne) existait deja — c'est l'EXCEPTION qui manquait.
+
+  MODELE FACON WHATSAPP : une quatrieme valeur `friends_except` sur les 5 champs de
+  VISIBILITE (photo, bio, vu a, ville, numero), avec une liste d'exclus PAR REGLAGE.
+  ⚠️ PAS sur les 3 champs de CONTACT (messages, appels, demandes d'ami) : y ecarter quelqu'un
+  ne serait plus de la visibilite mais du blocage, qui existe deja et fait mieux. WhatsApp ne
+  le propose pas davantage. Le serveur REFUSE la valeur sur ces champs (verifie).
+
+  MIGRATION `privacy_exceptions` — modele `PrivacyException { userId, field, excludedId }`.
+  ⚠️ Une LIGNE par (proprietaire, reglage, exclu) et non une liste en colonne Json : la
+  question posee en lecture est « de quels reglages ce visiteur est-il exclu ? », et elle se
+  repond alors par UNE requete indexee au lieu de deserialiser cinq listes. Index sur
+  (excludedId, userId) et non l'inverse : c'est le sens dans lequel on interroge, a CHAQUE
+  consultation de profil. Cascade des deux cotes.
+
+  ⚠️ `canSee(rule, viewer, target, field)` — le champ est devenu OBLIGATOIRE, et ce n'est pas
+  une commodite : sans lui, `friends_except` ne se tranche qu'en devinant, et les DEUX reponses
+  possibles sont mauvaises — montrer a tous les amis trahit l'exclusion aupres de la personne
+  meme qu'on voulait ecarter, masquer a tous revient a appliquer « personne ». Le compilateur a
+  immediatement designe le seul appelant qui l'ignorait (la presence, dans `lib/socket`).
+  → `excludedFieldsFor(owner, viewer)` charge les cinq reglages d'un coup pour l'affichage d'un
+    profil : une requete au lieu de cinq, et le filtre `gate` reste SYNCHRONE.
+
+  ⚠️ VALEUR ET LISTE PARTENT ENSEMBLE, dans le meme appel et une TRANSACTION serveur. Un
+  « sauf » enregistre sans sa liste se comporterait comme « mes amis » — donc montrerait a
+  quelqu'un qu'on venait d'ecarter. C'est aussi pourquoi l'ecran n'ecrit RIEN au moment ou l'on
+  choisit l'option : il ouvre le selecteur, et n'enregistre qu'a la validation.
+  ⚠️ Remplacement INTEGRAL de la liste (une liste vide la vide) : l'ecran envoie ce qu'il
+  affiche, et un simple ajout ne permettrait jamais de retirer quelqu'un.
+  ⚠️ Les ids sont FILTRES sur les amis reels. Ils viennent du client : exclure un inconnu ne
+  changerait rien a ce qu'il voit (la regle exige deja l'amitie), mais la base se remplirait de
+  lignes dictees par l'exterieur et le compteur affiche mentirait.
+
+  VERIFIE DE BOUT EN BOUT, deux vrais comptes et un temoin (OTP lu dans Redis) :
+    - exclusion PAR REGLAGE : C perd la photo de A, garde sa bio et son numero ✅
+    - le temoin D, ami non exclu, voit tout ✅
+    - `friends_except` refuse sur `privacyMessages` ✅
+    - vider la liste rend la visibilite ✅
+    - un NON-AMI passe dans la liste est silencieusement ecarte ✅ (premier essai fait avec
+      UserF, qui se trouvait etre ami de A : c'est l'hypothese de test qui etait fausse, pas le
+      filtre — refait avec un vrai non-ami)
+    - compte de test remis dans son etat d'origine apres coup.
+
+  CLIENTS : `app/privacy.tsx` (feuille de selection, cases a cocher, compte affiche sur la
+  ligne) et `components/PrivacyPanel.tsx` cote web (meme chose en fenetre modale). i18n dans les
+  3 langues des DEUX cotes — ⚠️ le web VOUVOIE, le mobile TUTOIE, les libelles different.
+  ⚠️ Le selecteur d'amis du mobile est une feuille a HAUTEUR FIXE : une feuille qui epouse son
+  contenu changerait de taille au chargement de la liste.
+  ⚠️ Cote web la fenetre est en `fixed inset-0` et non `absolute` : le panneau de
+  confidentialite est lui-meme absolu sur la colonne de gauche, une fenetre absolue y serait
+  enfermee dans 380 px.
+
+  PAS VERIFIE : le PARCOURS a l'ecran (ouvrir la feuille, cocher, valider) — pas de pilotage
+  tactile du simulateur, et le panneau web n'a pas ete ouvert dans un navigateur. Les deux
+  ecrans se rendent, tsc/lint/build passent, et la chaine serveur est prouvee.
+
+[FAIT 20/09 - dans la foulee] `privacyPhoto` N'ETAIT APPLIQUE NULLE PART, sauf sur la fiche
+profil.
+  Signale par Berke en testant « mes amis, sauf… » : l'exclu voyait quand meme la photo dans la
+  LISTE des conversations et dans l'EN-TETE du fil, alors qu'elle disparaissait bien en ouvrant
+  les details. Diagnostic fait par MESURE (quatre endpoints interroges avec deux vrais comptes),
+  pas par lecture :
+
+      GET /users/:id/profile ............. masquee  ✅ (seul endroit cable)
+      GET /conversations ................. SERVIE   ❌
+      GET /conversations/:id ............. SERVIE   ❌
+      GET /conversations/:id/messages .... SERVIE   ❌ (voir plus bas)
+      GET /friends ....................... SERVIE   ❌
+
+  ⚠️ LE TROU EST D'ORIGINE, il ne vient pas des exceptions : meme « Personne » fuyait dans la
+  liste. La nouveaute n'a fait que le rendre visible — c'est le premier reglage de photo que
+  quelqu'un ait reellement essaye.
+
+  → `makePhotoGate(viewerId, ownerIds)` (`social/relation.service`) : TROIS requetes au total
+    quel que soit le nombre de personnes, et un predicat SYNCHRONE en retour. Appeler `canSee`
+    par personne aurait mis deux requetes PAR LIGNE sur la liste des conversations, qui est
+    l'ecran le plus sollicite et fait deja un COUNT par conversation.
+  → applique a `getUserConversations`, `getConversationDetails` et `getFriends`.
+  ⚠️ Defaut OUVERT si le profil est absent : une donnee manquante ne doit pas se lire comme un
+    reglage.
+
+  VERIFIE, exclusion active : les QUATRE chemins masquent ✅ ; un ami NON exclu (UserC) voit
+  toujours la photo partout ✅ ; en repassant le reglage a « tout le monde », elle revient
+  partout ✅. Reglage de test remis comme Berke l'avait laisse.
+
+  [A FAIRE - reste ouvert, PAS corrige aujourd'hui] La photo de l'expediteur voyage encore dans
+  `MESSAGE_SELECT` (donc dans l'historique ET dans l'event socket `new_message`).
+  ⚠️ AUCUN CLIENT NE L'AFFICHE — verifie dans les deux depots, les bulles n'utilisent que
+  `sender.name`. La fuite est donc dans la charge utile, pas a l'ecran.
+  ⚠️ Deux raisons de ne pas l'avoir retiree a la volee : (1) le SERVEUR s'en sert pour l'image
+  des notifications push (`lib/socket.ts`), (2) `new_message` part dans une room avec UNE seule
+  charge pour tout le monde — masquer par destinataire demanderait d'emettre socket par socket.
+  A trancher : soit on retire le champ du select et l'on recompose l'image du push a part, soit
+  on assume. Meme question pour l'image du push elle-meme, qui ignore aussi `privacyPhoto`.
