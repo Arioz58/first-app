@@ -1,6 +1,7 @@
 import { io, Socket } from "socket.io-client";
 import { refreshAccessToken } from "./api";
 import { BASE_URL } from "./config";
+import { setConnectionOffline } from "./connection";
 import { getAccessToken } from "./storage";
 
 /**
@@ -40,8 +41,21 @@ export const connectSocket = async (): Promise<Socket> => {
     reconnection: true,
   });
 
-  socket.on("connect", () => console.log("[Socket] Connecté"));
-  socket.on("disconnect", () => console.log("[Socket] Déconnecté"));
+  socket.on("connect", () => {
+    console.log("[Socket] Connecté");
+    setConnectionOffline(false);
+  });
+
+  /**
+   * ⚠️ `io client disconnect` est NOTRE `pauseSocket()` au passage en arrière-plan : une
+   * coupure volontaire n'est pas un incident, et l'annoncer collerait un bandeau d'erreur sur
+   * une application qu'on vient à peine de rouvrir. Les autres raisons (`transport close`,
+   * `ping timeout`, `transport error`) sont subies, donc réelles.
+   */
+  socket.on("disconnect", (reason) => {
+    console.log("[Socket] Déconnecté :", reason);
+    if (reason !== "io client disconnect") setConnectionOffline(true);
+  });
 
   /**
    * Handshake refusé : on renouvelle le jeton et on RELANCE la connexion.
@@ -59,13 +73,51 @@ export const connectSocket = async (): Promise<Socket> => {
    * aussi ce qui empêche la boucle, le second passage trouvant un jeton frais.
    */
   socket.on("connect_error", async (err) => {
+    /**
+     * ⚠️ Le jeton AVEC LEQUEL la tentative est partie, et non seulement celui en mémoire.
+     *
+     * Une requête HTTP a pu renouveler le jeton PENDANT que le handshake était en cours :
+     * au lancement, `connectSocket` et le premier `GET /conversations` partent ensemble, et
+     * c'est presque toujours ce qui arrive quand le jeton stocké est déjà expiré. On se
+     * retrouvait alors avec un refus (tentative partie avec l'ancien) et un jeton en mémoire
+     * parfaitement frais — que le test ci-dessous prenait pour « valide et pourtant refusé »,
+     * donc pour une panne. Le socket restait mort et le bandeau s'affichait, alors qu'il
+     * suffisait de retenter avec le jeton neuf (mesuré le 16/09).
+     */
+    const used = (socket?.auth as { token?: string } | undefined)?.token;
     const current = await getAccessToken();
     if (current && !isTokenExpired(current)) {
+      if (socket && current !== used) {
+        // Renouvelé par quelqu'un d'autre pendant la tentative : ce n'est pas une panne.
+        console.log("[Socket] Jeton renouvelé entre-temps, nouvelle tentative");
+        socket.auth = { token: current, platform: "mobile" };
+        socket.connect();
+        return;
+      }
       console.warn("[Socket] Connexion refusée :", err.message);
+      /**
+       * Même jeton, valide, et pourtant refusé : il n'y a rien à renouveler, le serveur est
+       * hors d'atteinte. C'est une vraie coupure, et elle doit se voir.
+       *
+       * ⚠️ Pas de boucle possible : la tentative ci-dessus repart avec `current`, donc au
+       * passage suivant `used === current` et l'on tombe forcément ici.
+       */
+      setConnectionOffline(true);
       return;
     }
     const fresh = await refreshAccessToken();
-    if (!fresh || !socket) return;
+    if (!fresh || !socket) {
+      /**
+       * ⚠️ C'est ICI que la coupure devient réelle, et nulle part avant : le refus du
+       * handshake sur jeton expiré est attendu, seul l'échec du renouvellement prouve qu'on
+       * ne peut plus joindre le serveur. Déclarer la coupure dès le refus donnait le faux
+       * positif du 15/09 ; ne jamais la déclarer donnerait pire — un réseau coupé pendant
+       * l'arrière-plan resterait silencieux, puisque le jeton serait expiré à chaque
+       * nouvelle tentative et qu'aucune ne parlerait jamais.
+       */
+      setConnectionOffline(true);
+      return;
+    }
     console.log("[Socket] Jeton renouvelé, reconnexion");
     socket.auth = { token: fresh, platform: "mobile" };
     socket.connect();
@@ -136,7 +188,23 @@ export const resumeSocket = async () => {
     // rafraîchi par `api.ts`, sinon le serveur rejette la connexion à l'authentification.
     // ⚠️ RÉÉCRIRE `auth` en entier : n'y remettre que le jeton effacerait `platform`, et
     // le serveur retomberait sur son défaut à chaque retour au premier plan.
-    socket.auth = { token: await getAccessToken(), platform: "mobile" };
+    let token = await getAccessToken();
+    /**
+     * ⚠️ RENOUVELER AVANT DE TENTER, plutôt qu'après le refus.
+     *
+     * Relire le jeton ne suffit pas : `api.ts` ne l'a PAS rafraîchi pendant l'absence,
+     * puisque aucune requête n'est partie. Passé quinze minutes en arrière-plan, celui qu'on
+     * relit est donc expiré, et on ouvrait une connexion qu'on savait vouée au refus pour la
+     * rattraper juste après. D'où un `connect_error` à chaque retour sur l'application — le
+     * bandeau rouge signalé par le client le 15/09 — et une dizaine de secondes de temps réel
+     * perdu pendant l'aller-retour.
+     *
+     * ⚠️ Un renouvellement qui échoue ne bloque pas la tentative : on repart avec le jeton
+     * dont on dispose, et c'est `connect_error` qui constatera alors la coupure. Ne rien
+     * tenter laisserait le socket fermé sans que personne ne le dise.
+     */
+    if (!token || isTokenExpired(token)) token = (await refreshAccessToken()) ?? token;
+    socket.auth = { token, platform: "mobile" };
   } catch {
     // Lecture impossible : on tente avec le jeton précédent plutôt que de rester muet.
   }

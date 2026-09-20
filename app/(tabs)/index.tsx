@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRequest, clearConversation } from '../../lib/api';
 import { CACHE_CONVERSATIONS, readCache, writeCache } from '../../lib/cache';
+import { useConnectionOffline } from '../../lib/connection';
 import { requestScrollToMessage } from '../../lib/chatNav';
 import { ROUND } from '../../lib/radius';
 import { getSocket } from '../../lib/socket';
@@ -299,6 +300,23 @@ export default function ConversationsScreen() {
   }, []);
 
   /**
+   * Coupure constatée par le SOCKET (`lib/connection`), par opposition à un échec de requête.
+   *
+   * ⚠️ On lit un verdict, on ne l'établit pas : `lib/socket` a déjà écarté les refus de
+   * handshake qui ne font qu'annoncer un renouvellement de jeton — le cas ordinaire au retour
+   * d'arrière-plan, et la cause du faux bandeau rouge du 15/09.
+   *
+   * ⚠️ Le retour à `false` ne fait rien ici : c'est `onReconnect` qui recharge, et le succès
+   * du chargement qui bascule le bandeau au vert puis l'efface. Effacer le bandeau dès la
+   * reconnexion le ferait disparaître avant que la liste soit à jour, donc annoncer une
+   * fraîcheur qui n'existe pas encore.
+   */
+  const socketOffline = useConnectionOffline();
+  useEffect(() => {
+    if (socketOffline) showOffline();
+  }, [socketOffline, showOffline]);
+
+  /**
    * ⚠️ Mémoïsée : elle est utilisée par deux effets, qui la réclament en dépendance. Sa seule
    * dépendance est `showOffline`, elle-même stable — l'ajouter ne rejoue donc aucun effet.
    * (Jusqu'au 13/09, une ref `fetchRef` tenait ce rôle ; elle n'existait que pour le réessai
@@ -495,15 +513,6 @@ export default function ConversationsScreen() {
      * « parfois » tenait à ce qu'il fallait avoir ouvert puis quitté une conversation.
      */
     /**
-     * Nature de la dernière déconnexion, pour décider quoi faire à la reconnexion.
-     *
-     * ⚠️ `connect` ne dit PAS d'où l'on revient : le retour d'arrière-plan et le retour du
-     * réseau produisent le même événement, alors qu'ils demandent l'inverse l'un de l'autre.
-     * Seule la raison de la coupure les sépare.
-     */
-    let pausedByUs = false;
-
-    /**
      * RECONNEXION — on recharge, quelle qu'ait été la cause de la coupure.
      *
      * ⚠️ Ce n'est PAS du polling, et la distinction est tout l'objet de la décision du
@@ -528,67 +537,29 @@ export default function ConversationsScreen() {
      *   l'utilisateur.
      */
     const onReconnect = () => {
-      pausedByUs = false;
       fetchConversations();
     };
     socket.on('connect', onReconnect);
 
     /**
-     * PERTE DE CONNEXION → bandeau, immédiatement.
+     * ⚠️ PLUS D'ÉCOUTE DIRECTE de `disconnect` / `connect_error` ici.
      *
-     * ⚠️ C'est le SEUL moyen d'avertir sans réessai automatique : tant qu'aucune requête ne
-     * part, aucune ne peut échouer — couper le Wi-Fi ne produisait donc rien, et le bandeau
-     * n'arrivait qu'au geste suivant (retour sur l'onglet, tirer pour rafraîchir). Le socket,
-     * lui, s'en aperçoit tout de suite : on se sert de son état plutôt que d'interroger le
-     * serveur pour découvrir qu'il est injoignable.
+     * Cet écran en tirait lui-même ses conclusions, et se trompait : un `connect_error` sur
+     * jeton expiré — le cas ORDINAIRE au retour d'arrière-plan, le jeton d'accès ne vivant que
+     * quinze minutes — était compté comme une coupure, alors que `lib/socket` le renouvelle et
+     * se reconnecte dans la foulée. D'où le bandeau rouge que le client voyait à chaque retour
+     * sur l'application, disparaissant seul une dizaine de secondes plus tard (15/09).
      *
-     * ⚠️ `io client disconnect` est IGNORÉ : c'est NOTRE propre `pauseSocket()` au passage en
-     * arrière-plan. Sans ce test, revenir sur l'app afficherait un bandeau d'erreur alors que
-     * tout va bien. Les autres raisons (`transport close`, `ping timeout`, `transport error`)
-     * sont des coupures subies.
-     *
-     * → Le bandeau se lève tout seul au retour : `onReconnect` recharge, et un chargement
-     *   réussi le fait passer au vert, puis disparaître.
+     * La distinction demande de savoir si un renouvellement a été tenté et s'il a abouti :
+     * seul `lib/socket` le sait. Il publie désormais son verdict dans `lib/connection`, que
+     * l'effet ci-dessous se contente de lire. Les échecs de requête HTTP, eux, restent traités
+     * ici — c'est cet écran qui les provoque, et lui seul sait ce qu'il demandait.
      */
-    const onDisconnect = (reason: string) => {
-      if (reason === 'io client disconnect') {
-        pausedByUs = true;
-        return;
-      }
-      pausedByUs = false;
-      showOffline();
-    };
-    socket.on('disconnect', onDisconnect);
-
-    /**
-     * ÉCHEC DE RECONNEXION au retour d'arrière-plan.
-     *
-     * ⚠️ Le trou que ni `connect` ni `disconnect` ne couvrent : si le réseau tombe PENDANT
-     * que l'application est en arrière-plan, notre propre coupure a déjà eu lieu (sans
-     * bandeau, à juste titre) et la reconnexion échoue — il n'y a donc aucune déconnexion à
-     * signaler, et jamais de connexion. La liste restait périmée sans le dire.
-     *
-     * ⚠️ Conditionné à `pausedByUs` : un échec à la connexion INITIALE ne veut rien dire ici
-     * (la liste vient d'être chargée en HTTP par `useFocusEffect`, elle est fraîche), et le
-     * socket retente de lui-même après avoir renouvelé son jeton. Sans ce test, un simple
-     * jeton expiré au lancement aurait collé un bandeau d'erreur sur une liste à jour.
-     *
-     * → La pause est CONSOMMÉE au passage : dès qu'un bandeau s'affiche, plus aucune requête
-     *   ne part sans geste de l'utilisateur. C'est la règle, et elle n'a pas d'exception.
-     */
-    const onConnectError = () => {
-      if (!pausedByUs) return;
-      pausedByUs = false;
-      showOffline();
-    };
-    socket.on('connect_error', onConnectError);
 
     return () => {
       socket.off('conversation_updated', onConversationUpdated);
       socket.off('added_to_group');
       socket.off('connect', onReconnect);
-      socket.off('disconnect', onDisconnect);
-      socket.off('connect_error', onConnectError);
     };
     // ⚠️ `fetchConversations` et `showOffline` sont STABLES (mémoïsées sans dépendance
     // changeante) : les déclarer ici ne rebranche donc pas les écouteurs à chaque rendu.
