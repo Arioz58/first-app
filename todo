@@ -2278,3 +2278,40 @@ WhatsApp (web).
   ⚠️ Un `<img>` nu declenche `@next/next/no-img-element`, que `motion.img` masquait. Le projet
     etait a ZERO avertissement : les trois balises portent donc le meme
     `eslint-disable-next-line` que celles deja en place (apercu de lien, miniatures).
+
+[FAIT 20/09 - RETOUR CLIENT] BOUTON « SE DECONNECTER » INVISIBLE (Profil mobile).
+  « quand tu vas dans vous sur mobile le bouton se deconnecter on arrive pas a le voir il reste
+  en bas ». Le ScrollView du Profil se terminait sur `paddingBottom: 40` : la DERNIERE ligne
+  passait sous la tab bar, et rien ne permettait d'aller la chercher — la page etait deja au
+  bout de son defilement.
+
+  ⚠️ CAUSE : la tab bar native FLOTTE au-dessus du contenu et `SafeAreaView` ne la connait pas
+  (ses `edges` excluent volontairement le bas). Aucun hook de hauteur n'est expose par
+  `expo-router/unstable-native-tabs` — d'ou une constante.
+  MESURE au simulateur (iPhone 17 Pro, iOS 26) : la pilule flottante a son sommet a ~81 pt du
+  bas de l'ecran. `TAB_BAR_CLEARANCE = 96` (`lib/layout.ts`) laisse donc une quinzaine de
+  points entre elle et le contenu — c'est la valeur que `FAB_BOTTOM` portait deja dans l'onglet
+  Discussion pour degager cette meme barre.
+
+  ⚠️ LE DEFAUT ETAIT SYSTEMIQUE, pas propre au Profil : CINQ endroits, dont deux decouverts en
+  corrigeant les trois autres. Le Profil etait seulement le seul ou ca se VOYAIT, parce que
+  l'element cache y est un bouton unique et definitif plutot que la enieme ligne d'une liste.
+    - `app/(tabs)/profile.tsx` ....... 40 → clearance   (le cas signale)
+    - `app/(tabs)/updates.tsx` ....... 32 → clearance
+    - `components/DirectoryPanel.tsx`  24 → clearance
+    - `components/FriendsPanel.tsx` .. AUCUN retrait, sur ses TROIS listes
+    - `app/(tabs)/index.tsx` ......... AUCUN retrait sur la liste des conversations ; et son
+      `FAB_BOTTOM` disparait au profit de la constante partagee, meme barre a degager.
+  ⚠️ Une valeur ecrite dans cinq fichiers finit par diverger : d'ou `lib/layout.ts`, cree pour
+  elle. Genereuse plutot que juste — en reserver trop n'ajoute qu'un peu de vide en fin de
+  liste, en reserver trop peu rend un element inatteignable.
+
+  VERIFIE A L'ECRAN, et pas seulement en calcul : `xcrun simctl openurl booted "nexa:///profile"`
+  amene l'app sur l'onglet, `xcrun simctl io booted screenshot` en rend compte. Le lien profond
+  remplace le pilotage tactile qu'on n'a pas — a reutiliser pour tout defaut d'affichage mobile.
+  ⚠️ iOS pose une confirmation systeme « Ouvrir dans Nexa ? » par-dessus ; la navigation a deja
+  eu lieu, mais la boite reste a fermer a la main.
+
+  ⚠️ Les listes de `FriendsPanel` et du Repertoire sont VIDES sur le simulateur de dev : leur
+  retrait n'a donc pas pu etre constate a l'oeil, seulement le fait que les ecrans se rendent.
+  Le cas signale, lui, a bien ete verifie a l'ecran.
