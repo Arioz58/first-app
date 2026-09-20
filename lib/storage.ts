@@ -24,6 +24,16 @@ export const saveTokens = async (accessToken: string, refreshToken: string, user
   await SecureStore.setItemAsync(USER_ID_KEY, userId);
 };
 
+/**
+ * Écrit le SEUL jeton d'accès, sans toucher au reste de la session.
+ *
+ * ⚠️ Indispensable au renouvellement : `POST /auth/refresh` ne renvoie QUE `accessToken`.
+ * Passer par `saveTokens` y écrivait donc `undefined` par-dessus le jeton de rafraîchissement
+ * — voir le commentaire dans `api.ts`.
+ */
+export const saveAccessToken = (accessToken: string) =>
+  SecureStore.setItemAsync(ACCESS_KEY, accessToken);
+
 export const getAccessToken = () => SecureStore.getItemAsync(ACCESS_KEY);
 export const getRefreshToken = () => SecureStore.getItemAsync(REFRESH_KEY);
 export const getUserId = () => SecureStore.getItemAsync(USER_ID_KEY);

@@ -4,6 +4,7 @@ import {
   getAccessToken,
   getRefreshToken,
   getUserId,
+  saveAccessToken,
   saveTokens,
 } from "./storage";
 
@@ -88,7 +89,28 @@ const refreshSession = async (): Promise<RefreshResult> => {
         return { status: res.status >= 500 ? "unreachable" : "refused" } as const;
       }
       const data = await res.json();
-      await saveTokens(data.accessToken, data.refreshToken, (await getUserId()) ?? "");
+      /**
+       * ⚠️ N'ÉCRIRE LE JETON DE RAFRAÎCHISSEMENT QUE SI LE SERVEUR EN RENVOIE UN.
+       *
+       * `POST /auth/refresh` ne renvoie QUE `accessToken` (il n'y a pas de rotation).
+       * `data.refreshToken` valait donc TOUJOURS `undefined`, et l'appel à `saveTokens` le
+       * poussait tel quel dans le trousseau — `SecureStore.setItemAsync` refuse une valeur
+       * qui n'est pas une chaîne, l'exception partait dans le `catch` ci-dessous, et le
+       * renouvellement était rapporté comme `unreachable` ALORS QUE LE SERVEUR AVAIT RÉPONDU.
+       *
+       * Conséquences mesurées le 15/09 : plus AUCUN renouvellement n'aboutissait sur mobile.
+       * Le socket ne se reconnectait donc jamais après un passage en arrière-plan — d'où le
+       * bandeau « Mise à jour impossible » signalé par le client et le temps réel muet — et
+       * la session finissait effacée.
+       *
+       * ⚠️ Le client web faisait DÉJÀ ce test (`src/lib/api.ts`) : seul le mobile était
+       * touché. Ne pas « harmoniser » les deux en supprimant la condition.
+       */
+      if (data.refreshToken) {
+        await saveTokens(data.accessToken, data.refreshToken, (await getUserId()) ?? "");
+      } else {
+        await saveAccessToken(data.accessToken);
+      }
       return { status: "ok" as const, token: data.accessToken as string };
     } catch {
       // La requête n'a pas abouti : on ne sait RIEN de la validité de la session.
