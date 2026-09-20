@@ -2206,3 +2206,75 @@ LE TEMPS REEL QUI MOURAIT DERRIERE.
       `ForwardDialog` gardent `text-lg font-semibold`. Ce ne sont pas des destinations mais des
       panneaux qui RECOUVRENT la colonne — la barre elle-meme separe deja le profil des trois
       autres par un filet, pour cette raison exacte.
+
+[FAIT 20/09 - RETOUR CLIENT, point 2] PHOTOS « ENCORE TROP ETROITES » : recadrage facon
+WhatsApp (web).
+  Demande, mot pour mot : « la bulle qui contient l'image est plus large mais plus petite, et
+  l'image a l'interieur un peu plus zoomee ».
+
+  ⚠️ LE MOBILE N'ETAIT PAS CONCERNE, verifie avant de toucher quoi que ce soit : `MessageMedia`
+  y pose deja un carre de 244 avec `contentFit="cover"`. Il recadre depuis toujours — l'ecart
+  etait propre au WEB, qui seul conservait le format d'origine. Un « correctif » mobile aurait
+  ete du bruit.
+
+  ⚠️ CE CHANGEMENT REVIENT SUR UNE DECISION DU 13/09, et c'est le client qui tranche. J'avais
+  retenu `object-contain` : garder les proportions plutot que couper un sujet sans prevenir. Le
+  format conserve est precisement ce qui produisait les bandes etroites. Il a redemande apres
+  l'elargissement du cadre, ce qui ne laisse pas de doute sur l'intention.
+
+  ⚠️ LE DEFAUT N'ETAIT PAS `object-contain` MAIS LA LARGEUR `min(25rem,100%)`. Premiere
+  tentative livree le 20/09 : `object-cover` + un `min-width` porte par la meme expression.
+  Berke a teste : « elles sont encore etroites » — et c'etait PIRE qu'avant. MESURE ensuite
+  dans Chrome sans tete, sur la structure REELLE (rangee flex → bulle → image), apres que deux
+  bancs d'essai simplifies eurent donne deux resultats contraires :
+
+      min(25rem,100%) + contain ......... 324 × 576   (l'etat d'avant)
+      min(25rem,100%) + cover + min-w ... 297 × 528   (la tentative : PLUS ETROIT)
+      25rem + max-w-full + cover ........ 400 × 528   ✅ retenu
+
+  La bulle est un ELEMENT FLEX : sa largeur vient de son contenu, donc un `100%` a l'interieur
+  se resout contre une largeur INDEFINIE et la largeur retombe a « auto ». CSS la recalcule
+  alors depuis la hauteur plafonnee (CSS 2.1 §10.4) — d'ou les 324 px. Le `min-width` ajoute
+  s'effondrait pour exactement la meme raison, d'ou les 297. Une largeur FIXE n'est jamais
+  recalculee.
+  ⚠️ LECON : un banc d'essai qui ne reproduit pas le CONTENEUR ne prouve rien. Le premier
+  (bulle en bloc dans une colonne large) donnait 400 et validait une correction fausse ; seule
+  la rangee flex reelle a montre le 297.
+
+  CHIFFRES : 400 × 528 (25rem × 33rem, rapport proche de 3:4) contre 324 × 576 avant, soit
+  +22 % de largeur et 8 % de hauteur en moins — plus large, plus courte, plus zoomee, les trois
+  mots du client. `max-w-full` garde l'ecran etroit : 374 px a 390 de fenetre, sans debordement.
+  Une photo PAYSAGE n'est pas touchee (16:9 mesure a 400 × 225, aucun rognage). Meme traitement
+  pour les VIDEOS, sans quoi deux regles differentes se verraient dans un fil qui melange les
+  deux.
+
+  ⚠️ Les autres `object-contain` du web sont VOLONTAIREMENT conserves : visionneuse plein
+  ecran, viewer et editeur de stories, apercu de la camera. On y veut la photo ENTIERE — c'est
+  la bulle, et elle seule, qui recadre.
+
+  VERIFIE : tsc, eslint, ET MESURE au navigateur (Chrome sans tete, captures lues). Pas de
+  playwright cote web, mais `--headless --screenshot` sur un banc d'essai suffit a mesurer une
+  geometrie — a refaire des qu'un doute porte sur des pixels plutot que sur du code.
+
+  [A DECIDER - repere au passage, PAS modifie] Les TUILES D'ALBUM sont le vrai reste du sujet :
+  `grid-cols-2` sans largeur maximale dans une bulle de 600 px, et des tuiles de 128 px de haut
+  → environ 298 × 128, un rapport de 2,3:1. Des photos y sont donc rognees en bandeau, bien
+  plus severement qu'une photo seule. Le client n'en a pas parle (sa remarque vise les photos
+  seules), et changer la hauteur des tuiles est un choix d'affichage, pas une correction : a
+  proposer plutot qu'a decider. C'etait deja le « [A VERIFIER a l'oeil] » laisse le 13/09.
+
+[FAIT 20/09 - demande client] OUVERTURE D'UNE PHOTO : plus de transformation (web).
+  La photo GRANDISSAIT depuis sa bulle jusqu'au plein ecran, puis revenait s'y ranger a la
+  fermeture (`layoutId` partage, framer-motion — le geste « dossier iOS »). Retire sur demande :
+  la photo s'affiche desormais d'emblee a sa place definitive.
+  → Retire aux TROIS endroits qui participaient au meme mouvement : image seule et tuiles
+    d'ALBUM dans la bulle, image de la visionneuse. En laisser un seul aurait fait s'ouvrir la
+    moitie des photos d'une facon et l'autre moitie d'une autre.
+  → CONSERVE : le fondu du fond noir (180 ms). Ce n'est pas un deplacement, et sans lui l'aplat
+    noir apparaitrait d'un coup. A retirer aussi si le client le demande.
+  ⚠️ CONSERVE AILLEURS, et volontairement : les STORIES s'ouvrent toujours depuis leur pastille
+    (`story-<id>`), et l'indicateur de la barre de navigation glisse d'une icone a l'autre. La
+    demande visait les photos du fil ; le procede lui-meme n'est pas en cause.
+  ⚠️ Un `<img>` nu declenche `@next/next/no-img-element`, que `motion.img` masquait. Le projet
+    etait a ZERO avertissement : les trois balises portent donc le meme
+    `eslint-disable-next-line` que celles deja en place (apercu de lien, miniatures).
