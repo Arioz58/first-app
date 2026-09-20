@@ -15,6 +15,7 @@ import {
 import { apiRequest } from '../lib/api';
 import { setPendingFriendRequests } from '../lib/friendRequests';
 import { UserAvatar } from './UserAvatar';
+import { TAB_BAR_CLEARANCE } from '../lib/layout';
 
 type Friend = { id: string; name: string; photoUrl: string | null };
 type RequestItem = {
@@ -167,7 +168,7 @@ export function FriendsPanel({
           data={filteredFriends}
           keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingTop: 8 }}
+          contentContainerStyle={{ paddingTop: 8, paddingBottom: TAB_BAR_CLEARANCE }}
           ListEmptyComponent={<Empty text={t('friends.no_friends')} />}
           renderItem={({ item }) => (
             <Row user={item} onPress={() => onOpenProfile(item.id)}>
@@ -191,7 +192,7 @@ export function FriendsPanel({
           data={received}
           keyExtractor={(item) => item.requestId}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingTop: 8 }}
+          contentContainerStyle={{ paddingTop: 8, paddingBottom: TAB_BAR_CLEARANCE }}
           ListEmptyComponent={<Empty text={t('friends.no_received')} />}
           renderItem={({ item }) => (
             <Row
@@ -222,7 +223,7 @@ export function FriendsPanel({
           data={sent}
           keyExtractor={(item) => item.requestId}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingTop: 8 }}
+          contentContainerStyle={{ paddingTop: 8, paddingBottom: TAB_BAR_CLEARANCE }}
           ListEmptyComponent={<Empty text={t('friends.no_sent')} />}
           renderItem={({ item }) => (
             <Row user={item.user} onPress={() => onOpenProfile(item.user.id)}>

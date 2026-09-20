@@ -10,6 +10,7 @@ import { CACHE_CONVERSATIONS, readCache, writeCache } from '../../lib/cache';
 import { useConnectionOffline } from '../../lib/connection';
 import { requestScrollToMessage } from '../../lib/chatNav';
 import { ROUND } from '../../lib/radius';
+import { TAB_BAR_CLEARANCE } from '../../lib/layout';
 import { getSocket } from '../../lib/socket';
 import {
   bumpUnread,
@@ -36,9 +37,7 @@ import { ConversationSwipe } from '../../components/ConversationSwipe';
 
 const NEXA = '#1E40AF';
 
-// La tab bar native flotte au-dessus du contenu et `SafeAreaView` ne la connaît
-// pas : on remonte le FAB de sa hauteur (~49pt) + une marge, sinon il passe dessous.
-const FAB_BOTTOM = 96;
+
 /**
  * Sourdine « toujours » — même sentinelle que dans le chat (`app/chat/[id].tsx`).
  *
@@ -1110,6 +1109,8 @@ export default function ConversationsScreen() {
       <FlatList
         data={visible}
         keyExtractor={(item) => item.id}
+        // ⚠️ Sans ce retrait, la dernière conversation se glisse sous la pilule flottante.
+        contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}
         ListHeaderComponent={
           <>
             {/* Les stories ont migré vers l'onglet Actus (updates.tsx). */}
@@ -1275,7 +1276,7 @@ export default function ConversationsScreen() {
       {/* FAB « + » — remplace l'ancienne icône « nouveau groupe » du header. */}
       <TouchableOpacity
         className="absolute right-5 w-14 h-14 rounded-full bg-nexa items-center justify-center"
-        style={[FAB_SHADOW, { bottom: FAB_BOTTOM }]}
+        style={[FAB_SHADOW, { bottom: TAB_BAR_CLEARANCE }]}
         activeOpacity={0.85}
         onPress={() => setFabOpen(true)}
       >

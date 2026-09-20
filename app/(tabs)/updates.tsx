@@ -18,6 +18,7 @@ import StoriesBar, { type StoriesBarHandle } from '../../components/StoriesBar';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
 import { setPendingFriendRequests } from '../../lib/friendRequests';
+import { TAB_BAR_CLEARANCE } from '../../lib/layout';
 
 const NEXA = '#1E40AF';
 
@@ -148,7 +149,7 @@ function ActivityTab({ onStoriesRefresh }: { onStoriesRefresh: () => void }) {
 
   return (
     <ScrollView
-      contentContainerStyle={{ paddingBottom: 32 }}
+      contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

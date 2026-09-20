@@ -20,6 +20,7 @@ import {
   requestAndSyncContacts,
 } from '../lib/contacts';
 import { UserAvatar } from './UserAvatar';
+import { TAB_BAR_CLEARANCE } from '../lib/layout';
 
 const NEXA = '#1E40AF';
 type Phase = 'intro' | 'loading' | 'ready' | 'denied' | 'error';
@@ -145,7 +146,7 @@ export function DirectoryPanel({ onOpenProfile }: { onOpenProfile: (id: string) 
         'id' in item ? (item as NexaContact).id : `o-${(item as OtherContact).phone}-${i}`
       }
       stickySectionHeadersEnabled={false}
-      contentContainerStyle={{ paddingBottom: 24 }}
+      contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); sync(true); }} tintColor={NEXA} />
       }

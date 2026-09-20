@@ -28,6 +28,7 @@ import QrCode from '../../components/QrCode';
 import { toUploadableImage } from '../../lib/upload';
 import { apiRequest } from '../../lib/api';
 import { ROUND } from '../../lib/radius';
+import { TAB_BAR_CLEARANCE } from '../../lib/layout';
 import { SUPPORTED_LANGUAGES, setAppLanguage } from '../../lib/i18n';
 import { clearTokens } from '../../lib/storage';
 import { unregisterPushToken } from '../../lib/notifications';
@@ -46,6 +47,7 @@ import { stopAllLiveShares } from '../../lib/liveLocation';
 import { getThemePref, setThemePref, useThemeColors, type ThemePref } from '../../lib/theme';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
+
 const CARD_SHADOW = {
   shadowColor: '#000',
   shadowOpacity: 0.05,
@@ -416,7 +418,16 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-zinc-950" edges={['top', 'left', 'right']}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+      {/*
+        ⚠️ LA TAB BAR NATIVE FLOTTE AU-DESSUS DU CONTENU, et `SafeAreaView` ne la connaît pas
+        (ses `edges` excluent volontairement le bas). Avec 40 de retrait, la DERNIÈRE ligne —
+        « Se déconnecter » — passait sous la pilule et rien ne permettait d'aller la chercher :
+        la page était déjà au bout de son défilement. Signalé par le client le 15/09.
+
+        ⚠️ `TAB_BAR_CLEARANCE` (`lib/layout`) porte la mesure et son explication : la dernière
+        ligne s'arrête une quinzaine de points au-dessus de la pilule.
+      */}
+      <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}>
         {/* En-tête bannière */}
         <View className="bg-white dark:bg-zinc-900 mx-4 mt-3 overflow-hidden" style={[CARD_SHADOW, ROUND.bubble]}>
           <LinearGradient
