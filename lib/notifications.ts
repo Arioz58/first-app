@@ -32,11 +32,25 @@ export const registerForPushNotifications = async (): Promise<
   }
 
   if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "default",
+    /**
+     * ⚠️ NOUVEAU CANAL, et pas une modification de l'ancien : Android REFUSE de changer le son
+     * d'un canal déjà créé. Le réglage appartient à l'utilisateur une fois le canal posé, et
+     * `setNotificationChannelAsync` sur un identifiant existant ignore silencieusement le
+     * nouveau son. Les appareils qui ont déjà installé l'app seraient donc restés sur le son
+     * système, sans que rien ne le signale.
+     *
+     * ⚠️ `sound` sans extension : Android nomme la ressource d'après le fichier déposé dans
+     * `res/raw` par le plugin `expo-notifications`, et une ressource ne porte pas son
+     * extension. Sur iOS, à l'inverse, le serveur envoie bien `notification.wav`.
+     */
+    await Notifications.setNotificationChannelAsync("messages", {
+      name: "Messages",
       importance: Notifications.AndroidImportance.MAX,
-      sound: "default",
+      sound: "notification",
     });
+    // L'ancien canal n'a plus d'emploi : le laisser afficherait deux entrées dans les
+    // réglages système, dont une qui ne sert plus à rien.
+    await Notifications.deleteNotificationChannelAsync("default").catch(() => {});
   }
 
   // Le token push REMOTE nécessite un vrai appareil (les notifs locales marchent quand même).

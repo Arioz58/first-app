@@ -88,7 +88,10 @@
         {
           "icon": "./assets/images/notification-icon.png",
           "color": "#1E40AF",
-          "defaultChannel": "default"
+          "defaultChannel": "messages",
+          "sounds": [
+            "./assets/sounds/notification.wav"
+          ]
         }
       ],
       [
