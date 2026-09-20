@@ -664,5 +664,8 @@
     "message": "Couldn't refresh",
     "retry": "Retry",
     "reconnected": "Back online"
+  },
+  "sounds": {
+    "label": "Message sounds"
   }
 }

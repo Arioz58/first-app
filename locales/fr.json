@@ -664,5 +664,8 @@
     "message": "Mise à jour impossible",
     "retry": "Réessayer",
     "reconnected": "Connexion rétablie"
+  },
+  "sounds": {
+    "label": "Sons des messages"
   }
 }

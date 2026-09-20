@@ -31,6 +31,7 @@ import {
 } from "../lib/storage";
 import { BOOT_KEYS, hydrateCache } from "../lib/cache";
 import { initTheme, useThemeColors } from "../lib/theme";
+import { initSounds, playReceived } from "../lib/sounds";
 import { initHeaderStyle } from "../lib/headerStyle";
 import { VoiceMiniPlayer } from "../components/VoiceMiniPlayer";
 import { ToastStack } from "../components/ToastStack";
@@ -102,6 +103,20 @@ type ConversationUpdated = {
  */
 const onConversationUpdated = (p: ConversationUpdated) => {
   if (!p.alert) return;
+  /**
+   * ⚠️ Le son vient AVANT le test de la conversation ouverte : un message reçu pendant qu'on
+   * la lit s'entend aussi, comme sur WhatsApp. Seul le BANDEAU n'a pas lieu d'être, puisque le
+   * message s'affiche déjà sous les yeux.
+   *
+   * ⚠️ Un seul point d'appel, et c'est celui-ci : `alert` n'est joint QUE lorsqu'il y a matière
+   * à prévenir — jamais à l'émetteur, ni sur une conversation en sourdine, ni sur une demande
+   * de message, ni sur les médias suivants d'un album. Jouer le son depuis l'écran de
+   * conversation obligerait à refaire ce tri, que le serveur seul peut faire.
+   *
+   * ⚠️ L'application est forcément À L'ÉCRAN ici : en arrière-plan le socket est fermé et
+   * c'est la notification système qui sonne. Les deux ne peuvent donc pas se superposer.
+   */
+  playReceived();
   // Conversation déjà sous les yeux : le message s'y affiche à l'instant, et un bandeau
   // par-dessus masquerait ce qu'on est en train de lire.
   if (getActiveConversation() === p.conversationId) return;
@@ -264,6 +279,9 @@ export default function RootLayout() {
         // ⚠️ PAS attendu, contrairement au thème : cela ne concerne qu'un écran, qui n'est
         // pas encore monté. L'attendre allongerait le lancement pour rien.
         initHeaderStyle().catch(() => {});
+        // ⚠️ PAS attendu non plus : un son qui n'existe pas encore ne se voit pas, et
+        // personne n'envoie de message avant que l'application soit montée.
+        initSounds().catch(() => {});
         const token = await getAccessToken();
         const refreshToken = await getRefreshToken();
         const inAuth = segments[0] === "(auth)";

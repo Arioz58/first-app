@@ -17,6 +17,7 @@ import {
   Pressable,
   ScrollView,
   Share,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -29,6 +30,7 @@ import { toUploadableImage } from '../../lib/upload';
 import { apiRequest } from '../../lib/api';
 import { ROUND } from '../../lib/radius';
 import { TAB_BAR_CLEARANCE } from '../../lib/layout';
+import { setSoundsEnabled, useSoundsEnabled } from '../../lib/sounds';
 import { SUPPORTED_LANGUAGES, setAppLanguage } from '../../lib/i18n';
 import { clearTokens } from '../../lib/storage';
 import { unregisterPushToken } from '../../lib/notifications';
@@ -95,6 +97,7 @@ function SettingRow({
   onPress,
   danger,
   last,
+  toggle,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
@@ -102,6 +105,11 @@ function SettingRow({
   onPress?: () => void;
   danger?: boolean;
   last?: boolean;
+  /**
+   * ⚠️ Un interrupteur REMPLACE la valeur et le chevron : une ligne qui porterait les deux
+   * annoncerait deux commandes pour un seul réglage, et l'on ne saurait plus laquelle agit.
+   */
+  toggle?: { value: boolean; onChange: (v: boolean) => void };
 }) {
   const c = useThemeColors();
   return (
@@ -121,8 +129,20 @@ function SettingRow({
       >
         {label}
       </Text>
-      {value ? <Text className="text-gray-400 dark:text-zinc-500 mr-1">{value}</Text> : null}
-      {onPress && !danger ? <Ionicons name="chevron-forward" size={18} color={c.faint} /> : null}
+      {toggle ? (
+        <Switch
+          value={toggle.value}
+          onValueChange={toggle.onChange}
+          trackColor={{ true: c.nexa }}
+        />
+      ) : (
+        <>
+          {value ? <Text className="text-gray-400 dark:text-zinc-500 mr-1">{value}</Text> : null}
+          {onPress && !danger ? (
+            <Ionicons name="chevron-forward" size={18} color={c.faint} />
+          ) : null}
+        </>
+      )}
     </TouchableOpacity>
   );
 }
@@ -135,6 +155,7 @@ export default function ProfileScreen() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const soundsOn = useSoundsEnabled();
 
   const [editModal, setEditModal] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
@@ -518,6 +539,13 @@ export default function ProfileScreen() {
             label={t('language')}
             value={currentLang ? `${currentLang.flag} ${currentLang.label}` : ''}
             onPress={() => setLangVisible(true)}
+          />
+          {/* ⚠️ Réglage LOCAL à l'appareil, comme l'apparence : on peut vouloir le son sur
+              l'ordinateur et le silence sur le téléphone. */}
+          <SettingRow
+            icon="volume-medium-outline"
+            label={t('sounds.label')}
+            toggle={{ value: soundsOn, onChange: setSoundsEnabled }}
             last
           />
         </Section>

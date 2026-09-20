@@ -32,6 +32,7 @@ import { AudioModule } from 'expo-audio';
 import i18n from '../../lib/i18n';
 import { apiRequest, clearConversation } from '../../lib/api';
 import { connectSocket, getSocket } from '../../lib/socket';
+import { playSent } from '../../lib/sounds';
 import { toUploadableImage, uploadFile } from '../../lib/upload';
 import { MessageMedia } from '../../components/MessageMedia';
 import { AttachmentSheet, type AttachAction } from '../../components/AttachmentSheet';
@@ -3057,6 +3058,12 @@ export default function ChatScreen() {
 
     // Tap haptique dès le départ, sans attendre l'écho serveur.
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    /**
+     * ⚠️ Le son accompagne le GESTE, pas l'écho du serveur — comme l'haptique juste au-dessus.
+     * Le jouer à la confirmation le décrocherait du tap, et pour un média il n'arriverait
+     * qu'une fois le téléversement fini, soit plusieurs secondes plus tard.
+     */
+    playSent();
 
     // La barre se vide tout de suite : l'envoi est acté, les uploads suivent en fond.
     setText('');
@@ -3310,6 +3317,7 @@ export default function ChatScreen() {
    * l'aperçu et dans la liste des conversations.
    */
   const sendLocation = ({ latitude, longitude, address }: PickedLocation) => {
+    playSent();
     getSocket()?.emit('send_message', {
       conversationId: id,
       type: 'location',
@@ -3385,6 +3393,7 @@ export default function ChatScreen() {
 
   const sendRecording = async (uri: string, durationMs: number) => {
     setIsRecording(false);
+    playSent();
     // La durée est déjà connue et le fichier est local : le lecteur s'affiche complet, et
     // le vocal reste écoutable PENDANT son téléversement.
     const draft = makeDraft({

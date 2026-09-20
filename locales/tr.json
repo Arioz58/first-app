@@ -664,5 +664,8 @@
     "message": "Güncellenemedi",
     "retry": "Tekrar dene",
     "reconnected": "Bağlantı yeniden kuruldu"
+  },
+  "sounds": {
+    "label": "Mesaj sesleri"
   }
 }
