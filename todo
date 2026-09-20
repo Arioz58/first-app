@@ -2147,3 +2147,62 @@ LE TEMPS REEL QUI MOURAIT DERRIERE.
     - web : laisser un onglet ouvert > 15 min, envoyer un message depuis le telephone → il doit
       arriver dans le fil OUVERT sans rechargement ;
     - les deux : couper le Wi-Fi → bandeau rouge, le retablir → vert « Connexion retablie ».
+
+[FAIT 20/09 - RETOUR CLIENT, point 3] REPLIER LE PANNEAU DE GAUCHE (web).
+  Demande : « pouvoir fermer le panneau gauche pour que la conversation prenne toute la
+  largeur », avec une contrainte explicite — « laisser la pilule de navigation visible ».
+
+  CE QUI SE REPLIE : la COLONNE DE CONTENU seule (380 px), pas l'aside entier. La barre de
+  navigation (64 px) reste, et avec elle le seul chemin de retour. 64 + 380 = 444, la largeur
+  d'avant : la disposition ouverte est inchangee au pixel pres.
+
+  LE BOUTON est sous la pilule et HORS d'elle. Les quatre entrees de la pilule changent ce que
+  la colonne MONTRE, celui-ci change la DISPOSITION : glisse dedans, il se serait lu comme une
+  cinquieme destination, et l'indicateur actif — qui ne s'y pose jamais — aurait paru
+  defaillant. `hidden md:flex` : sous 768 px il n'y a qu'une colonne, replier n'y veut rien
+  dire.
+
+  ⚠️ UN COOKIE, PAS `localStorage`, et c'est la seule difficulte reelle du lot. Le layout de la
+  messagerie est un composant SERVEUR : en stockage navigateur il rendrait toujours le panneau
+  ouvert, et celui-ci se refermerait a l'hydratation — un repli visible a chaque chargement,
+  pour quelqu'un qui a justement demande a ne plus voir cette colonne. Meme raison, et meme
+  mecanisme, que le theme (05/09) et la langue. `PANEL_COOKIE` vit dans `lib/languages.ts`,
+  le seul module de constantes que le serveur peut importer. Verifie par `curl` : le HTML rendu
+  porte `--panel-w:0px` avec le cookie, `380px` sans.
+
+  ⚠️ LARGEUR PAR VARIABLE CSS et transition CSS, PAS framer-motion. Une largeur en style inline
+  s'applique a TOUTES les tailles d'ecran et aurait ecrase le `w-full` de la disposition
+  etroite : sous 768 px la liste occupe seule l'ecran, et elle s'y serait retrouvee a ZERO
+  PIXEL des lors qu'on avait replie depuis un ordinateur. En passant par `--panel-w`, c'est
+  `md:` qui decide si la largeur s'applique — Tailwind garde la main sur le point de rupture.
+  ⚠️ La colonne garde sa largeur fixe pendant qu'elle se ferme, c'est `overflow-hidden` qui la
+  rogne : animer sa largeur reelle relaierait texte et avatars a chaque image, sur une colonne
+  entiere.
+
+  ⚠️ REPLIER NE DOIT JAMAIS RENDRE UNE COMMANDE INATTEIGNABLE. Deux chemins deplient d'office :
+  choisir une destination dans la barre (sinon le clic n'aurait AUCUN effet visible), et ouvrir
+  son profil — `ProfilePanel` se pose en `absolute inset-0` sur l'aside et serait ecrase dans
+  les 64 px de la barre. Les deux autres panneaux sont des modales `fixed inset-0`, donc
+  indifferentes ; `MessageRequestsPanel` ne s'ouvre que depuis la liste, donc jamais replie.
+  ⚠️ PAS d'`overflow-hidden` sur l'aside : les infobulles de la barre debordent volontairement
+  sur la colonne, et panneau replie elles sortent de l'aside. Les couper les rendrait illisibles
+  exactement la ou elles servent le plus — une barre d'icones sans libelle.
+
+  VERIFIE : tsc, eslint, `next build`, et le rendu serveur avec/sans cookie (curl).
+  PAS VERIFIE : l'animation et l'interaction a l'oeil — playwright n'est plus installe cote web.
+  ⚠️ Au test, REDEMARRER le serveur de dev : les JSON de traduction sont importes donc figes au
+  demarrage, et les nouvelles cles (`nav.collapse` / `nav.expand`) s'affichaient brutes. Piege
+  deja connu, retombe dedans.
+
+  [FAIT 20/09 - repere par Berke dans la foulee] EN-TETE DU PANNEAU AMIS aligne sur les deux
+    autres destinations. « Amis » s'affichait en `text-lg` gris semi-gras sur `py-3`, quand
+    « Discussions » et « Actus » portent `text-2xl` gras en bleu nexa sur `py-4`.
+    CAUSE : ce panneau etait un SOUS-ECRAN avant la barre de navigation (05/09) ; il en a garde
+    le titre discret en devenant une destination de plein rang. La barre les annonce comme trois
+    vues equivalentes, l'en-tete les contredisait.
+    → le filet du bas ne subsiste que pour le mode RECOUVREMENT (`onClose`), ou l'en-tete flotte
+      au-dessus de la liste. Dans la colonne, aucune des deux autres vues n'en a.
+    ⚠️ NON touches, et c'est voulu : `ProfilePanel`, `MessageRequestsPanel`, `PrivacyPanel`,
+      `ForwardDialog` gardent `text-lg font-semibold`. Ce ne sont pas des destinations mais des
+      panneaux qui RECOUVRENT la colonne — la barre elle-meme separe deja le profil des trois
+      autres par un filet, pour cette raison exacte.
