@@ -110,7 +110,10 @@ first-app-web/       → Next.js — client web (Mois 3). Connexion par **QR** (
 
 ### Services tiers
 
-- **Agora.io** — appels audio/vidéo (Mois 4)
+- **Agora.io** — appels audio/vidéo (Mois 4) 🔄 **en cours depuis le 22 sept. 2026**
+  - Projet en mode **« Secured mode: APP ID + Token »** — surtout pas « Testing mode », qui laisse entrer quiconque connaît l'App ID
+  - `AGORA_APP_ID` + `AGORA_APP_CERTIFICATE` en variables d'environnement backend (et Railway). ⚠️ **Jamais** côté client : `first-app` et `first-app-web` sont des dépôts PUBLICS
+  - Facturation à la minute au-delà de 10 000 min/mois — dépense récurrente à cadrer avec le client, comme la clé Google Maps Android
 - **Expo Push** — notifications push (🔄 remplace l'envoi direct Firebase/FCM, chantier en cours — voir la section dédiée)
   - Expo relaie vers APNs et FCM avec ses propres identifiants : plus de clé APNs ni de `GoogleService-Info.plist` côté serveur
   - ⚠️ iOS : compte Apple Developer payant (99€/an) toujours nécessaire — c'est lui qui porte l'entitlement `aps-environment`
@@ -239,6 +242,7 @@ src/
 │   ├── prisma.ts                   # Client Prisma singleton
 │   ├── redis.ts                    # Client Redis
 │   ├── socket.ts                   # Socket.io : auth JWT + membership check + events + helpers emit
+│   ├── agora.ts                    # Jetons d'accès aux canaux d'appel. ⚠️ `AGORA_APP_CERTIFICATE` ne quitte JAMAIS le serveur (il signe les jetons : dans le bundle, il permettrait d'écouter n'importe quel appel et de brûler le quota facturé). Identifiant de participant dérivé de l'UUID par hachage — stable, et `0` jamais rendu (réservé par Agora)
 │   ├── push.ts                     # **Expo Push** : sendPushNotification / sendPushToMany (⚠️ remplace `fcm.ts`/firebase-admin — voir section Notifications push)
 │   │                               # ⚠️ `categoryId` = ce qui fait apparaître le champ « Répondre » (actions déclarées côté app)
 │   └── unread.ts                   # `countUnreadMessages` (SQL brut, 1 requête) → pastille de l'icône envoyée dans le push
@@ -253,6 +257,9 @@ src/
     │                               #    alerte in-app, push, accusés). Le handler socket `send_message` et la
     │                               #    route REST `POST /:id/messages` l'appellent tous les deux — ne jamais
     │                               #    en écrire un second, il sauterait l'un de ces effets
+    ├── calls/                      # Appels audio (Agora) : cycle de vie + signalisation + historique
+    │                               # ⚠️ Agora ne transporte que la VOIX ; qui appelle qui, la sonnerie,
+    │                               #    le décroché et le raccroché sont notre travail
     ├── stories/                    # Stories 24h : CRUD + groupées par user (texts en colonne Json)
     └── upload/                     # Presigned URL S3 (lib/s3.ts) — folder/ext selon contentType
 prisma/
@@ -336,6 +343,11 @@ DELETE /conversations/:id/members/:userId         → expulser un membre (admin 
 POST /conversations/:id/leave                     → quitter (promeut prochain admin si besoin)
 PATCH /conversations/:id                          → éditer groupe (admin requis) : `name` / `photoUrl` / `description` (bandeau système « renommé » si name)
 
+POST /calls                                       → lancer un appel `{ receiverId, type? }` (audio par défaut) → `{ callId, appId, channel, token, uid }`. ⚠️ Règles vérifiées SERVEUR : blocage, `privacyCalls` de la personne appelée, et « ligne occupée » des deux côtés — le bouton grisé côté app vient du client et ne protège rien. Refus en **403** (blocage ET confidentialité, indistinguables volontairement), **409** occupé, **503** si les clés Agora manquent
+POST /calls/:callId/accept                        → décrocher (destinataire seul) → son propre `{ token, uid }`. ⚠️ Le jeton n'est remis QU'ICI : une sonnerie ignorée ne doit rien laisser derrière elle qui permette de rejoindre le canal
+POST /calls/:callId/end                           → refuser / annuler / raccrocher — **une seule route** pour les trois, qui sont le même geste vu à trois moments. Le statut en découle (`declined` / `cancelled` / `ended`) et la durée court depuis le DÉCROCHÉ, jamais depuis l'émission
+GET  /calls                                       → historique des deux sens (50 max) → `outgoing`, `missed` (jamais pour l'appelant : un appel sans réponse n'est pas un appel manqué), `duration`, `peer` en `select` ciblé
+
 POST /receipts/delivered                          → accusé de RÉCEPTION depuis l'arrière-plan `{ conversationId, token }`. ⚠️ **Sans middleware d'auth, volontairement** : l'appelant est l'extension de notification iOS ou la tâche de fond Android, qui n'ont pas accès au JWT (trousseau de l'app). L'autorisation vient d'un **jeton signé** glissé dans le push (`src/lib/receipts.ts`, HMAC + expiration 7 j) qui n'autorise QUE marquer ce destinataire comme ayant reçu, dans cette conversation — aucune donnée, aucune session. Rejouer ne réécrit que la même date
 
 GET  /giphy?q=                                    → proxy Giphy (recherche, ou tendances si `q` absent) → `{ gifs: [{ id, preview, original }] }`. ⚠️ Existe pour que la **clé d'API reste côté serveur** (`process.env.GIPHY_API_KEY`) : en dur dans le bundle, elle était lisible et irrévocable sans republier l'app. Limite 120/h/utilisateur (le quota Giphy est celui de l'application, pas de l'utilisateur), tendances en cache Redis 10 min, **503** si la clé manque
@@ -379,6 +391,10 @@ removed_from_group({ conversationId })            → redirige vers accueil côt
 group_updated({ conversationId, name })           → + push à tous les membres
 friend_request_received({ from })                 → demande d'ami reçue (in-app si en ligne, sinon push) — notif locale côté app via `_layout`
 friend_request_accepted({ by })                   → demande d'ami acceptée (in-app si en ligne, sinon push)
+call_incoming({ callId, type, from, createdAt })   → ça sonne. ⚠️ **Sans jeton Agora** (voir `/calls/:id/accept`) + notification de repli si aucune app mobile ouverte
+call_accepted({ callId })                         → la personne a décroché
+call_ended({ callId, status, duration })          → émis aux DEUX (y compris celui qui raccroche : ses autres appareils doivent cesser de sonner), et par le balayage serveur pour les appels restés sans réponse
+
 error({ message })
 ```
 

@@ -2628,3 +2628,83 @@ PUSH.
   (`first-app-backend/.env`) mises a jour ; l'URL d'API du web reste `localhost`, le
   serveur tournant sur la meme machine. ⚠️ `nodemon` ne surveille PAS le `.env` : relancer
   le backend pour qu'il serve la nouvelle `PUBLIC_URL` dans ses notifications.
+
+[EN COURS 22/09 - MOIS 4] APPELS AUDIO (Agora). Phase 1 — SOCLE SERVEUR ✅
+
+  Perimetre arbitre le 22/09 par Berke : appel entrant en VRAI ECRAN D'APPEL SYSTEME
+  (CallKit iOS / ConnectionService Android), pas une simple notification. C'est le plus
+  exigeant des trois niveaux proposes ; les consequences sont notees en phase 3.
+
+  ⚠️ CE QU'AGORA FAIT, ET CE QU'IL NE FAIT PAS. Agora ne transporte QUE la voix. Qui
+  appelle qui, la sonnerie, le decroche, le raccroche, l'occupation de la ligne : c'est
+  NOTRE travail, et c'est cette signalisation qui fait un appel utilisable — pas le son.
+
+  FAIT :
+    → `src/lib/agora.ts` : jetons d'acces aux canaux. ⚠️ Le CERTIFICAT ne quitte jamais le
+      serveur — il signe les jetons, donc dans le bundle il permettrait de fabriquer un
+      acces a n'importe quel canal (ecouter des appels, bruler le quota facture). Meme
+      regle que la cle Giphy, consequences plus graves.
+    → Identifiant de participant DERIVE de l'UUID par hachage : Agora veut un entier 32
+      bits, nous avons des UUID. Stable (les deux appareils doivent calculer le meme) et
+      jamais `0`, valeur reservee par Agora (« attribue-moi un numero » — on ne saurait
+      plus qui parle). Collision possible en theorie, sans portee : elle ne compterait que
+      DANS un meme canal, qui contient deux personnes.
+    → Canal derive de l'identifiant d'appel (un UUID), donc NON DEVINABLE. Un nom construit
+      sur les deux participants serait reconstituable, et deux appels successifs entre les
+      memes personnes partageraient le meme canal — un retardataire du precedent se
+      retrouverait dans le suivant.
+    → Migration `call_lifecycle` : `answeredAt` / `endedAt` + index. ⚠️ Sans `answeredAt`,
+      la duree d'un appel compterait le temps de SONNERIE et l'historique serait faux.
+    → `modules/calls/` : service + controleur + routes `POST /calls`,
+      `POST /calls/:id/accept`, `POST /calls/:id/end`, `GET /calls`.
+    → Signalisation socket : `call_incoming` / `call_accepted` / `call_ended`.
+
+  ⚠️ LE JETON N'EST REMIS QU'AU DECROCHE. La sonnerie (`call_incoming`) n'en porte pas :
+  une sonnerie qu'on ignore ne doit rien laisser derriere elle qui permette de rejoindre le
+  canal.
+
+  ⚠️ UNE SEULE ROUTE DE FIN pour refuser, annuler et raccrocher : ce sont les memes gestes
+  vus a trois moments. Les separer aurait immanquablement laisse un chemin sans fermeture,
+  donc deux personnes marquees « occupees » indefiniment.
+
+  ⚠️ BALAYAGE DES APPELS FANTOMES toutes les MINUTES (et non 5 min comme les autres purges) :
+  si l'appelant perd le reseau ou tue l'app, plus personne ne clot l'appel et les deux
+  restent « occupes ». Une purge a cinq minutes laisserait quelqu'un injoignable cinq
+  minutes sans qu'il comprenne pourquoi. Les appels qui sonnent depuis trop longtemps sont
+  aussi EXCLUS du calcul d'occupation, pour ne pas dependre du balayage.
+
+  VERIFIE PAR MESURE (deux comptes reels + sockets temoins) : appel complet avec jeton et
+  uid distincts ✅ ; `call_incoming` sans jeton ✅ ; deuxieme appel pendant la sonnerie →
+  409 occupe ✅ ; decroche → `call_accepted` + jeton ✅ ; raccroche → duree comptee depuis
+  le decroche, `call_ended` des deux cotes ✅ ; accepter un appel termine → 409 ✅ ; un
+  TIERS ne peut pas terminer l'appel d'autrui → 404 ✅ ; s'appeler soi-meme → 400 ✅ ;
+  `privacyCalls: nobody` → 403 SANS fuite de jeton ✅ ; appel fantome vieilli de 2 min →
+  passe en `missed` par le vrai setInterval du serveur ✅ ; pas de fuite telephone/jeton
+  push dans l'historique ✅. Reglage de test et base remis en etat.
+  ⚠️ Un premier test de `privacyCalls` avait « reussi » a tort : la variable shell ne
+  lancait pas `docker`, donc le reglage n'avait jamais ete pose. Refait proprement.
+
+  [PHASE 2 — a suivre] L'appel qui passe VRAIMENT, application ouverte : `react-native-agora`
+  (4.6.4, compatible New Architecture — verifie dans son `codegenConfig`), ecran d'appel,
+  micro. ⚠️ Pas de config plugin Expo dans le paquet : permissions et modes de fond a
+  declarer a la main dans `app.json`. Le libelle du micro parle aujourd'hui des « videos de
+  vos stories » — a reformuler, Apple lit ces textes. REBUILD NATIF requis.
+
+  [PHASE 3 — le gros morceau] Sonnerie systeme.
+    ⚠️ `react-native-callkeep` n'a pas ete publie depuis NOVEMBRE 2024 : son fonctionnement
+    en New Architecture reste a prouver sur un vrai build. A valider TOT (phase 0), avant
+    d'avoir construit dessus.
+    ⚠️ Le plugin `@config-plugins/react-native-callkeep` : prendre la **12.0.0** (cible
+    `expo ^54`). La 14 exige Expo >= 56.
+    ⚠️ PushKit exige d'editer l'AppDelegate, or `ios/` est REGENERE a chaque
+    `expo prebuild --clean` (obligatoire chez nous a cause de @bacons/apple-targets) : les
+    modifications seraient effacees a chaque build. Il faut donc un CONFIG PLUGIN MAISON
+    qui les reinjecte.
+    ⚠️ Expo Push ne sait PAS envoyer de push VoIP : il faudra une cle APNs .p8, un envoi
+    DIRECT a Apple (topic `com.berke.nexa2.voip`) et une colonne de plus en base — le jeton
+    VoIP est distinct du jeton push habituel.
+    ⚠️ Android 14 restreint `USE_FULL_SCREEN_INTENT` ; callkeep passe par ConnectionService,
+    a verifier.
+    ⚠️ La notification d'appel actuelle est un REPLI assume : elle previent, elle ne fait
+    pas sonner le telephone comme un appel. Sans elle, un appel vers quelqu'un dont l'app
+    est fermee n'arriverait nulle part.
