@@ -2684,7 +2684,60 @@ PUSH.
   ⚠️ Un premier test de `privacyCalls` avait « reussi » a tort : la variable shell ne
   lancait pas `docker`, donc le reglage n'avait jamais ete pose. Refait proprement.
 
-  [PHASE 2 — a suivre] L'appel qui passe VRAIMENT, application ouverte : `react-native-agora`
+  [PHASE 2 ✅ 22/09] L'INTERFACE ET LA SIGNALISATION, application ouverte.
+    → `react-native-agora` 4.6.4 installe ; REBUILD FAIT (`expo prebuild -p ios --clean` +
+      `expo run:ios`), l'application demarre avec le module natif embarque.
+    → `lib/callEngine.ts` : moteur Agora + etat de l'appel, HORS de l'arbre React (meme
+      raison que `voicePlayback.ts` : un appel doit survivre a la navigation — on doit
+      pouvoir quitter l'ecran d'appel sans couper la voix).
+    → `components/CallOverlay.tsx` : l'appel en plein ecran, monte dans `_layout` comme
+      `ToastStack`, PAS comme un ecran de navigation — un appel entrant doit s'afficher
+      depuis n'importe ou, et un ecran empile survivrait mal a la fin de l'appel.
+    → ecouteurs socket `call_incoming` / `call_accepted` / `call_ended` au niveau app.
+    → bouton d'appel du chat branche (la video reste « a venir »).
+    → i18n `calls.*` dans les 3 langues.
+
+    ⚠️ ON NE REJOINT PAS LE CANAL A L'EMISSION, alors que le jeton est deja la : Agora
+    facture a la minute ET PAR PARTICIPANT, donc une sonnerie sans reponse couterait autant
+    qu'une conversation. L'appelant rejoint sur `call_accepted`.
+
+    ⚠️ CHRONOMETRE recalcule depuis l'horodatage du decroche, jamais incremente d'une
+    seconde par battement : un compteur qui s'incremente derive des que l'app est mise en
+    veille, et afficherait une duree plus courte que celle enregistree par le serveur.
+
+    ⚠️ PERMISSION MICRO : le libelle ne se change PAS dans `ios.infoPlist` — le config
+    plugin `expo-camera` (`microphonePermission`) l'ECRASE au prebuild. La cle a ete retiree
+    d'`infoPlist` pour ne laisser qu'une seule source. Apple lit ces textes.
+
+    ⚠️ `UIBackgroundModes: audio` ajoute : sans lui iOS suspend l'app des qu'elle quitte
+    l'ecran et la voix se coupe en pleine conversation.
+
+    DEFAUT TROUVE ET CORRIGE — le calque n'apparaissait pas du tout. Diagnostic par mesure
+    (le serveur emettait bien, le socket etait connecte, le bundle servi contenait le code) :
+    `CallOverlay` est rendu AVANT le `Stack` dans l'arbre, donc DERRIERE l'application. Il
+    existait, il etait invisible. ⚠️ Les autres calques (`ToastStack` 100,
+    `VoiceMiniPlayer` 50) ne passent au-dessus que par leur `zIndex` ; celui de l'appel est
+    a 200 — un appel prime sur un bandeau de message.
+    ⚠️ Deux fausses pistes au passage : l'URL du bundle Metro n'est pas `index.bundle` mais
+    `node_modules/expo-router/entry.bundle` (le projet entre par expo-router), et le compte
+    connecte sur le simulateur n'etait pas celui que je croyais — verifier PAR L'API
+    (`online` dans `GET /users/:id/profile`) avant de conclure quoi que ce soit.
+    ⚠️ `plutil -extract` SANS `-o -` ECRIT DANS LE FICHIER D'ENTREE. J'ai ecrase l'Info.plist
+    en croyant le lire ; `ios/` etant regenerable, un prebuild a suffi. Toujours `-o -`.
+
+    VERIFIE AU SIMULATEUR (captures) : appel entrant affiche avec avatar, nom, « Appel
+    entrant », boutons Repondre / Refuser ✅ ; annulation par l'appelant → « Appel
+    termine » ✅ ; le calque se referme seul ✅. Appels de test purges de la base.
+    ⚠️ PAS VERIFIE : LA VOIX. Il faut DEUX appareils avec micro — le simulateur n'en a pas
+    d'exploitable et il n'y avait qu'un client. C'est le prochain test, et le seul qui dira
+    si Agora est correctement branche.
+    ⚠️ PAS VERIFIE : l'appel SORTANT (le bouton du chat), faute de pilotage tactile.
+
+  [PHASE 2b — reste a faire] Sonnerie et vibration locales pendant `ringing` : il n'y en a
+  AUCUNE aujourd'hui, l'ecran apparait en silence. Sur iOS la phase 3 (CallKit) l'apportera
+  nativement, mais Android et l'app au premier plan en ont besoin de toute facon.
+
+  [PHASE 2 — historique] `react-native-agora`
   (4.6.4, compatible New Architecture — verifie dans son `codegenConfig`), ecran d'appel,
   micro. ⚠️ Pas de config plugin Expo dans le paquet : permissions et modes de fond a
   declarer a la main dans `app.json`. Le libelle du micro parle aujourd'hui des « videos de

@@ -672,5 +672,19 @@
   },
   "sounds": {
     "label": "Sons des messages"
+  },
+  "calls": {
+    "calling": "Appel…",
+    "incoming": "Appel entrant",
+    "connecting": "Connexion…",
+    "ended": "Appel terminé",
+    "accept": "Répondre",
+    "decline": "Refuser",
+    "hang_up": "Raccrocher",
+    "mute": "Muet",
+    "speaker": "Haut-parleur",
+    "peer_busy": "Cette personne est déjà en ligne.",
+    "unavailable": "Les appels ne sont pas disponibles pour le moment.",
+    "failed": "L'appel n'a pas pu être lancé."
   }
 }

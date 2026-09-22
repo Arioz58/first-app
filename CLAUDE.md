@@ -37,7 +37,7 @@ Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintena
 - **Mois 1** ✅ — Architecture, BDD, auth (JWT + OTP), profils, consentement politique de confidentialité, i18n (tr/fr/en)
 - **Mois 2** ✅ — Messagerie temps réel (Socket.io), groupes (API + rooms + gestion membres), push, frontend mobile complet
 - **Mois 3** 🔄 — Stories 24h ✅ (éditeur texte riche + photo/vidéo, voir section dédiée), médias S3 ✅ (upload presigned + CloudFront), chat enrichi ✅ (Phases A→E : header profil, présence/frappe, mute/éphémères/épinglés/favoris, pièces jointes, refonte visuelle « verre » — voir section dédiée), messages système ✅, groupes enrichis (rôles/permissions) ✅, mode sombre ✅, répertoire de contacts façon WhatsApp ✅, QR de profil ✅, notifications push Expo 🔄 (**chantier en cours, non commité — voir section dédiée**), localisation 🔄 (phases 1 et 2 ✅ — ville au profil affichée sur les deux écrans, envoi de position ; **phase 3 arrière-plan à retester sur appareil réel verrouillé**), version web Next.js 🔜
-- **Mois 4** — Appels audio/vidéo (Agora.io)
+- **Mois 4** 🔄 — Appels audio/vidéo (Agora.io) : socle serveur ✅, interface et signalisation ✅ (22 sept.) ; **la voix elle-même reste à éprouver sur deux appareils** ; sonnerie système (CallKit / ConnectionService) à venir
 - **Mois 5** — Points, leaderboard, anti-spam, module B2B, dashboard admin, site vitrine + DA verte + sécurité hardening (rate limiting, helmet, validation stricte)
 - **Mois 6** — QA, corrections, mise en production (App Store + Google Play + AWS)
 
@@ -88,6 +88,7 @@ first-app-web/       → Next.js — client web (Mois 3). Connexion par **QR** (
 - **react-native-webview** — visionneuse de documents in-app (`DocumentViewer`) ⚠️ **module natif** (rebuild requis)
 - **@shopify/flash-list** (v2) — liste du fil de discussion (mesure réelle des cellules, recyclage, `startRenderingFromBottom`) — pur JS, pas de rebuild ; ⚠️ exige la nouvelle architecture (`newArchEnabled: true`, déjà actif)
 - **qrcode** (+ `@types/qrcode`) — QR de profil rendu en **pur JS** (aucun module natif), voir `components/QrCode.tsx`
+- **react-native-agora** (4.6.4) — appels audio (Mois 4) ⚠️ **module natif** (rebuild requis) ; compatible New Architecture ; **aucun config plugin** : permissions et `UIBackgroundModes: audio` déclarés à la main dans `app.json`. ⚠️ Le libellé du micro se change dans l'option `microphonePermission` du plugin **expo-camera**, qui écrase `ios.infoPlist` au prebuild
 - **expo-haptics** — retours haptiques (capture, envoi, scan QR, tuiles de pièces jointes)
 - **expo-clipboard** — action « Copier » du menu contextuel d'un message ⚠️ **module natif** (rebuild requis après install)
 - **@bacons/apple-targets** — extension de notification iOS (`targets/`) ⚠️ **module natif** (rebuild requis) — voir la section Notifications push
@@ -173,6 +174,7 @@ components/
 ├── DocumentViewer.tsx   # Visionneuse de documents in-app (WebView : PDF/texte/images ; repli téléchargement sinon). ⚠️ **Aucun** service de conversion tiers (ne pas envoyer d'URL privée à Google Docs Viewer)
 ├── VoiceRecorderBar.tsx # Barre d'enregistrement vocal (chrono, annulation, envoi) + niveaux via `metering`
 ├── VoiceMiniPlayer.tsx  # Rappel du vocal en cours quand on a quitté sa conversation — monté dans `app/_layout.tsx`, sinon il disparaîtrait avec l'écran
+├── CallOverlay.tsx      # L'appel en plein écran — monté dans `app/_layout.tsx` hors du `Stack`, comme `ToastStack` : un appel entrant doit s'afficher depuis n'importe quel écran. ⚠️ `zIndex: 200` (au-dessus des bandeaux, 100) — rendu AVANT le `Stack`, il serait sinon invisible **derrière** l'application
 ├── ToastStack.tsx       # Pile de bandeaux d'alerte en haut de l'écran (message reçu pendant qu'on est ailleurs, demande d'ami) — montée dans `app/_layout.tsx` hors du `Stack` ; entrée et sortie par le HAUT, les précédents reculent (ressort sur la translation seule, jamais sur l'échelle) ; **dépliable** par un chevron (hauteur de carte FIXE, sinon la liste se déplierait en deux temps)
 ├── VoiceWaveform.tsx    # Tracé d'onde : `LiveWaveform` (fenêtre glissante à l'enregistrement) et lecture avec seek au doigt
 ├── FloatingSuggestions.tsx # Suggestions d'amis en orbite animée (onglet Actus)
@@ -218,6 +220,7 @@ lib/
 ├── friendRequests.ts    # Store externe (`useSyncExternalStore`) du **compteur de demandes d'ami reçues** — alimente le badge natif de l'onglet Contacts et la pastille du segment Amis
 ├── unreadMessages.ts    # Store externe du **total de messages non lus** (détail par conversation) — badge de l'onglet Discussion **et** pastille de l'icône de l'app
 ├── config.ts            # BASE_URL (local/Railway selon `__DEV__`) + PRIVACY_URL / PRIVACY_POLICY_VERSION + INVITE_URL (⚠️ 2 placeholders ; plus aucune clé d'API — Giphy est passée côté serveur)
+├── callEngine.ts        # Appels audio : moteur Agora + état de l'appel, **hors de l'arbre React** (un appel survit à la navigation, comme le lecteur vocal). ⚠️ L'appelant ne rejoint le canal qu'au DÉCROCHÉ : Agora facture à la minute et par participant, une sonnerie sans réponse coûterait autant qu'une conversation
 ├── voicePlayback.ts     # Vocal en cours au niveau de l'APP (store externe) — ne porte que la description + un rappel `stop` ; le lecteur natif reste dans son composant
 ├── threadScroll.ts      # **Position dans le fil de discussion** — machine à états (`opening`/`anchored`/`following`/`jumping`), **un seul propriétaire du défilement** à la fois. Remplace les 9 refs qui s'annulaient mutuellement (voir la section Chat)
 ├── cache.ts             # **Mémoire locale** (`expo-file-system`, pas de rebuild) : ce que l'app affiche AVANT que le serveur réponde. Copie mémoire hydratée sous le splash (`hydrateCache`) car un premier rendu ne peut pas attendre une promesse ; **cloisonnée par compte** (`cache/<userId>/`) ; écritures regroupées à 600 ms ; ⚠️ `null` = rien en cache (→ indicateur), `[]` = cache vide (→ écran « aucune conversation ») ; ⚠️ **ne PAS y mettre le fil d'une conversation** sans revoir `threadScroll` — un fil posé avant de savoir où la conversation s'ouvre passe en mode `following`, et une fenêtre `around` arrivant ensuite est ramenée au bas en boucle (diagnostic complet dans `todo`, 11/09)

@@ -672,5 +672,19 @@
   },
   "sounds": {
     "label": "Mesaj sesleri"
+  },
+  "calls": {
+    "calling": "Aranıyor…",
+    "incoming": "Gelen arama",
+    "connecting": "Bağlanıyor…",
+    "ended": "Arama sona erdi",
+    "accept": "Cevapla",
+    "decline": "Reddet",
+    "hang_up": "Kapat",
+    "mute": "Sessiz",
+    "speaker": "Hoparlör",
+    "peer_busy": "Bu kişi şu anda başka bir aramada.",
+    "unavailable": "Aramalar şu anda kullanılamıyor.",
+    "failed": "Arama başlatılamadı."
   }
 }

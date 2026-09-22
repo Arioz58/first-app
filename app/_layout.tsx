@@ -39,6 +39,13 @@ import { initTheme, useThemeColors } from "../lib/theme";
 import { initSounds, playReceived } from "../lib/sounds";
 import { initHeaderStyle } from "../lib/headerStyle";
 import { VoiceMiniPlayer } from "../components/VoiceMiniPlayer";
+import { CallOverlay } from "../components/CallOverlay";
+import {
+  callEnded,
+  incomingCall,
+  peerAccepted,
+  type CallPeer,
+} from "../lib/callEngine";
 import { ToastStack } from "../components/ToastStack";
 import { showToast } from "../lib/toasts";
 import { getActiveConversation } from "../lib/unreadMessages";
@@ -374,6 +381,28 @@ export default function RootLayout() {
           });
 
           /**
+           * APPELS. ⚠️ Écoutés au niveau de l'APPLICATION, comme les messages : un appel
+           * arrive quel que soit l'écran affiché, et c'est justement quand on regarde
+           * ailleurs qu'il doit s'imposer. L'affichage est un calque
+           * (`components/CallOverlay.tsx`), pas un écran de navigation.
+           */
+          bindSocket(
+            socket,
+            "call_incoming",
+            "root",
+            (p: { callId: string; from: CallPeer }) => incomingCall(p.callId, p.from),
+          );
+          // L'autre a décroché : c'est à cet instant que l'appelant rejoint le canal — pas
+          // avant, une sonnerie sans réponse serait facturée comme une conversation.
+          bindSocket(socket, "call_accepted", "root", () => peerAccepted());
+          bindSocket(
+            socket,
+            "call_ended",
+            "root",
+            (p: { callId: string; status: string }) => callEnded(p.callId, p.status),
+          );
+
+          /**
            * MESSAGE REÇU PENDANT QUE L'APPLICATION EST OUVERTE.
            *
            * ⚠️ Écouté ICI, au niveau de l'application, et non dans la liste des
@@ -461,6 +490,9 @@ export default function RootLayout() {
     {/* ⚠️ Hors du `Stack` : un vocal doit continuer d'être signalé quand on QUITTE la
         conversation où il joue — monté dans un écran, ce rappel disparaîtrait avec lui. */}
     <VoiceMiniPlayer />
+    {/* ⚠️ Un appel couvre TOUT l'écran. Rendu avant le `Stack` comme les autres calques,
+        il ne passe au-dessus que par son `zIndex` — sans lui, il est simplement invisible. */}
+    <CallOverlay />
     {/* ⚠️ Hors du `Stack`, pour la même raison : une alerte annonce ce qui se passe
         AILLEURS que sur l'écran courant, elle ne peut donc pas appartenir à un écran. */}
     <ToastStack />

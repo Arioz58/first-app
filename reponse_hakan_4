@@ -1,0 +1,83 @@
+Objet : Tes retours sont corrigés — nouvelle version disponible
+
+Selam Hakan,
+
+Tout ce que tu m'as signalé est corrigé, et il y a deux nouveautés en plus.
+Voici le détail, simplement.
+
+
+CE QUI EST CORRIGÉ
+
+Le petit logo rouge "mise à jour impossible"
+Il ne devrait plus apparaître. C'était un problème de connexion qui se
+rétablissait tout seul, mais l'application l'annonçait comme une panne.
+
+Le téléphone et le web qui ne se synchronisaient plus
+C'était le même problème, vu de l'autre côté. Tu peux maintenant écrire depuis
+ton téléphone et voir le message arriver sur l'ordinateur tout de suite, sans
+rafraîchir la page.
+
+Les photos trop étroites
+Elles sont maintenant recadrées comme sur WhatsApp : la bulle est plus large,
+moins haute, et la photo remplit l'espace.
+
+Le bouton "Se déconnecter" qu'on ne voyait pas
+Il est de nouveau visible. Le même défaut existait ailleurs dans l'application
+sans que tu l'aies remarqué, je l'ai corrigé partout.
+
+Fermer le panneau de gauche sur le web
+C'est fait. Un bouton sous la barre de navigation replie la liste, et la
+conversation prend toute la largeur. La navigation reste visible, comme tu le
+voulais. Ton choix est mémorisé.
+
+
+CE QUI EST NOUVEAU
+
+La confidentialité "sauf ces personnes"
+C'est ce que tu demandais. Pour ta photo, ta bio, ta dernière connexion, ta
+ville et ton numéro, tu peux maintenant choisir "mes amis, sauf..." et
+sélectionner les personnes à écarter. Chaque réglage a sa propre liste : tu
+peux cacher ta photo à quelqu'un tout en lui laissant voir ta bio.
+
+Au passage, j'ai découvert que le réglage de la photo de profil ne
+s'appliquait pas partout dans l'application. C'est réglé.
+
+Les sons
+Il y a maintenant un son quand tu envoies un message, et un autre quand tu en
+reçois un. Ce sont les sons que tu m'as envoyés. Ils fonctionnent aussi sur le
+web, qui n'en avait aucun, et sur les notifications de ton téléphone.
+
+Tu peux les couper quand tu veux : "Vous" puis "Sons des messages". Ce réglage
+est propre à chaque appareil, donc tu peux garder le son sur l'ordinateur et le
+silence sur le téléphone.
+
+
+POUR EN PROFITER
+
+Mets à jour l'application depuis TestFlight. Les sons des notifications ne
+fonctionneront qu'avec cette nouvelle version.
+
+
+MARDI
+
+Une nouvelle version arrive mardi avec deux choses :
+
+- les appels audio
+- la possibilité de répondre directement depuis la notification, sans ouvrir
+  l'application
+
+
+UNE QUESTION EN ATTENTE
+
+Je te l'avais posée dans mon dernier message et je n'ai pas eu ta réponse.
+
+Tu m'as parlé de gérer le son selon le "type de notification". Tu veux dire un
+son différent pour un message, un message de groupe et une demande d'ami ? Ou
+simplement pouvoir choisir le son toi-même ?
+
+Dis-le-moi et je m'en occupe.
+
+Continue à tout tester, c'est comme ça qu'on avance vite.
+
+À bientôt,
+Berke

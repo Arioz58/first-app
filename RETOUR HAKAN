@@ -1,0 +1,17 @@
+RETOUR HAKAN :
+
+BUG/PROBLEME RENCONTRÉ LORS DE SES TESTS :
+     - Il rencontre un probleme lors de l'ouverture du mobile et web, je cite : "quand je rentre dans l'application sur mobile et web j'ai une icone, mise a jour impossible en rouge elle disparait 10 secondes après, ou je suis obliger de rafraichir la page sur mobile et web pour que sa disparait, je te joints une capture d'ecran en pièce jointe," ce probleme la est deja diagnostiqué et sera corrigé. (A REVOIR EN PREMIER CAR CHANTIER FRAIS)
+     - Il trouve que les images sont encore trop etroite, sur whatsapp par exemple la bull qui contien l'image est plus large mais plus petite et l'image a l'interrieur de cette bull est un peu plus "zoomé". Je sais pas si tu vois de quoi je parle (A REVOIR EN PREMIER CAR CHANTIER FRAIS)
+     - Il veut aussi qu'on puisse fermer le paneau gauche pour que la conversation prenne toute la largeur de l'ecran (quand on fera ca je voudrais qu'on laisse la pilule de navigation visible). (A REVOIR EN PREMIER CAR CHANTIER FRAIS)
+     - Il me dit "Quand j'envoie un message sur le mobile, la version web ne synchronise pas je suis obliger de regenerer les pages pour avoir les infos en temps réels pourrez tu voir ce probleme stp ?". Je croyais que ce probleme n'etais pas censé arrivé non ? (A REVOIR EN PREMIER CAR CHANTIER FRAIS)
+     - Il me dit "j'ai remarquer une autre problématique niveau affichage sur nexa mobile, quand tu vas dans vous sur mobile le boutons se deconnecter on arrive pas a le voir il reste en bas tu peut voir ce problème stp". Je dois d'abord regarder
+     - Il me dit "Sur la partie confidentialité, j'ai besoin que tu m'inclue une options, par exemple photos de profil quand tu clique dessus, ya marquer tout le monde, mes amis ou personne, j'ai également besoin que l'utilisateur puissent définir les gens qu'il souhaite pas voir sa photos, sa bio ou autre un peut comme le principe de WA" mais c'est deja en place non ?
+
+
+SOUHAITE AJOUTER :
+     - A tester les notification et ca marche bien cependant il me demande si il est possible de géré le son emis par ces derniers type de notification (je vois pas de quoi il parle quand il dit "Type de notif")
+     - Voici ce qu'il me dit : "j'aurais aussi besoin que les personnes qui utilise le web puissent envoyer un message a leur contact sans avoir besoin de passer par le mobile par exemple, c'est possible de repercuter cela sur la version web ?".
+     - Il m'informe que sur la version web il n'y a pas de son pour les notifications
+     - Il souhaiterai un son également quand l'utilisateur envoie le message comme le principe de whats app le paak, attention ce son doit pouvoir etre activer et désactiver par l'utilisateur, de préference choisir des sons neutres stp qui ne seront pas désagréable.
+     - Encore sur les notification il souhaite ajouter la feature de reponse direct en restant appuyé sur la notification sans passé par Nexa.

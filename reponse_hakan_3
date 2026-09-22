@@ -1,0 +1,109 @@
+Objet : J'ai regardé tes retours
+
+Selam Hakan,
+
+Merci pour tes tests. Ils sont précis, ça aide beaucoup.
+
+J'ai déjà trouvé la cause de plusieurs problèmes. Voici où j'en suis, point par
+point.
+
+
+LE PETIT LOGO ROUGE "MISE À JOUR IMPOSSIBLE"
+
+Trouvé, et corrigé.
+
+C'était le plus important des deux, parce qu'il en cachait un autre.
+
+Quand tu laisses l'application de côté un moment, elle doit renouveler ton accès
+en revenant. Ce renouvellement échouait à chaque fois. L'application croyait donc
+qu'elle n'avait plus de réseau, alors que tout allait bien.
+
+C'est aussi ce qui expliquait qu'il fallait parfois rafraîchir pour voir les
+nouveaux messages.
+
+Tu ne devrais plus rien voir de rouge en revenant sur l'application.
+
+
+LA SYNCHRONISATION ENTRE LE TÉLÉPHONE ET LE WEB
+
+Je pense que c'est le même problème, vu de l'autre côté. Je vérifie cette semaine.
+
+Si c'est bien ça, les deux seront réglés ensemble.
+
+
+LE BOUTON "SE DÉCONNECTER" QU'ON NE VOIT PAS
+
+Trouvé aussi. La page s'arrête trop haut, et le dernier bouton passe sous la barre
+du bas. Correction simple.
+
+
+LES PHOTOS TROP ÉTROITES
+
+J'ai compris ce que tu décris. Sur WhatsApp, la photo est recadrée pour remplir une
+zone plus large et moins haute. Chez nous, on garde le format d'origine de la photo,
+ce qui donne ces bandes étroites.
+
+Je vais faire comme eux.
+
+
+FERMER LE PANNEAU DE GAUCHE SUR LE WEB
+
+Noté. La conversation prendra tout l'écran, et la navigation restera visible comme
+tu le demandes.
+
+
+LA CONFIDENTIALITÉ
+
+Une partie existe déjà : pour ta photo, ta bio, ton statut et le reste, tu peux
+choisir entre tout le monde, tes amis, ou personne.
+
+Ce qui manque, c'est ce que tu demandes en plus : pouvoir dire "mes amis, sauf
+ces personnes-là". Ça n'existe pas encore. Je vais l'ajouter.
+
+
+LES SONS
+
+Trois choses différentes, je les prends toutes :
+
+- un son quand tu envoies un message, comme sur WhatsApp
+- un son pour les notifications sur le web, qui n'en a aucun aujourd'hui
+- la possibilité de couper ces sons quand on veut
+
+Je choisirai des sons discrets.
+
+Par contre j'ai besoin d'une précision. Tu parles de gérer le son selon le "type
+de notification". Tu veux dire un son différent pour un message, un message de
+groupe, et une demande d'ami ? Ou simplement pouvoir choisir le son ? Dis-moi.
+
+
+RÉPONDRE DIRECTEMENT DEPUIS LA NOTIFICATION
+
+C'est faisable, et c'est une bonne idée. Un peu plus de travail que les autres
+points, parce que l'application doit pouvoir envoyer le message sans être ouverte.
+Je le fais.
+
+
+ÉCRIRE À QUELQU'UN DEPUIS LE WEB
+
+Ça existe déjà. Dans la liste des conversations, le bouton pour démarrer une
+nouvelle discussion propose trois choix : un ami, un groupe, ou une recherche par
+numéro de téléphone.
+
+Si tu ne l'as pas trouvé, c'est que ce n'est pas assez visible, et c'est un défaut
+de ma part. Dis-moi ce que tu cherchais exactement, je le rendrai plus évident.
+
+Une seule chose restera impossible sur le web : ton répertoire téléphonique. Un
+navigateur n'y a pas accès, sur aucun site. Il faudra passer par le numéro.
+
+
+LA SUITE
+
+Je continue sur ces points cette semaine, en commençant par la synchronisation,
+puis les corrections d'affichage.
+
+Les appels audio et vidéo restent le gros chantier du mois.
+
+Continue à tout tester, c'est comme ça qu'on avance vite.
+
+À bientôt,
+Berke

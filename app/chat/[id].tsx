@@ -31,6 +31,7 @@ import * as Linking from 'expo-linking';
 import { AudioModule } from 'expo-audio';
 import i18n from '../../lib/i18n';
 import { apiRequest, clearConversation } from '../../lib/api';
+import { startCall } from '../../lib/callEngine';
 import { connectSocket, getSocket } from '../../lib/socket';
 import { playSent } from '../../lib/sounds';
 import { toUploadableImage, uploadFile } from '../../lib/upload';
@@ -4217,6 +4218,35 @@ export default function ChatScreen() {
   };
 
 
+  /**
+   * Lancer un appel audio.
+   *
+   * ⚠️ `canCall` grise le bouton mais ne protège rien — il vient du serveur, puis vit dans
+   * le client. C'est `POST /calls` qui tranche vraiment (blocage, confidentialité, ligne
+   * occupée), et on se contente ici de traduire son refus.
+   *
+   * ⚠️ Blocage et confidentialité donnent le MÊME message : les distinguer apprendrait à
+   * l'appelant qu'il a été bloqué.
+   */
+  const placeCall = async () => {
+    if (!otherUserId) return;
+    if (!header?.canCall) {
+      Alert.alert('', t('details.call_unavailable'));
+      return;
+    }
+    const r = await startCall({ id: otherUserId, name: displayName, photoUrl: header?.photoUrl });
+    if (r.ok) return;
+    const message =
+      r.reason === 'busy'
+        ? t('calls.peer_busy')
+        : r.reason === 'unconfigured'
+          ? t('calls.unavailable')
+          : r.reason === 'refused'
+            ? t('details.call_unavailable')
+            : t('calls.failed');
+    Alert.alert('', message);
+  };
+
   const openMenu = () => {
     const direct = convType === 'direct' && !!otherUserId;
     Alert.alert(displayName, undefined, [
@@ -4396,18 +4426,13 @@ export default function ChatScreen() {
           ) : null}
         </TouchableOpacity>
 
-        {/* Boutons d'appel (grisés selon canCall serveur) — appels = Mois 4 */}
+        {/* Appel audio branché ; la vidéo reste à venir (elle passera par le même chemin). */}
         {convType === 'direct' ? (
           <>
             <TouchableOpacity
               className="px-2 py-1"
               style={{ opacity: header?.canCall ? 1 : 0.4 }}
-              onPress={() =>
-                Alert.alert(
-                  '',
-                  header?.canCall ? t('details.calls_coming') : t('details.call_unavailable'),
-                )
-              }
+              onPress={placeCall}
             >
               <Ionicons name="call" size={21} color={NEXA} />
             </TouchableOpacity>

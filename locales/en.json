@@ -672,5 +672,19 @@
   },
   "sounds": {
     "label": "Message sounds"
+  },
+  "calls": {
+    "calling": "Calling…",
+    "incoming": "Incoming call",
+    "connecting": "Connecting…",
+    "ended": "Call ended",
+    "accept": "Answer",
+    "decline": "Decline",
+    "hang_up": "Hang up",
+    "mute": "Mute",
+    "speaker": "Speaker",
+    "peer_busy": "This person is already on a call.",
+    "unavailable": "Calls are unavailable right now.",
+    "failed": "The call could not be placed."
   }
 }
