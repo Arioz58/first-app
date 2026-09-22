@@ -34,6 +34,7 @@ import { setSoundsEnabled, useSoundsEnabled } from '../../lib/sounds';
 import { SUPPORTED_LANGUAGES, setAppLanguage } from '../../lib/i18n';
 import { clearTokens } from '../../lib/storage';
 import { unregisterPushToken } from '../../lib/notifications';
+import { unregisterVoipPush } from '../../lib/voipPush';
 import { disconnectSocket } from '../../lib/socket';
 import { requestContactsSegment } from '../../lib/tabsNav';
 import { setUnreadCounts } from '../../lib/unreadMessages';
@@ -266,6 +267,9 @@ export default function ProfileScreen() {
           // Avant d'effacer la session : la requête a besoin du jeton d'accès, et
           // l'appareil ne doit plus recevoir les notifications de ce compte.
           await unregisterPushToken();
+          // ⚠️ Le jeton VoIP aussi : sans cela, le compte quitté garde l'adresse de cet
+          // appareil et continuerait d'y faire sonner ses appels.
+          await unregisterVoipPush();
           // Aucun partage de position ne doit survivre au changement de compte. Attendu :
           // l'arrêt prévient le serveur et coupe le suivi, deux choses qui ont besoin de la
           // session encore valide.

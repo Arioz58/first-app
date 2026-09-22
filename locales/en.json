@@ -685,6 +685,9 @@
     "speaker": "Speaker",
     "peer_busy": "This person is already on a call.",
     "unavailable": "Calls are unavailable right now.",
-    "failed": "The call could not be placed."
+    "failed": "The call could not be placed.",
+    "missed": "Missed call",
+    "no_answer": "No answer",
+    "empty": "No calls yet."
   }
 }

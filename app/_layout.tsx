@@ -27,13 +27,7 @@ import {
 import { registerDeliveryReceiptTask } from "../lib/deliveryReceipt";
 import { bindSocket, connectSocket, pauseSocket, resumeSocket } from "../lib/socket";
 import { hydrateLiveShares } from "../lib/liveLocation";
-import {
-  clearTokens,
-  getAccessToken,
-  getRefreshToken,
-  getUserId,
-  hydrateLocalSettings,
-} from "../lib/storage";
+import { clearTokens, getAccessToken, getRefreshToken, getUserId, hydrateLocalSettings, migrateSessionAccessibility } from "../lib/storage";
 import { BOOT_KEYS, hydrateCache } from "../lib/cache";
 import { initTheme, useThemeColors } from "../lib/theme";
 import { initSounds, playReceived } from "../lib/sounds";
@@ -41,11 +35,16 @@ import { initHeaderStyle } from "../lib/headerStyle";
 import { VoiceMiniPlayer } from "../components/VoiceMiniPlayer";
 import { CallOverlay } from "../components/CallOverlay";
 import {
+  acceptCall,
   callEnded,
+  hangUp,
   incomingCall,
   peerAccepted,
+  setMutedFromSystem,
   type CallPeer,
 } from "../lib/callEngine";
+import { bindCallKit, setupCallKit } from "../lib/callKit";
+import { registerVoipPush } from "../lib/voipPush";
 import { ToastStack } from "../components/ToastStack";
 import { showToast } from "../lib/toasts";
 import { getActiveConversation } from "../lib/unreadMessages";
@@ -437,6 +436,47 @@ export default function RootLayout() {
       // distant) : la catégorie, elle, sert aussi aux notifications locales, et c'est ce
       // qui permet de l'essayer sans appareil réel.
       registerReplyCategory();
+
+      /**
+       * Écran d'appel du SYSTÈME (CallKit / ConnectionService).
+       *
+       * ⚠️ Déclaré au DÉMARRAGE et non au premier appel : sur iOS, le système doit
+       * connaître l'application avant qu'un appel arrive, sinon le premier appel de la
+       * session n'affiche rien.
+       *
+       * ⚠️ Les actions viennent de l'écran système et non de l'application : décrocher
+       * depuis l'écran verrouillé doit produire exactement le même effet que le bouton
+       * vert de l'application — d'où le passage par les mêmes fonctions du moteur.
+       */
+      /**
+       * Jeton PushKit : c'est lui qui permet au serveur de faire sonner ce téléphone même
+       * verrouillé. ⚠️ Séparé de `setupCallKit` : l'un déclare l'application au système,
+       * l'autre donne au serveur une adresse où pousser. L'un sans l'autre ne sonne pas.
+       */
+      /**
+       * ⚠️ AVANT tout le reste : réécrit la session pour qu'elle reste lisible écran
+       * verrouillé. Sans cela, décrocher un appel depuis l'écran verrouillé échoue — le
+       * trousseau est illisible et la requête part sans authentification.
+       */
+      migrateSessionAccessibility();
+
+      registerVoipPush();
+
+      setupCallKit().then((ok) => {
+        // Trace explicite : sans elle, l'absence d'écran système est indiscernable d'un
+        // appel qui n'arrive pas. ⚠️ CallKit ne s'affiche PAS sur simulateur (pas de
+        // téléphonie) — l'application retombe alors sur son propre écran, ce qui est le
+        // comportement voulu.
+        console.log(ok ? "[callkit] Écran d'appel système actif" : '[callkit] Indisponible');
+        if (!ok) return;
+        bindCallKit({
+          // ⚠️ L'identifiant du système est transmis : décroché depuis l'écran
+          // verrouillé, c'est la SEULE trace de l'appel que l'application possède.
+          onAnswer: (callId) => acceptCall(callId),
+          onEnd: () => hangUp(),
+          onMute: (muted) => setMutedFromSystem(muted),
+        });
+      });
       refreshPendingFriendRequests();
     };
 

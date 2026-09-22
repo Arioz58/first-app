@@ -68,6 +68,17 @@ export function CallOverlay() {
   if (!call) return null;
 
   const incomingRinging = call.direction === 'incoming' && call.status === 'ringing';
+
+  /**
+   * ⚠️ On s'efface pendant que le SYSTÈME fait sonner : son écran d'appel s'affiche
+   * par-dessus tout, y compris sur un téléphone verrouillé, et empiler le nôtre dessous
+   * donnerait deux interfaces d'appel pour un seul appel — l'utilisateur en refermerait
+   * une et trouverait l'autre derrière.
+   *
+   * ⚠️ Uniquement pendant la SONNERIE : une fois décroché, c'est notre écran qui porte la
+   * sourdine, le haut-parleur et la durée.
+   */
+  if (call.nativeUI && incomingRinging) return null;
   const label =
     call.status === 'ended'
       ? t('calls.ended')

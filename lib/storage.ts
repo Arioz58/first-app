@@ -18,10 +18,58 @@ export type RecentSearch = {
   photoUrl: string | null;
 };
 
+/**
+ * Accessibilité des clés de SESSION dans le trousseau iOS.
+ *
+ * ⚠️ SANS CECI, RIEN NE FONCTIONNE ÉCRAN VERROUILLÉ. Le défaut d'`expo-secure-store` est
+ * `WHEN_UNLOCKED` : le trousseau devient illisible dès que le téléphone est verrouillé.
+ * Constaté le 22/09 sur les appels — on décrochait depuis l'écran verrouillé, l'application
+ * n'arrivait pas à lire son jeton, la requête partait sans authentification, échouait, et
+ * l'appel se terminait aussitôt. Symptôme : « ça décroche puis raccroche direct ».
+ *
+ * `AFTER_FIRST_UNLOCK` rend la clé lisible dès le premier déverrouillage qui suit un
+ * redémarrage, y compris ensuite écran verrouillé. C'est le réglage qu'exige toute
+ * application devant agir en arrière-plan — appels, accusés de réception, réponse depuis
+ * une notification.
+ *
+ * ⚠️ Compromis assumé : après un redémarrage, tant que le téléphone n'a pas été déverrouillé
+ * UNE fois, la session reste illisible — et c'est très bien ainsi, c'est ce qui protège les
+ * jetons sur un téléphone éteint qu'on aurait volé.
+ *
+ * ⚠️ N'est posé QUE sur les clés de session. Les réglages cosmétiques (fonds, surnoms)
+ * n'ont aucune raison d'être lisibles verrouillé.
+ */
+const SESSION_OPTIONS = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK };
+
 export const saveTokens = async (accessToken: string, refreshToken: string, userId: string) => {
-  await SecureStore.setItemAsync(ACCESS_KEY, accessToken);
-  await SecureStore.setItemAsync(REFRESH_KEY, refreshToken);
-  await SecureStore.setItemAsync(USER_ID_KEY, userId);
+  await SecureStore.setItemAsync(ACCESS_KEY, accessToken, SESSION_OPTIONS);
+  await SecureStore.setItemAsync(REFRESH_KEY, refreshToken, SESSION_OPTIONS);
+  await SecureStore.setItemAsync(USER_ID_KEY, userId, SESSION_OPTIONS);
+};
+
+/**
+ * Réécrit la session avec la bonne accessibilité.
+ *
+ * ⚠️ Une clé garde l'accessibilité qu'elle avait À L'ÉCRITURE : changer l'option ne touche
+ * pas ce qui est déjà stocké. Sans cette reprise, il faudrait se déconnecter et se
+ * reconnecter pour que les appels fonctionnent écran verrouillé — ce que personne ne
+ * devinerait.
+ *
+ * ⚠️ Appelée au démarrage, donc téléphone déverrouillé : c'est le seul moment où l'ancienne
+ * valeur est lisible.
+ */
+export const migrateSessionAccessibility = async () => {
+  try {
+    const [a, r, u] = await Promise.all([
+      SecureStore.getItemAsync(ACCESS_KEY),
+      SecureStore.getItemAsync(REFRESH_KEY),
+      SecureStore.getItemAsync(USER_ID_KEY),
+    ]);
+    if (!a || !r || !u) return;
+    await saveTokens(a, r, u);
+  } catch {
+    // Trousseau indisponible : on réessaiera au prochain démarrage.
+  }
 };
 
 /**
@@ -32,7 +80,9 @@ export const saveTokens = async (accessToken: string, refreshToken: string, user
  * — voir le commentaire dans `api.ts`.
  */
 export const saveAccessToken = (accessToken: string) =>
-  SecureStore.setItemAsync(ACCESS_KEY, accessToken);
+  // ⚠️ Même accessibilité que le reste de la session : un jeton renouvelé sans cette option
+  // redeviendrait illisible écran verrouillé, et le défaut réapparaîtrait au bout de 15 min.
+  SecureStore.setItemAsync(ACCESS_KEY, accessToken, SESSION_OPTIONS);
 
 export const getAccessToken = () => SecureStore.getItemAsync(ACCESS_KEY);
 export const getRefreshToken = () => SecureStore.getItemAsync(REFRESH_KEY);

@@ -6,6 +6,14 @@ import {
   type IRtcEngine,
 } from 'react-native-agora';
 import { apiRequest } from './api';
+import { playRingback, playRingtone, stopCallSounds } from './callSounds';
+import {
+  displayIncomingCall,
+  endNativeCall,
+  reportConnected,
+  setNativeMuted,
+  startOutgoingCall,
+} from './callKit';
 
 /**
  * Appels audio, AU NIVEAU DE L'APPLICATION.
@@ -47,6 +55,15 @@ export type CallState = {
   speaker: boolean;
   /** Motif de fin, une fois l'appel terminé — sert au dernier écran affiché. */
   endedReason?: string;
+  /**
+   * L'écran d'appel du SYSTÈME a pris cet appel en charge.
+   *
+   * ⚠️ Sert à ne pas afficher deux interfaces d'appel entrant l'une sur l'autre : celle du
+   * système par-dessus la nôtre. Le calque de l'application s'efface alors pendant la
+   * sonnerie, et reprend la main au décroché — c'est lui qui porte la sourdine et le
+   * haut-parleur.
+   */
+  nativeUI?: boolean;
 };
 
 let engine: IRtcEngine | null = null;
@@ -86,21 +103,59 @@ const ensureEngine = (appId: string): IRtcEngine => {
      * Le correspondant est entré dans le canal : c'est à cet instant précis, et pas au
      * décroché, qu'on peut dire que la voix passe.
      */
-    onUserJoined: () => patch({ status: 'active', startedAt: state?.startedAt ?? Date.now() }),
+    onUserJoined: () => {
+      remoteCount += 1;
+      // ⚠️ Voir la garde de `onUserOffline` : un appel terminé ne se rouvre pas.
+      if (state?.status === 'ended') return;
+      patch({ status: 'active', startedAt: state?.startedAt ?? Date.now() });
+    },
     /**
-     * Il est parti. ⚠️ On ne termine pas l'appel ici : le serveur fait foi, et c'est
-     * `call_ended` qui clôt. Agora signale aussi ce départ lors d'une coupure réseau
-     * passagère, et raccrocher là-dessus couperait un appel qui allait se rétablir.
+     * Il est parti.
+     *
+     * ⚠️ On ne termine pas l'appel ici : le serveur fait foi, et c'est `call_ended` qui
+     * clôt. Agora signale aussi ce départ lors d'une coupure réseau passagère, et
+     * raccrocher là-dessus couperait un appel qui allait se rétablir.
+     *
+     * ⚠️ ON NE REPASSE EN « Connexion… » QUE S'IL NE RESTE PLUS PERSONNE. Le faire à chaque
+     * `onUserOffline` affichait « Connexion… » pendant une conversation parfaitement
+     * établie : Agora émet ce signal pour un décrochage passager, et rien ne le contredit
+     * ensuite puisque le correspondant n'a jamais vraiment quitté le canal — donc aucun
+     * `onUserJoined` ne vient remettre l'état en place. Signalé par Berke le 22/09.
      */
-    onUserOffline: () => patch({ status: 'connecting' }),
+    onUserOffline: () => {
+      remoteCount = Math.max(0, remoteCount - 1);
+      /**
+       * ⚠️ UN APPEL TERMINÉ NE REDEVIENT JAMAIS « en cours de connexion ».
+       *
+       * Ces signaux d'Agora arrivent APRÈS le raccroché — quitter le canal fait
+       * évidemment partir le correspondant. Sans cette garde, l'état repassait de
+       * « terminé » à « Connexion… » une fraction de seconde après le raccroché : l'écran
+       * affichait « Connexion… » au lieu de la durée, et SURTOUT il ne se fermait plus,
+       * puisque sa fermeture automatique est déclenchée par l'état « terminé ».
+       * Signalé par Berke le 22/09 — régression introduite par le compteur de participants.
+       */
+      if (state?.status === 'ended') return;
+      if (remoteCount === 0) patch({ status: 'connecting' });
+    },
   });
   engine = e;
   return e;
 };
 
+/**
+ * Nombre de participants distants réellement présents dans le canal.
+ *
+ * ⚠️ Un COMPTEUR et non un booléen : c'est ce qui permet de distinguer « le correspondant
+ * a quitté » de « l'un des signaux d'Agora est passé », et c'est déjà prêt pour un appel à
+ * plusieurs.
+ */
+let remoteCount = 0;
+
 /** Rejoint le canal de l'appel avec le jeton que le serveur vient de remettre. */
 const join = (info: { appId: string; channel: string; token: string; uid: number }) => {
   const e = ensureEngine(info.appId);
+  // Nouveau canal : personne d'autre n'y est encore.
+  remoteCount = 0;
   e.joinChannel(info.token, info.channel, info.uid, {
     clientRoleType: ClientRoleType.ClientRoleBroadcaster,
     // Un appel : tout le monde publie et reçoit.
@@ -117,6 +172,7 @@ const join = (info: { appId: string; channel: string; token: string; uid: number
  * souvent en même temps.
  */
 const leave = () => {
+  remoteCount = 0;
   try {
     engine?.leaveChannel();
   } catch {
@@ -151,6 +207,12 @@ export const startCall = async (
       speaker: false,
     };
     emit();
+    // La tonalité d'attente, dès que le serveur a accepté de faire sonner chez l'autre —
+    // pas avant : un appel refusé ne doit pas laisser un « brrr » derrière lui.
+    playRingback();
+    // L'appel apparaît dans l'historique téléphonique du système. ⚠️ La tonalité reste la
+    // NÔTRE : CallKit ne fournit pas de tonalité d'attente pour un appel sortant.
+    startOutgoingCall(call.callId, peer.name);
     /**
      * ⚠️ On NE rejoint PAS le canal tout de suite, alors que le jeton est déjà là : Agora
      * facture à la minute et par participant, et une sonnerie sans réponse coûterait
@@ -189,23 +251,77 @@ export const incomingCall = (callId: string, peer: CallPeer) => {
     speaker: false,
   };
   emit();
+  /**
+   * ⚠️ SI le système prend l'appel en charge, c'est LUI qui sonne — l'application ne doit
+   * surtout pas jouer sa sonnerie en plus, on entendrait les deux superposées. Notre
+   * sonnerie n'est donc qu'un REPLI, pour le cas où l'écran système n'est pas disponible
+   * (autorisation refusée, Android sans compte d'appel, module indisponible).
+   */
+  const native = displayIncomingCall(callId, peer.name);
+  if (native) state = { ...state, nativeUI: true };
+  else playRingtone();
+  emit();
 };
 
-/** Décrocher : le serveur ne remet le jeton qu'ici. */
-export const acceptCall = async (): Promise<boolean> => {
-  if (!state || state.direction !== 'incoming' || state.status !== 'ringing') return false;
+/**
+ * Décrocher. Le serveur ne remet le jeton qu'ici.
+ *
+ * ⚠️ `callIdFromSystem` est le cas le plus important, et le moins évident : quand on
+ * décroche depuis l'ÉCRAN VERROUILLÉ, l'application vient de démarrer à froid. C'est le
+ * code natif qui a fait sonner, à la réception du push VoIP ; le JavaScript, lui, n'a
+ * jamais vu passer d'appel et son état est vide. Sans cet identifiant venu du système, on
+ * sortait immédiatement — l'appel ne s'établissait pas et le téléphone de l'appelant
+ * continuait de sonner dans le vide.
+ */
+export const acceptCall = async (callIdFromSystem?: string): Promise<boolean> => {
+  /**
+   * ⚠️ NORMALISÉ EN MINUSCULES : CallKit rend les UUID en MAJUSCULES, nos identifiants sont
+   * en minuscules. Comparés ou utilisés tels quels, ils ne se rejoignent jamais.
+   */
+  const callId = (callIdFromSystem ?? state?.callId)?.toLowerCase();
+  if (!callId) return false;
+  // Un appel connu du JavaScript doit être en train de sonner ; un appel connu du seul
+  // système n'a pas d'état local à vérifier.
+  if (state && state.callId.toLowerCase() === callId) {
+    if (state.direction !== 'incoming' || state.status !== 'ringing') return false;
+  }
   try {
     const info = await apiRequest<{
       appId: string;
       channel: string;
       token: string;
       uid: number;
-    }>(`/calls/${state.callId}/accept`, { method: 'POST' });
-    patch({ status: 'connecting', startedAt: Date.now() });
+      peer: CallPeer;
+    }>(`/calls/${callId}/accept`, { method: 'POST' });
+
+    /**
+     * L'application démarrée à froid n'a aucun état : on le reconstruit à partir de ce que
+     * le serveur vient de renvoyer, sinon l'écran d'appel s'ouvrirait vide.
+     */
+    if (!state || state.callId.toLowerCase() !== callId) {
+      state = {
+        callId,
+        peer: info.peer,
+        direction: 'incoming',
+        status: 'connecting',
+        startedAt: Date.now(),
+        muted: false,
+        speaker: false,
+        nativeUI: true,
+      };
+      emit();
+    }
+    // ⚠️ Avant `join` : Agora prend la session audio en rejoignant le canal, et une
+    // sonnerie encore en cours se mêlerait à la conversation.
+    stopCallSounds();
+    reportConnected(callId);
+    patch({ status: 'connecting', startedAt: state?.startedAt ?? Date.now() });
     join(info);
     return true;
   } catch {
     // L'appel n'existe plus (raccroché pendant qu'on décrochait) : on ferme proprement.
+    stopCallSounds();
+    endNativeCall(callId);
     patch({ status: 'ended', endedReason: 'gone' });
     return false;
   }
@@ -214,6 +330,8 @@ export const acceptCall = async (): Promise<boolean> => {
 /** L'autre a décroché : c'est notre tour de rejoindre le canal. */
 export const peerAccepted = () => {
   if (!state || state.direction !== 'outgoing') return;
+  stopCallSounds();
+  reportConnected(state.callId);
   patch({ status: 'connecting', startedAt: Date.now() });
   if (pendingJoin) {
     join(pendingJoin);
@@ -230,6 +348,10 @@ export const peerAccepted = () => {
 export const hangUp = async (): Promise<void> => {
   const current = state;
   if (!current) return;
+  stopCallSounds();
+  // ⚠️ Sans ceci l'écran d'appel du système RESTE affiché et le téléphone se croit en
+  // communication : un appel fantôme que l'utilisateur ne peut fermer qu'en tuant l'app.
+  endNativeCall(current.callId);
   leave();
   pendingJoin = null;
   patch({ status: 'ended' });
@@ -243,6 +365,8 @@ export const hangUp = async (): Promise<void> => {
 /** L'appel a été clos par l'autre bout ou par le serveur (event `call_ended`). */
 export const callEnded = (callId: string, reason: string) => {
   if (!state || state.callId !== callId) return;
+  stopCallSounds();
+  endNativeCall(callId);
   leave();
   pendingJoin = null;
   patch({ status: 'ended', endedReason: reason });
@@ -262,6 +386,21 @@ export const clearCall = () => {
 export const toggleMute = () => {
   if (!state) return;
   const muted = !state.muted;
+  engine?.muteLocalAudioStream(muted);
+  // L'écran système a son propre bouton micro : les deux doivent dire la même chose.
+  setNativeMuted(state.callId, muted);
+  patch({ muted });
+};
+
+/**
+ * Sourdine demandée DEPUIS l'écran système.
+ *
+ * ⚠️ Distincte de `toggleMute` : celle-ci ne repasse pas l'information au système, qui en
+ * est justement l'auteur. Le faire renverrait l'ordre à son émetteur, et certains systèmes
+ * bouclent là-dessus.
+ */
+export const setMutedFromSystem = (muted: boolean) => {
+  if (!state) return;
   engine?.muteLocalAudioStream(muted);
   patch({ muted });
 };

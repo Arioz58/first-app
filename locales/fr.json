@@ -685,6 +685,9 @@
     "speaker": "Haut-parleur",
     "peer_busy": "Cette personne est déjà en ligne.",
     "unavailable": "Les appels ne sont pas disponibles pour le moment.",
-    "failed": "L'appel n'a pas pu être lancé."
+    "failed": "L'appel n'a pas pu être lancé.",
+    "missed": "Appel manqué",
+    "no_answer": "Sans réponse",
+    "empty": "Aucun appel pour le moment."
   }
 }

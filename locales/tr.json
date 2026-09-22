@@ -685,6 +685,9 @@
     "speaker": "Hoparlör",
     "peer_busy": "Bu kişi şu anda başka bir aramada.",
     "unavailable": "Aramalar şu anda kullanılamıyor.",
-    "failed": "Arama başlatılamadı."
+    "failed": "Arama başlatılamadı.",
+    "missed": "Cevapsız arama",
+    "no_answer": "Yanıt yok",
+    "empty": "Henüz arama yok."
   }
 }
