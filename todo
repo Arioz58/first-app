@@ -2733,9 +2733,216 @@ PUSH.
     si Agora est correctement branche.
     ⚠️ PAS VERIFIE : l'appel SORTANT (le bouton du chat), faute de pilotage tactile.
 
-  [PHASE 2b — reste a faire] Sonnerie et vibration locales pendant `ringing` : il n'y en a
-  AUCUNE aujourd'hui, l'ecran apparait en silence. Sur iOS la phase 3 (CallKit) l'apportera
-  nativement, mais Android et l'app au premier plan en ont besoin de toute facon.
+  [VERIFIE 22/09 par Berke, DEUX APPAREILS REELS] LA VOIX PASSE. Micro coupable et
+  haut-parleur fonctionnels. La phase 2 est close — c'etait la seule inconnue.
+  ⚠️ Il aura fallu installer `expo-dev-client` pour y arriver : l'app buildee par
+  `expo run:ios` n'en avait PAS, donc elle cherchait Metro a une adresse GRAVEE dans le
+  binaire au moment du build (`ip.txt`, l'IP du Mac) et ne pouvait en recevoir aucune autre.
+  Sur un reseau qui isole les appareils (fac), c'etait sans issue. Le simulateur, lui,
+  marchait : il utilise `localhost`, donc aucun reseau a traverser. Voir la note d'outillage.
+
+  [FAIT 22/09 - demande client] SONS D'APPEL : tonalite cote appelant, sonnerie cote appele.
+    « lorsque j'appelle quelqu'un, moi j'ai un indicateur sonore, une sorte de brrr...brrr,
+    et que la personne d'en face ait une sonnerie. »
+
+    → `lib/callSounds.ts` (nouveau) + `assets/sounds/ringback.wav` / `ringtone.wav`.
+    → branche sur SEPT points du cycle de vie dans `callEngine` : emission, reception,
+      decroche des deux cotes, raccroche, fin serveur, et echec au decroche.
+
+    ⚠️ MODULE SEPARE de `lib/sounds.ts`, et ce n'est pas de l'organisation : ce dernier est
+    soumis a l'interrupteur « sons des messages ». Un appel n'est pas un message — couper
+    les sons de messagerie ne doit pas rendre un telephone muet quand quelqu'un appelle.
+
+    ⚠️ FABRIQUES ici, rien d'emprunte (pas de licence a justifier en production) :
+      ringback : 425 Hz, 2 s de son / 4 s de silence — frequence et cadence europeennes et
+                 turques. C'est le MOTIF, pas le timbre, qui fait entendre « ca sonne chez
+                 l'autre ».
+      ringtone : re / fa# / la montants, repetes, puis un silence. Neutre, comme la consigne
+                 du client sur les sons de messages.
+      22 kHz mono : une tonalite a 425 Hz et des notes sous 1 kHz n'ont aucun besoin de
+      44,1 kHz — 258 et 134 Ko au lieu du double.
+
+    ⚠️ BOUCLE NATIVE (`loop`) et non un minuteur JavaScript : le silence fait partie du
+    fichier, donc la cadence ne derive pas et ne depend pas du fil JS, occupe ailleurs
+    pendant l'etablissement d'un appel.
+
+    ⚠️ La sonnerie est coupee AVANT `join` : Agora prend la session audio en rejoignant le
+    canal, et une sonnerie encore en cours se melerait a la conversation.
+
+    ⚠️ `stopCallSounds` doit rester indolore a appeler deux fois : les chemins de fin se
+    croisent (les deux appareils raccrochent souvent en meme temps). Un son d'appel qui
+    survit a l'appel est le pire defaut possible ici — il continue PAR-DESSUS la voix.
+
+    ⚠️ VIBRATION en boucle (1 s / 2 s) avec la sonnerie : c'est elle qui reste quand le
+    telephone est en silencieux, comme pour un appel telephonique.
+    ⚠️ A SURVEILLER, le meme piege que pour les sons de messages : `enterPlaybackMode()`
+    (appele apres tout vocal) pose `playsInSilentMode: true` GLOBALEMENT — apres avoir ecoute
+    un vocal, la sonnerie sonnera donc meme en silencieux.
+
+  [PHASE 3 — EN COURS 22/09] Appel sur ecran verrouille facon WhatsApp (CallKit).
+
+    [FAIT] Le RISQUE PRINCIPAL est leve : `react-native-callkeep` (4.3.16, non publie depuis
+    novembre 2024) COMPILE et DEMARRE en New Architecture. Plugin
+    `@config-plugins/react-native-callkeep@12.0.0` (et non la 14, qui exige Expo >= 56) : il
+    pose `voip` dans UIBackgroundModes, lie CallKit.framework et Intents.framework, et
+    declare le ConnectionService Android.
+    → `lib/callKit.ts` (nouveau) + branchement sur les 7 points du cycle dans `callEngine`
+      + actions systeme (decrocher / raccrocher / sourdine) branchees dans `_layout`.
+
+    ⚠️ CALLKIT NE S'AFFICHE PAS SUR SIMULATEUR (pas de telephonie). L'app retombe alors sur
+    son propre ecran — comportement voulu. Tout test de cette fonctionnalite doit se faire
+    sur APPAREIL REEL, et l'iPhone doit etre REBUILDE (callkeep est natif).
+
+    ⚠️ DOUBLE INTERFACE evitee : sans precaution, l'ecran systeme s'affiche PAR-DESSUS le
+    calque de l'application et l'utilisateur en referme un pour trouver l'autre derriere.
+    `nativeUI` dans l'etat de l'appel : le calque s'efface pendant la SONNERIE seulement, et
+    reprend la main au decroche — c'est lui qui porte la sourdine, le haut-parleur et la
+    duree.
+
+    ⚠️ LA SONNERIE DE L'APP NE JOUE PLUS quand le systeme prend l'appel en charge : sinon on
+    entend les deux superposees. Notre sonnerie devient un REPLI (autorisation refusee,
+    Android sans compte d'appel, module indisponible).
+
+    ⚠️ `endNativeCall` sur TOUS les chemins de fin : sans lui, l'ecran d'appel du systeme
+    RESTE affiche et le telephone se croit en communication — un appel fantome que
+    l'utilisateur ne peut fermer qu'en tuant l'application.
+
+    ⚠️⚠️ DEFAUT MAJEUR TROUVE ET CORRIGE LE 22/09 — « l'appel se lance mais direct apres ca
+    coupe » (signale par Berke). CallKit accepte `setup` ET `displayIncomingCall` SANS
+    BRONCHER sur simulateur, n'affiche rien, puis emet un `endCall` — que l'application
+    traduisait fidelement en raccroche. Tout appel etait donc REFUSE dans la seconde, et la
+    base le montrait : `declined`.
+    ⚠️ Ce n'est PAS une exception : le systeme repond normalement. Un `try/catch` ne pouvait
+    rien detecter — seule l'absence de telephonie distingue le cas. D'ou le test explicite
+    `Device.isDevice`. NE PAS le remplacer par une garde d'erreur.
+    ⚠️ Diagnostic fait PAR MESURE (trace sur l'evenement `endCall` + etat en base), pas par
+    lecture : la cause etait a l'oppose du symptome — c'est notre propre code qui
+    raccrochait, sur ordre d'un systeme qui n'avait rien affiche.
+    Deux gardes ajoutees au passage :
+      - une fin qui ne concerne PAS l'appel courant est ignoree (le systeme garde trace des
+        appels passes et peut en clore un ancien, ce qui raccrocherait celui en cours) ;
+      - la fin que NOUS demandons ne nous revient plus : `endNativeCall` declenche
+        `endCall`, qui relancait `hangUp`, donc `endNativeCall` — une boucle sans sortie.
+
+    [FAIT 22/09 — LA CHAINE PUSHKIT EST COMPLETE, reste a tester sur appareil reel]
+    Le client : « quand on appelle quelqu'un qui a le telephone verrouille, que ca s'affiche
+    comme un appel normal provenant de Nexa, exactement comme WhatsApp ».
+
+    → `plugins/withVoipPush.js` (CONFIG PLUGIN MAISON) injecte PushKit dans
+      `AppDelegate.swift` et dans le bridging header A CHAQUE PREBUILD. ⚠️ Sans ce plugin,
+      le code disparaitrait au build suivant (`prebuild --clean` est obligatoire chez nous a
+      cause de @bacons/apple-targets) et la fonctionnalite s'evaporerait SANS RIEN SIGNALER.
+    → `src/lib/apns.ts` : envoi direct a Apple en HTTP/2 (obligatoire, APNs refuse HTTP/1.1),
+      jeton d'autorisation ES256 mis en cache 50 min (Apple refuse qu'on en regenere trop :
+      `TooManyProviderTokenUpdates`).
+    → migration `voip_token` + `POST/DELETE /users/me/voip-token` + `lib/voipPush.ts`.
+    → `calls.service` : push VoIP si jeton present, sinon repli sur notification ordinaire
+      (Android, et iPhone dont le build est anterieur).
+
+    ⚠️ REGLE D'APPLE NON NEGOCIABLE (iOS 13+) : a la reception d'un push VoIP, l'application
+    DOIT signaler l'appel a CallKit dans le MEME CYCLE. Sinon iOS tue le processus et finit
+    par ne plus delivrer les pushes du tout. D'ou `reportNewIncomingCall` appele en NATIF,
+    avant meme de prevenir le JavaScript — qui n'est pas demarre quand le telephone est
+    verrouille.
+
+    ⚠️ CONTRAT FRAGILE : les champs `callId` et `callerName` de la charge utile sont lus par
+    le code NATIF. Les renommer d'un cote ferait sonner un appel sans nom, ou pas du tout.
+
+    ⚠️ Le jeton VoIP est DISTINCT du jeton push habituel (Apple en delivre deux, non
+    interchangeables). Meme transaction de retrait des autres comptes que pour `fcmToken` :
+    un jeton identifie un APPAREIL. Libere a la deconnexion, avant d'effacer la session.
+
+    ⚠️ CLE APNS RESTREINTE A SANDBOX (celle de Berke, 22/09) : elle marche en developpement
+    mais PAS en TestFlight ni sur l'App Store, qui passent par la passerelle de production.
+    A remplacer par une cle « Sandbox & Production » AVANT la prochaine livraison au client —
+    sinon les appels arriveront chez lui sans jamais sonner.
+
+    ⚠️ DEUX ERREURS PAYEES, a ne pas refaire :
+      - `import RNVoipPushNotification` en Swift → « no such module ». Ces classes sont en
+        OBJECTIVE-C : elles passent par le BRIDGING HEADER, pas par un import Swift.
+        L'erreur laisse croire a un paquet manquant alors qu'il est bien installe.
+      - Prisma n'accepte PAS les commentaires `/** */`, seulement `//`. Le schema devenait
+        invalide avec 8 erreurs de validation sans rapport apparent.
+      - ⚠️ Et une erreur de DIAGNOSTIC : le repli sur l'autre passerelle APNs retournait
+        l'erreur du SECOND essai. Un franc `BadDeviceToken` (= toute la configuration est
+        bonne) se presentait donc en `BadEnvironmentKeyInToken`, et l'on cherchait le defaut
+        du mauvais cote. Le premier diagnostic est desormais conserve.
+
+    ⚠️ RAPPEL : le formateur d'Expo annonce « 0 error(s) » juste avant d'echouer. Les vraies
+    erreurs sont dans `.expo/xcodebuild.log`, jamais dans la sortie de `expo run:ios`.
+
+    [VERIFIE 22/09 par Berke, IPHONE REEL] L'appel arrive et fonctionne dans les TROIS cas :
+    application ouverte, application en arriere-plan, et ECRAN VERROUILLE avec l'ecran
+    d'appel du systeme. La demande du client est satisfaite.
+
+    ⚠️⚠️ LE DEFAUT LE PLUS INSTRUCTIF DE TOUT LE CHANTIER — « ca decroche puis raccroche
+    direct », ECRAN VERROUILLE UNIQUEMENT. Cause : `expo-secure-store` ecrit par defaut en
+    `WHEN_UNLOCKED`, donc LE TROUSSEAU EST ILLISIBLE TANT QUE LE TELEPHONE EST VERROUILLE.
+    Au decroche, l'application ne pouvait pas lire son jeton, la requete partait sans
+    authentification, echouait, et le code raccrochait sur l'echec.
+    → `SESSION_OPTIONS = { keychainAccessible: AFTER_FIRST_UNLOCK }` sur les 3 cles de
+      session (`lib/storage.ts`).
+    ⚠️ Une cle GARDE l'accessibilite qu'elle avait A L'ECRITURE : changer l'option ne touche
+      pas l'existant. D'ou `migrateSessionAccessibility()` au demarrage — sans elle, il
+      aurait fallu se deconnecter/reconnecter, ce que PERSONNE n'aurait devine.
+    ⚠️ `saveAccessToken` (renouvellement toutes les 15 min) doit porter LA MEME option,
+      sinon le defaut revient tout seul un quart d'heure plus tard.
+    ⚠️ Compromis assume : apres un redemarrage du telephone, tant qu'il n'a pas ete
+      deverrouille une fois, la session reste illisible. C'est voulu — c'est ce qui protege
+      les jetons sur un telephone eteint qu'on aurait vole.
+    ⚠️ CE DEFAUT TOUCHE TOUT CE QUI AGIT EN ARRIERE-PLAN, pas seulement les appels : les
+      accuses de reception et la reponse depuis une notification passaient par le meme
+      trousseau. La correction les repare aussi.
+
+    ⚠️ « Connexion… » affiche pendant une conversation deja etablie (signale par Berke) :
+    l'etat retombait en `connecting` a CHAQUE `onUserOffline` d'Agora, qui emet ce signal
+    pour un decrochage passager — et rien ne le contredisait ensuite, le correspondant
+    n'ayant jamais vraiment quitte le canal. Remplace par un COMPTEUR de participants
+    distants : on ne repasse en « Connexion… » que s'il ne reste plus personne.
+
+    ⚠️ REGRESSION INTRODUITE PAR LE CORRECTIF PRECEDENT, signalee par Berke : au raccroche,
+    l'ecran affichait « Connexion… » au lieu de la duree ET NE SE FERMAIT PLUS. Les signaux
+    d'Agora arrivent APRES le raccroche — quitter le canal fait evidemment partir le
+    correspondant —, et le compteur de participants les traitait comme une perte de
+    connexion, ecrasant l'etat « termine ». Or la fermeture automatique du calque est
+    declenchee par cet etat.
+    → Garde sur les DEUX signaux : un appel termine ne change plus jamais d'etat.
+    ⚠️ Lecon : tout signal d'un moteur externe peut arriver APRES la fin de ce qu'il decrit.
+    Un etat terminal doit etre absorbant.
+
+    [DEV CLIENT RETIRE le 22/09, a la demande de Berke] `expo-dev-client` avait ete ajoute
+    pour joindre Metro a travers un tunnel depuis le reseau de la fac. Il genait le travail
+    quotidien (ecran de lanceur, logs, `r` qui ne rechargeait plus). Retire + rebuild des
+    deux appareils ; callkeep, le push VoIP et PushKit sont bien reinjectes par le plugin
+    maison dans un AppDelegate tout neuf.
+    ⚠️ Consequence : l'adresse de Metro est de nouveau GRAVEE au build (`ip.txt`). A
+    reinstaller le temps d'un deplacement si le reseau isole les appareils.
+
+    ⚠️ PIEGE D'OUTILLAGE PAYE DEUX FOIS : apres un lot de modifications, le premier
+    chargement demande a Metro de RECONSTRUIRE 2681 modules / 16 Mo. L'appareil attend, puis
+    abandonne avec « Could not connect to development server » — un message qui accuse le
+    reseau alors que le serveur est joignable et simplement occupe. REFLEXE : charger le
+    bundle une fois depuis le Mac (`curl` sur l'URL du bundle) AVANT d'ouvrir l'app.
+
+    [PROTOCOLE DE TEST, a garder] Le simulateur ne recoit AUCUN push VoIP. Protocole :
+    rebuild de l'iPhone, verifier « [voip] Jeton enregistre » dans les logs, puis appeler
+    depuis un autre compte telephone VERROUILLE. Ce qui precede ne donne l'ecran
+    systeme que si l'APPLICATION TOURNE. Or elle FERME SON SOCKET en arriere-plan (c'est ce
+    qui permet aux notifications d'exister), donc `call_incoming` n'arrive jamais a un
+    telephone verrouille : il ne sonnera pas du tout. Il faut :
+      - une cle APNs .p8 (compte Apple Developer de Berke) ;
+      - `react-native-voip-push-notification` + un CONFIG PLUGIN MAISON pour l'AppDelegate,
+        que `prebuild --clean` regenere a chaque build ;
+      - une colonne de plus en base : le jeton VoIP est DISTINCT du jeton push habituel ;
+      - un envoi DIRECT a Apple cote serveur (topic `com.berke.nexa2.voip`) — Expo Push ne
+        sait pas envoyer de push VoIP.
+    ⚠️ Depuis iOS 13, un push VoIP DOIT signaler l'appel a CallKit immediatement, sinon iOS
+    tue l'application. Ce n'est pas optionnel.
+    ⚠️ Android n'a pas de PushKit : push FCM haute priorite + ConnectionService.
+
+    [A CORRIGER] Le plugin declare le service Android sous le libelle « Wazo » (le nom du
+    projet d'origine de callkeep). C'est ce que verrait un utilisateur Android dans ses
+    reglages de comptes d'appel.
 
   [PHASE 2 — historique] `react-native-agora`
   (4.6.4, compatible New Architecture — verifie dans son `codegenConfig`), ecran d'appel,
