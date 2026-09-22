@@ -2533,9 +2533,98 @@ PUSH.
   AUCUNE app mobile ouverte, et `playReceived()` ne part que du socket, qui n'existe qu'au
   premier plan. Les deux chemins s'excluent par construction.
 
-  ⚠️ A TESTER SUR APPAREIL REEL, ET APRES REBUILD. Le push ne fonctionne pas sur simulateur, et
-  le fichier n'entre dans l'app qu'a la compilation :
+  [VERIFIE 22/09 par Berke, sur appareil reel apres rebuild] Le son de l'app se joue bien
+  sur les notifications push — « ils sont parfaits ». Le chantier des sons est CLOS.
+
+  ⚠️ RAPPEL POUR LA SUITE (c'est ainsi que la verification ci-dessus a ete faite) : le push ne
+  fonctionne pas sur simulateur, et le fichier n'entre dans l'app qu'a la compilation :
       npx expo prebuild -p ios --clean   (⚠️ `--clean` obligatoire, cf. @bacons/apple-targets)
       puis build EAS ou `npx expo run:ios --device`
   Tant que le rebuild n'est pas fait, le son envoye n'existe pas sur l'appareil et iOS retombe
   silencieusement sur le son systeme — rien ne casse, mais rien ne change non plus.
+
+[FAIT 22/09 - RETOUR CLIENT, ⚠️ REBUILD NON REQUIS] REPONDRE DEPUIS LA NOTIFICATION.
+  Derniere demande du 3e retour : « repondre directement en restant appuye sur la
+  notification sans passer par Nexa ».
+
+  ⚠️ LE POINT DUR N'EST PAS L'INTERFACE, C'EST QU'IL N'Y AVAIT AUCUN MOYEN D'ENVOYER UN
+  MESSAGE SANS SOCKET. Tout passait par l'event `send_message`, or l'app FERME son socket
+  en arriere-plan — c'est precisement ce qui permet aux notifications d'exister. Au moment
+  ou l'on repond a l'une d'elles, il n'y a donc plus de socket pour envoyer.
+
+  BACKEND — la logique d'envoi est SORTIE du handler socket :
+    → `src/modules/messages/deliver.service.ts` (nouveau) porte `deliverMessage()` : les
+      ~300 lignes qui etaient dans `lib/socket.ts` (blocage, whoCanSend, ephemeres, albums,
+      alerte in-app, push, accuses de reception).
+    → `lib/socket.ts` n'en est plus que l'entree socket (15 lignes) ; `PUBLIC_URL`,
+      `batchExpected` et `messageSummary` ont suivi.
+    → nouvelle route `POST /conversations/:id/messages` (JWT ordinaire) qui appelle LA MEME
+      fonction.
+    ⚠️ UNE SEULE implementation, pas deux : un second chemin d'envoi qui sauterait
+    l'alerte, le push ou l'accuse produirait un message que la liste des conversations ne
+    remonte pas, ou dont personne n'est prevenu.
+    ⚠️ Le service rend un MOTIF (`not_member` / `blocked` / `admins_only`), pas une phrase :
+    le socket en fait un `error`, la route un code HTTP. Tous les refus sortent en 403 —
+    distinguer « pas membre » de « bloque » revelerait l'existence d'un blocage.
+    VERIFIE PAR MESURE (deux comptes reels, socket + REST) : le chemin socket emet toujours
+    `new_message` ET `conversation_updated` avec son `alert` ✅ ; le chemin REST produit
+    exactement les memes evenements ✅ ; pas de fuite telephone/jeton dans la reponse ✅ ;
+    non-membre 403 ✅ ; contenu vide 400 ✅. Messages de test supprimes de la base.
+
+  MOBILE :
+    → `lib/notifications.ts` : `registerReplyCategory()` pose la categorie `message` avec
+      une action `reply` a champ de saisie, et `sendReplyFromNotification()` envoie par
+      REST puis marque la conversation LUE (repondre, c'est avoir lu) et vide la pastille.
+    → `app/_layout.tsx` : l'ecouteur de reponse distingue desormais le TAP (ouvre la
+      conversation, comme avant) de l'ACTION `reply` (envoie, et surtout ne navigue pas).
+    → `src/lib/push.ts` + `deliver.service.ts` : `categoryId: 'message'` sur les seules
+      notifications de MESSAGE. Repondre a « X vous a ajoute au groupe » n'aurait pas de
+      sens, et le texte partirait dans une conversation non choisie.
+    → i18n `notifications.reply_*` dans les 3 langues.
+
+  ⚠️ LA CONTRAINTE CENTRALE, documentee par expo-notifications
+  (`Notifications.types.d.ts`, option `opensAppToForeground`) : a `false` — le seul reglage
+  qui reponde a la demande — l'ecouteur NE SE DECLENCHE PAS si l'application a ete TUEE
+  (balayee du selecteur), et le texte est perdu. En arriere-plan ordinaire, qui est le cas
+  de loin le plus courant, il se declenche normalement.
+  → Decision du 22/09 (Berke) : livrer la version JS, MESURER sur appareil reel ce qui se
+    passe vraiment app tuee, et ne decider du natif (Swift + Kotlin + plugin de config)
+    qu'avec la mesure en main.
+
+  ⚠️ GARDE ANTI-DOUBLON, indispensable et facile a oublier : une reponse deja traitee reste
+  la « derniere reponse » que le systeme rend au lancement suivant
+  (`getLastNotificationResponseAsync`). Sans garde, chaque demarrage a froid renverrait le
+  meme message. Naviguer deux fois vers une conversation est sans consequence ; envoyer
+  deux fois un message ne l'est pas. L'identifiant de la notification est donc retenu en
+  SecureStore — PERSISTE, puisque le cas a couvrir est justement le redemarrage.
+
+  ⚠️ L'ECHEC EST ANNONCE par une notification locale : c'est le seul moment ou l'utilisateur
+  ne voit rien de ce qui se passe, et un message perdu (reseau coupe) le laisserait croire
+  qu'il a repondu.
+
+  [VERIFIE 22/09 par Berke] La reponse depuis la notification fonctionne. ⚠️ Ce qui a ete
+  constate, c'est que le chemin marche ; l'etat « application TUEE » n'a pas ete distingue
+  explicitement — si la perte silencieuse decrite plus haut se manifeste un jour, c'est de
+  la que ca viendra, et c'est ce cas-la qui declencherait le passage au natif.
+
+  [PROTOCOLE, garde pour la prochaine verification]
+    Aucun pilotage tactile n'est disponible depuis la session (ni idb ni fbsimctl), et
+    derouler une notification pour y taper du texte ne se fait pas autrement. Protocole :
+      1. simulateur ou iPhone, app AU PREMIER PLAN puis en ARRIERE-PLAN puis TUEE ;
+      2. recevoir un message (ou `xcrun simctl push booted com.berke.nexa2 <payload>` avec
+         `"category": "message"`) ;
+      3. derouler la notification, taper une reponse, envoyer ;
+      4. constater : l'app NE s'ouvre PAS, le message arrive chez l'autre, la conversation
+         passe en lu, la pastille retombe.
+    ⚠️ Le cas « app tuee » est celui qui decide de la suite du chantier.
+    ⚠️ A verifier aussi : que l'extension de notification iOS, qui REECRIT le contenu
+    (`content.updating(from: intent)`), conserve bien la categorie — sinon l'action
+    disparait justement sur les notifications de message, les seules qui la portent.
+    ⚠️ ANDROID non verifie : `textInput` devient un `RemoteInput`, et le canal est
+    `messages`. Voir android.md.
+
+[INTENDANCE 22/09] Changement de reseau Wi-Fi : l'IP de la machine est passee a
+  172.29.80.117. `LOCAL_URL` (`first-app/lib/config.ts`) et `PUBLIC_URL`
+  (`first-app-backend/.env`) mises a jour ; l'URL d'API du web reste `localhost`, le
+  serveur tournant sur la meme machine. ⚠️ `nodemon` ne surveille PAS le `.env` : relancer
+  le backend pour qu'il serve la nouvelle `PUBLIC_URL` dans ses notifications.
