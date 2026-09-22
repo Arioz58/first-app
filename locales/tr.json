@@ -354,7 +354,12 @@
   },
   "notifications": {
     "friend_request": "size arkadaşlık isteği gönderdi",
-    "friend_accepted": "arkadaşlık isteğinizi kabul etti"
+    "friend_accepted": "arkadaşlık isteğinizi kabul etti",
+    "reply_action": "Yanıtla",
+    "reply_send": "Gönder",
+    "reply_placeholder": "Mesaj",
+    "reply_failed_title": "Mesaj gönderilemedi",
+    "reply_failed_body": "Sohbeti yeniden açıp tekrar denemek için dokunun."
   },
   "moderation": {
     "block": "Engelle",

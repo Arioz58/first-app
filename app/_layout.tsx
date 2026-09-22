@@ -15,7 +15,12 @@ import {
   refreshPendingFriendRequests,
 } from "../lib/friendRequests";
 import i18n from "../lib/i18n";
-import { registerForPushNotifications } from "../lib/notifications";
+import {
+  REPLY_ACTION,
+  registerForPushNotifications,
+  registerReplyCategory,
+  sendReplyFromNotification,
+} from "../lib/notifications";
 // ⚠️ Importé au niveau module, pas dans un effet : la tâche doit être DÉFINIE avant que le
 // système ne réveille l'app pour une notification — à ce moment-là aucun composant n'a été
 // rendu, et une tâche non définie est simplement perdue.
@@ -197,18 +202,39 @@ export default function RootLayout() {
       router.push({ pathname: "/chat/[id]" as any, params });
     };
 
+    /**
+     * Toucher la notification l'ouvre ; répondre dans son champ de saisie envoie le
+     * message SANS rien ouvrir. Les deux arrivent par le même écouteur, et c'est
+     * `actionIdentifier` qui les distingue.
+     */
+    const handle = (response: Notifications.NotificationResponse) => {
+      const data = response.notification.request.content.data;
+      if (response.actionIdentifier === REPLY_ACTION) {
+        const conversationId = data?.conversationId;
+        if (typeof conversationId === "string" && response.userText) {
+          // ⚠️ Aucune navigation : on répond justement pour ne pas ouvrir l'application.
+          // L'identifiant de la notification sert de garde anti-doublon (voir la fonction).
+          sendReplyFromNotification(
+            conversationId,
+            response.userText,
+            response.notification.request.identifier,
+          );
+        }
+        return;
+      }
+      open(data);
+    };
+
     // App lancée DEPUIS la notification (elle était fermée) : l'événement est déjà passé
     // quand ce composant se monte, il faut donc le récupérer a posteriori.
     Notifications.getLastNotificationResponseAsync()
       .then((response) => {
-        if (response) open(response.notification.request.content.data);
+        if (response) handle(response);
       })
       .catch(() => {});
 
     // App déjà lancée (arrière-plan ou premier plan).
-    const sub = Notifications.addNotificationResponseReceivedListener((response) =>
-      open(response.notification.request.content.data),
-    );
+    const sub = Notifications.addNotificationResponseReceivedListener(handle);
     return () => sub.remove();
   }, [router]);
 
@@ -378,6 +404,10 @@ export default function RootLayout() {
       registerForPushNotifications()
         .then(() => registerDeliveryReceiptTask())
         .catch(() => {});
+      // ⚠️ Séparée de l'enregistrement du jeton, qui s'arrête au simulateur (pas de push
+      // distant) : la catégorie, elle, sert aussi aux notifications locales, et c'est ce
+      // qui permet de l'essayer sans appareil réel.
+      registerReplyCategory();
       refreshPendingFriendRequests();
     };
 

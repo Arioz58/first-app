@@ -354,7 +354,12 @@
   },
   "notifications": {
     "friend_request": "sent you a friend request",
-    "friend_accepted": "accepted your friend request"
+    "friend_accepted": "accepted your friend request",
+    "reply_action": "Reply",
+    "reply_send": "Send",
+    "reply_placeholder": "Message",
+    "reply_failed_title": "Message not sent",
+    "reply_failed_body": "Tap to reopen the conversation and try again."
   },
   "moderation": {
     "block": "Block",

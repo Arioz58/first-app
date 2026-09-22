@@ -354,7 +354,12 @@
   },
   "notifications": {
     "friend_request": "vous a envoyé une demande d'ami",
-    "friend_accepted": "a accepté votre demande d'ami"
+    "friend_accepted": "a accepté votre demande d'ami",
+    "reply_action": "Répondre",
+    "reply_send": "Envoyer",
+    "reply_placeholder": "Message",
+    "reply_failed_title": "Message non envoyé",
+    "reply_failed_body": "Touchez pour rouvrir la conversation et réessayer."
   },
   "moderation": {
     "block": "Bloquer",

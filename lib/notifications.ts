@@ -3,6 +3,9 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { apiRequest } from "./api";
+import i18n from "./i18n";
+import { clearUnread } from "./unreadMessages";
+import * as SecureStore from "expo-secure-store";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -13,6 +16,121 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
+
+/**
+ * Réponse directe depuis la notification, sans ouvrir l'application.
+ *
+ * ⚠️ L'action n'apparaît QUE si la notification porte cette catégorie : le serveur l'envoie
+ * dans son push (`categoryId`, voir `src/lib/push.ts`). Une notification sans catégorie
+ * s'affiche normalement, simplement sans champ de réponse — rien ne casse sur les anciennes
+ * versions de l'app, qui n'ont pas enregistré la catégorie.
+ *
+ * ⚠️ Les libellés sont FIGÉS au moment de l'enregistrement, dans la langue de l'app à cet
+ * instant. C'est pour cela qu'on réenregistre à chaque démarrage plutôt qu'une fois pour
+ * toutes : changer la langue dans le profil doit changer le bouton de la notification.
+ */
+export const REPLY_CATEGORY = "message";
+export const REPLY_ACTION = "reply";
+
+export const registerReplyCategory = async (): Promise<void> => {
+  if (Platform.OS === "web") return;
+  try {
+    await Notifications.setNotificationCategoryAsync(REPLY_CATEGORY, [
+      {
+        identifier: REPLY_ACTION,
+        buttonTitle: i18n.t("notifications.reply_action"),
+        textInput: {
+          submitButtonTitle: i18n.t("notifications.reply_send"),
+          placeholder: i18n.t("notifications.reply_placeholder"),
+        },
+        options: {
+          /**
+           * ⚠️ `false` = c'est tout l'intérêt : répondre SANS ouvrir l'application, ce que
+           * le client a demandé.
+           *
+           * ⚠️ Contrepartie documentée par `expo-notifications` : si l'application a été
+           * TUÉE (balayée du sélecteur, pas simplement mise en arrière-plan), l'écouteur de
+           * réponse ne se déclenche pas et le texte est perdu. Couvrir ce cas demanderait
+           * du code natif des deux côtés. À mesurer sur appareil réel avant d'y aller.
+           */
+          opensAppToForeground: false,
+        },
+      },
+    ]);
+  } catch (e) {
+    // Catégorie refusée : les notifications s'affichent toujours, sans champ de réponse.
+    console.warn("[push] Catégorie de réponse indisponible :", e);
+  }
+};
+
+/**
+ * Envoie la réponse saisie dans la notification.
+ *
+ * ⚠️ Par l'API REST et NON par le socket : à ce moment précis, l'application est en
+ * arrière-plan et son socket est fermé — c'est justement cette fermeture qui fait que la
+ * notification existe. Le serveur expose `POST /conversations/:id/messages`, qui passe par
+ * la même fonction d'envoi que le socket (alerte, push, accusés compris).
+ *
+ * ⚠️ On marque aussi la conversation comme LUE : répondre à un message, c'est l'avoir lu,
+ * et sans cela la pastille resterait allumée sur une conversation à laquelle on vient de
+ * répondre.
+ *
+ * ⚠️ L'échec est ANNONCÉ, par une notification locale. C'est le seul point de la
+ * fonctionnalité où l'utilisateur ne voit rien de ce qui se passe : sans ce retour, un
+ * message perdu (réseau coupé au moment de la réponse) le laisserait croire qu'il a
+ * répondu.
+ */
+const HANDLED_REPLY_KEY = "lastHandledReply";
+
+export const sendReplyFromNotification = async (
+  conversationId: string,
+  text: string,
+  notificationId: string,
+): Promise<void> => {
+  const content = text.trim();
+  if (!content) return;
+
+  /**
+   * ⚠️ Garde ANTI-DOUBLON, et elle est indispensable.
+   *
+   * Une réponse déjà traitée reste la « dernière réponse » que le système nous rend au
+   * lancement suivant (`getLastNotificationResponseAsync`) : sans cette garde, chaque
+   * démarrage à froid renverrait le même message. Naviguer deux fois vers une
+   * conversation est sans conséquence ; envoyer deux fois un message ne l'est pas.
+   *
+   * ⚠️ Persistée et non gardée en mémoire : le cas à couvrir est précisément celui où
+   * l'application redémarre.
+   */
+  try {
+    if ((await SecureStore.getItemAsync(HANDLED_REPLY_KEY)) === notificationId) return;
+    await SecureStore.setItemAsync(HANDLED_REPLY_KEY, notificationId);
+  } catch {
+    // Trousseau indisponible : on préfère envoyer que perdre la réponse de l'utilisateur.
+  }
+  try {
+    await apiRequest(`/conversations/${conversationId}/messages`, {
+      method: "POST",
+      body: { content },
+    });
+    await apiRequest(`/conversations/${conversationId}/read`, { method: "POST" }).catch(
+      () => {},
+    );
+    // La pastille de l'onglet et celle de l'icône suivent le même store : sans cela elles
+    // garderaient le compte d'avant la réponse jusqu'au prochain passage par la liste.
+    clearUnread(conversationId);
+  } catch {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: i18n.t("notifications.reply_failed_title"),
+        body: i18n.t("notifications.reply_failed_body"),
+        // ⚠️ Pas de catégorie ici : proposer de « répondre » à un échec d'envoi rouvrirait
+        // le même chemin sur une notification qui n'appartient à aucune conversation.
+        data: { conversationId },
+      },
+      trigger: null,
+    });
+  }
+};
 
 export const registerForPushNotifications = async (): Promise<
   string | null
