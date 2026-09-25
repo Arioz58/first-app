@@ -703,6 +703,15 @@
     "back": "Back",
     "filter_all": "All",
     "filter_missed": "Missed",
-    "empty_missed": "No missed calls."
+    "empty_missed": "No missed calls.",
+    "minimize": "Minimize call",
+    "banner_hint": "Tap to return to the call",
+    "history_live": "Call in progress…",
+    "history_declined": "Declined call",
+    "call_other_device": "This call is taking place on another device.",
+    "audio_call": "Voice call",
+    "tap_to_join": "Tap to answer",
+    "tap_to_return": "Tap to return to the call",
+    "tap_to_call_back": "Tap to call back"
   }
 }

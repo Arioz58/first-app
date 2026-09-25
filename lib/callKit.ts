@@ -161,6 +161,26 @@ export const startOutgoingCall = (callId: string, calleeName: string) => {
   }
 };
 
+/**
+ * Décrocher DEPUIS L'APPLICATION un appel que le système fait sonner (bulle d'appel du chat).
+ *
+ * ⚠️ On demande au système de décrocher, on ne décroche pas dans son dos : il arrête alors
+ * sa sonnerie, passe l'appel en « en cours », et renvoie l'événement `answerCall` — le MÊME
+ * chemin que le bouton vert de son écran. Décrocher directement en laissant l'écran système
+ * sonner donnerait une conversation sous une sonnerie qui continue.
+ *
+ * Renvoie `false` si le système n'a pas cet appel : l'appelant décroche alors lui-même.
+ */
+export const answerNativeCall = (callId: string) => {
+  if (!ready || !currentUuid || currentUuid.toLowerCase() !== callId.toLowerCase()) return false;
+  try {
+    RNCallKeep.answerIncomingCall(currentUuid);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 /** Le correspondant a décroché : le système passe l'appel en « en cours ». */
 export const reportConnected = (callId: string) => {
   if (!ready) return;

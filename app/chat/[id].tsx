@@ -31,7 +31,15 @@ import * as Linking from 'expo-linking';
 import { AudioModule } from 'expo-audio';
 import i18n from '../../lib/i18n';
 import { apiRequest, clearConversation } from '../../lib/api';
-import { startCall } from '../../lib/callEngine';
+import {
+  acceptCall,
+  answerFromApp,
+  expandCall,
+  getCurrentCall,
+  startCall,
+} from '../../lib/callEngine';
+import type { CallInfo } from '../../lib/callHistory';
+import { CallBubble } from '../../components/CallBubble';
 import { connectSocket, getSocket } from '../../lib/socket';
 import { playSent } from '../../lib/sounds';
 import { toUploadableImage, uploadFile } from '../../lib/upload';
@@ -261,6 +269,8 @@ type Message = {
   deletedAt?: string | null;
   /** Aperçu du premier lien, résolu par le serveur APRÈS l'envoi (arrive par socket). */
   linkPreview?: LinkPreview | null;
+  /** Bulle d'appel (`type: 'call'`) : l'état RÉEL de l'appel, tenu à jour par socket. */
+  call?: CallInfo | null;
 };
 
 /**
@@ -322,6 +332,9 @@ const sameGroup = (a?: Message, b?: Message) =>
   !!b &&
   a.type !== 'system' &&
   b.type !== 'system' &&
+  // Une bulle d'appel est hors série : elle n'a ni nom d'auteur ni queue de bulle.
+  a.type !== 'call' &&
+  b.type !== 'call' &&
   !isStoryReplyMsg(a) &&
   !isStoryReplyMsg(b) &&
   !!a.sender?.id &&
@@ -1325,6 +1338,9 @@ type ChatRowProps = {
   setReactionsOf: (ids: string[] | null) => void;
   setScrollTarget: (id: string | null) => void;
   toggleSelected: (id: string) => void;
+  /** Bulle d'appel : répondre, revenir à l'appel ou rappeler (voir `onCallPress`). */
+  onCallPress: (m: Message) => void;
+  onCallLongPress: (messageId: string) => void;
 };
 
 const ChatRow = React.memo(
@@ -1363,6 +1379,8 @@ const ChatRow = React.memo(
     setReactionsOf,
     setScrollTarget,
     toggleSelected,
+    onCallPress,
+    onCallLongPress,
   }: ChatRowProps) {
     // ⚠️ Lu ICI et pas en prop : le comparateur du memo l'ignorerait, mais `theirBubble`
     // change avec le thème et force déjà le re-rendu — le hook relit alors la bonne valeur.
@@ -1381,6 +1399,29 @@ const ChatRow = React.memo(
             {systemText(item.content)}
           </Text>
         </View>
+      );
+    }
+
+    /**
+     * Bulle d'appel. ⚠️ Hors du `GestureDetector` des bulles ordinaires : ni glisser pour
+     * répondre, ni réactions, ni transfert — c'est la trace d'un appel, pas un message
+     * qu'on a écrit. L'appui long ne propose que « supprimer pour moi » (le serveur refuse
+     * de toute façon le reste).
+     */
+    if (item.type === 'call' && item.call) {
+      return (
+        <>
+          {mode === 'list' && !!daySeparator && <DateSeparator label={daySeparator} />}
+          {mode === 'list' && !!dividerLabel && <UnreadDivider label={dividerLabel} />}
+          <CallBubble
+            call={item.call}
+            currentUserId={currentUserId}
+            time={formatTime(item.createdAt)}
+            t={t}
+            onPress={() => onCallPress(item)}
+            onLongPress={() => onCallLongPress(item.id)}
+          />
+        </>
       );
     }
     const isMe = item.sender?.id === currentUserId;
@@ -2155,6 +2196,8 @@ export default function ChatScreen() {
   const typingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null); // arrêt auto de notre frappe
   const peerTypingRef = useRef<ReturnType<typeof setTimeout> | null>(null); // masquage auto (5 s)
   const otherUserIdRef = useRef<string | null>(null); // pour filtrer les events présence
+  // Écouteur de `call_message_updated`, gardé pour être retiré NOMMÉMENT (voir son montage).
+  const callMessageHandlerRef = useRef<((d: any) => void) | null>(null);
   // Pièces jointes / médias (Phase D)
   const [viewer, setViewer] = useState<{ type: 'image' | 'video'; url: string } | null>(null);
   const [albumView, setAlbumView] = useState<{ items: AlbumItem[]; index: number } | null>(
@@ -2779,6 +2822,23 @@ export default function ChatScreen() {
           },
         );
 
+        /**
+         * Bulle d'appel : l'appel a changé d'état (décroché, fini, manqué).
+         *
+         * ⚠️ Gestionnaire NOMMÉ, retiré nommément au démontage : la liste des conversations
+         * écoute le même événement, et un `off` sans gestionnaire lui retirerait le sien.
+         */
+        const onCallMessageUpdated = (d: {
+          conversationId: string;
+          messageId: string;
+          call: CallInfo;
+        }) => {
+          if (d.conversationId !== id) return;
+          setMessages((prev) => prev.map((m) => (m.id === d.messageId ? { ...m, call: d.call } : m)));
+        };
+        callMessageHandlerRef.current = onCallMessageUpdated;
+        socket.on('call_message_updated', onCallMessageUpdated);
+
         // Message modifié par son auteur.
         socket.on(
           'message_edited',
@@ -2968,6 +3028,9 @@ export default function ChatScreen() {
       socket?.off('message_deleted');
       socket?.off('message_reaction');
       socket?.off('message_edited');
+      if (callMessageHandlerRef.current) {
+        socket?.off('call_message_updated', callMessageHandlerRef.current);
+      }
       socket?.off('message_preview');
       socket?.off('peer_typing');
       socket?.off('presence_update');
@@ -3488,7 +3551,9 @@ export default function ChatScreen() {
       const moderates = convType === 'group' && (myRole === 'admin' || myRole === 'moderator');
       const recent =
         !!msg && Date.now() - new Date(msg.createdAt).getTime() < DELETE_FOR_ALL_MS;
-      const canDeleteForAll = moderates || (isMine && recent && !msg?.deletedAt);
+      // Une bulle d'appel ne se supprime que pour soi (le serveur refuse le reste).
+      const canDeleteForAll =
+        msg?.type !== 'call' && (moderates || (isMine && recent && !msg?.deletedAt));
 
       const run = (scope: 'me' | 'all') =>
         apiRequest(`/conversations/${id}/messages/${messageId}?scope=${scope}`, {
@@ -4296,6 +4361,50 @@ export default function ChatScreen() {
    * Une ligne du fil → `ChatRow` mémoïsé. Le parent ne fait plus que CALCULER les props ;
    * le rendu lourd est bloqué par le `memo` tant qu'elles n'ont pas changé.
    */
+  /**
+   * Bulle d'appel : ce que fait un appui.
+   *
+   *   - l'appel vit sur CE téléphone : il sonne → on répond (en passant par l'écran système
+   *     s'il le fait sonner, pour que SA sonnerie s'arrête) ; on est dedans → on revient à
+   *     l'écran d'appel ;
+   *   - il sonne pour moi mais ce téléphone ne le connaît pas (événement manqué) → on
+   *     décroche quand même : le serveur fait foi, et `acceptCall` reconstruit l'appel ;
+   *   - il vit ailleurs (mon autre appareil) → on le dit, on ne peut pas le rejoindre d'ici ;
+   *   - il est fini → on rappelle, avec les mêmes contrôles que le bouton de l'en-tête.
+   *
+   * ⚠️ STABLE (refs) : `ChatRow` ignore ses gestionnaires dans son comparateur, une ligne
+   * garderait sinon la première version, avec un `currentUserId` peut-être encore vide.
+   */
+  const placeCallRef = useRef(placeCall);
+  placeCallRef.current = placeCall;
+  const confirmDeleteRef = useRef(confirmDelete);
+  confirmDeleteRef.current = confirmDelete;
+  const meRef = useRef(currentUserId);
+  meRef.current = currentUserId;
+  const onCallPress = useCallback(
+    (m: Message) => {
+      const call = m.call;
+      if (!call) return;
+      if (call.status !== 'pending' && call.status !== 'accepted') {
+        placeCallRef.current();
+        return;
+      }
+      const local = getCurrentCall();
+      if (local && local.status !== 'ended' && local.callId.toLowerCase() === call.id.toLowerCase()) {
+        if (local.direction === 'incoming' && local.status === 'ringing') answerFromApp();
+        else expandCall();
+        return;
+      }
+      if (call.status === 'pending' && call.receiverId === meRef.current) {
+        acceptCall(call.id);
+        return;
+      }
+      Alert.alert('', t('calls.call_other_device'));
+    },
+    [t],
+  );
+  const onCallLongPress = useCallback((messageId: string) => confirmDeleteRef.current(messageId), []);
+
   const renderRow = (row: Row, index: number, mode: 'list' | 'preview' = 'list') => {
     const item = row.messages[0];
     const isMe = item.sender?.id === currentUserId;
@@ -4351,6 +4460,8 @@ export default function ChatScreen() {
         setReactionsOf={setReactionsOf}
         setScrollTarget={setScrollTarget}
         toggleSelected={toggleSelected}
+        onCallPress={onCallPress}
+        onCallLongPress={onCallLongPress}
       />
     );
   };
@@ -4770,6 +4881,7 @@ export default function ChatScreen() {
           getItemType={(row) => {
             const m = row.messages[0];
             if (m.type === 'system') return 'system';
+            if (m.type === 'call') return 'call';
             if (row.messages.length > 1) return 'album';
             if (m.mediaType) return m.mediaType;
             if (m.type === 'location') return 'location';

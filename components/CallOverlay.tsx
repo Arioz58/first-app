@@ -9,6 +9,7 @@ import {
   acceptCall,
   clearCall,
   hangUp,
+  minimizeCall,
   toggleMute,
   toggleSpeaker,
   useCall,
@@ -95,6 +96,11 @@ export function CallOverlay() {
    * sourdine, le haut-parleur et la durée.
    */
   if (call.nativeUI && incomingRinging) return null;
+  // Réduit : c'est le bandeau vert (`CallBanner`) qui prend le relais.
+  if (call.minimized) return null;
+  // On peut réduire tant que l'appel vit — sauf pendant qu'un appel ENTRANT sonne, où il
+  // faut d'abord répondre ou refuser (même règle que `minimizeCall`).
+  const canMinimize = !incomingRinging && call.status !== 'ended';
   const label =
     call.status === 'ended'
       ? t('calls.ended')
@@ -130,6 +136,17 @@ export function CallOverlay() {
         justifyContent: 'space-between',
       }}
     >
+      {canMinimize && (
+        <Pressable
+          onPress={minimizeCall}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={t('calls.minimize')}
+          style={{ position: 'absolute', top: insets.top + 8, left: 16, padding: 8 }}
+        >
+          <Ionicons name="chevron-down" size={28} color={c.content} />
+        </Pressable>
+      )}
       <View style={{ alignItems: 'center' }}>
         <UserAvatar name={call.peer.name} photoUrl={call.peer.photoUrl} size={112} />
         <Text

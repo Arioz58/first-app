@@ -3031,3 +3031,25 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
   meme canal). Traite apres l'audio.
 
 [QUESTION] Son par type de notification : toujours sans reponse de Hakan (3e fois).
+
+[FAIT 25/09, backend + mobile + web — A TESTER SUR 2 TELEPHONES] Les appels dans le fil du chat
+  (demande de Berke) : une bulle par appel, VERTE tant qu'il vit (« Appel en cours… », puis
+  chrono en direct une fois decroche), ROUGE « Appel manque » chez l'appele, sinon
+  « Appel sortant/entrant · 2:05 », « Sans reponse », « Appel refuse », « Appel annule ».
+  → serveur : migration `call_message` (`Message.callId` unique, SetNull). Bulle creee au
+    lancement de l'appel (`calls/callMessage.service.ts`), APRES la sonnerie et sans
+    l'attendre ; conversation directe retrouvee, ou creee si la messagerie le permet
+    (sinon appel sans bulle). Etat relu par `MESSAGE_SELECT.call`, suivi par l'evenement
+    `call_message_updated`. Pas de push ni d'alerte pour la bulle (l'appel sonne deja).
+  → non-lu SEULEMENT si manque (`CALL_UNREAD_SQL`, trois requetes) ; « supprimer pour tous »
+    et reactions refuses sur une bulle d'appel, « supprimer pour moi » autorise.
+  → regle « manque » changee (decision de Berke) : `cancelled` compte, `declined` non.
+    Onglet Recents aligne.
+  → mobile : appui = repondre (via CallKit s'il fait sonner : `answerNativeCall`, sa
+    sonnerie s'arrete), revenir a l'appel, ou rappeler. Appel en cours ailleurs = message.
+  → ecran d'appel REDUCTIBLE (chevron) + bandeau vert `CallBanner` qui repousse l'app.
+  → web : bulle en lecture seule, apercu, non-lus, mises a jour en direct.
+  ⚠️ Pas de bulle retroactive pour les appels d'avant.
+  ⚠️ Verifie en local (curl + simulateur) : creation, passage au rouge en direct, apercu,
+    pastille. NON verifie : bandeau vert et bulle verte (demandent un appel decroche sur
+    appareil), decrocher depuis la bulle pendant que CallKit sonne (appareil reel), le web.

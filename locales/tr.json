@@ -703,6 +703,15 @@
     "back": "Geri",
     "filter_all": "Tümü",
     "filter_missed": "Cevapsız",
-    "empty_missed": "Cevapsız arama yok."
+    "empty_missed": "Cevapsız arama yok.",
+    "minimize": "Aramayı küçült",
+    "banner_hint": "Aramaya dönmek için dokunun",
+    "history_live": "Arama sürüyor…",
+    "history_declined": "Reddedilen arama",
+    "call_other_device": "Bu arama başka bir cihazda sürüyor.",
+    "audio_call": "Sesli arama",
+    "tap_to_join": "Cevaplamak için dokunun",
+    "tap_to_return": "Aramaya dönmek için dokunun",
+    "tap_to_call_back": "Geri aramak için dokunun"
   }
 }

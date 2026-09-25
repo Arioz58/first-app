@@ -33,6 +33,7 @@ import { useThemeColors } from '../../lib/theme';
 import BottomSheet from '../../components/BottomSheet';
 import { UserAvatar } from '../../components/UserAvatar';
 import { ConversationRow } from '../../components/ConversationRow';
+import { isMissedCall, type CallInfo } from '../../lib/callHistory';
 import { ConversationSwipe } from '../../components/ConversationSwipe';
 
 const NEXA = '#1E40AF';
@@ -119,6 +120,8 @@ type Message = {
   conversationId?: string;
   /** Médias d'un même envoi : plusieurs messages, une seule bulle chez le destinataire. */
   batchId?: string | null;
+  /** Bulle d'appel : l'appel lui-même (aperçu, et non-lu seulement s'il est manqué). */
+  call?: CallInfo | null;
 };
 type Member = { userId: string; user: { id: string; name: string; photoUrl: string | null } };
 type Conversation = {
@@ -251,6 +254,8 @@ export default function ConversationsScreen() {
 
   /** Albums déjà comptés — voir le handler `conversation_updated`. */
   const seenBatchesRef = useRef<Set<string>>(new Set());
+  // Appels déjà comptés comme manqués : un même appel ne doit monter la pastille qu'une fois.
+  const countedCallsRef = useRef<Set<string>>(new Set());
 
   /**
    * Dernière mise à jour en échec.
@@ -477,7 +482,15 @@ export default function ConversationsScreen() {
           fetchConversations();
           return;
         }
-        if (!fromMe && !known) bumpUnread(conversationId);
+        /**
+         * Une bulle d'appel ne compte comme non lue que MANQUÉE (règle du serveur, voir
+         * `CALL_UNREAD_SQL`). Or elle arrive ici dès la SONNERIE, donc jamais manquée à cet
+         * instant : c'est `call_message_updated`, plus bas, qui la comptera si elle le devient.
+         */
+        const countable =
+          message.type !== 'call' || (!!message.call && isMissedCall(message.call, currentUserIdRef.current));
+        if (countable && message.type === 'call' && message.call) countedCallsRef.current.add(message.call.id);
+        if (!fromMe && !known && countable) bumpUnread(conversationId);
 
         setConversations((prev) => {
           const idx = prev.findIndex((c) => c.id === conversationId);
@@ -491,12 +504,44 @@ export default function ConversationsScreen() {
             // conversation est ouverte, le chat la remarque lue et le refetch
             // au retour sur cet écran remettra le compteur à zéro.
             unreadCount:
-              fromMe || known ? updated[idx].unreadCount : updated[idx].unreadCount + 1,
+              fromMe || known || !countable ? updated[idx].unreadCount : updated[idx].unreadCount + 1,
           };
           return sortConversations(updated);
         });
     };
     socket.on('conversation_updated', onConversationUpdated);
+
+    /**
+     * Un appel a changé d'état : l'aperçu suit (« Appel en cours… » → « Appel manqué »), et
+     * la pastille monte s'il vient de devenir MANQUÉ pour moi.
+     *
+     * ⚠️ Compté UNE fois par appel (`countedCallsRef`) : l'événement peut arriver plusieurs
+     * fois pour le même appel (reconnexion, deux appareils qui raccrochent ensemble).
+     * ⚠️ Écouteur NOMMÉ, pour la même raison que `conversation_updated` : l'écran de
+     * conversation écoute aussi cet événement.
+     */
+    const onCallMessageUpdated = (d: { conversationId: string; messageId: string; call: CallInfo }) => {
+      const conv = convRef.current.find((c) => c.id === d.conversationId);
+      if (!conv) return;
+      const newlyMissed =
+        isMissedCall(d.call, currentUserIdRef.current) && !countedCallsRef.current.has(d.call.id);
+      if (newlyMissed) {
+        countedCallsRef.current.add(d.call.id);
+        bumpUnread(d.conversationId);
+      }
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (c.id !== d.conversationId) return c;
+          const last = c.messages[0];
+          return {
+            ...c,
+            messages: last?.id === d.messageId ? [{ ...last, call: d.call }] : c.messages,
+            unreadCount: newlyMissed ? c.unreadCount + 1 : c.unreadCount,
+          };
+        }),
+      );
+    };
+    socket.on('call_message_updated', onCallMessageUpdated);
 
     socket.on('added_to_group', () => fetchConversations());
 
@@ -557,6 +602,7 @@ export default function ConversationsScreen() {
 
     return () => {
       socket.off('conversation_updated', onConversationUpdated);
+      socket.off('call_message_updated', onCallMessageUpdated);
       socket.off('added_to_group');
       socket.off('connect', onReconnect);
     };

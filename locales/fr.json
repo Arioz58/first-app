@@ -703,6 +703,15 @@
     "back": "Retour",
     "filter_all": "Tous",
     "filter_missed": "Manqués",
-    "empty_missed": "Aucun appel manqué."
+    "empty_missed": "Aucun appel manqué.",
+    "minimize": "Réduire l'appel",
+    "banner_hint": "Touchez pour revenir à l'appel",
+    "history_live": "Appel en cours…",
+    "history_declined": "Appel refusé",
+    "call_other_device": "Cet appel a lieu sur un autre appareil.",
+    "audio_call": "Appel audio",
+    "tap_to_join": "Touchez pour répondre",
+    "tap_to_return": "Touchez pour revenir à l'appel",
+    "tap_to_call_back": "Touchez pour rappeler"
   }
 }

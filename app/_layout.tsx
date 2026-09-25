@@ -46,6 +46,8 @@ import {
 import { bindCallKit, setupCallKit } from "../lib/callKit";
 import { registerVoipPush } from "../lib/voipPush";
 import { ToastStack } from "../components/ToastStack";
+import { CallBanner } from "../components/CallBanner";
+import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-context";
 import { showToast } from "../lib/toasts";
 import { getActiveConversation } from "../lib/unreadMessages";
 import { requestContactsSegment } from "../lib/tabsNav";
@@ -536,6 +538,17 @@ export default function RootLayout() {
     {/* ⚠️ Hors du `Stack`, pour la même raison : une alerte annonce ce qui se passe
         AILLEURS que sur l'écran courant, elle ne peut donc pas appartenir à un écran. */}
     <ToastStack />
+    {/* Appel réduit : bandeau vert DANS LE FLUX, qui repousse l'application vers le bas. */}
+    <CallBanner />
+    {/*
+      ⚠️ Second `SafeAreaProvider`, TOUJOURS présent : il mesure les marges de SA propre
+      zone. Quand le bandeau d'appel occupe la barre d'état, la navigation commence dessous
+      et sa marge du haut tombe à zéro — sans lui, chaque écran ajouterait la hauteur de la
+      barre d'état sous le bandeau. ⚠️ Jamais conditionnel : l'ajouter ou le retirer
+      remonterait toute la navigation, qui perdrait sa pile d'écrans en plein appel.
+      `initialWindowMetrics` évite une image vide au premier rendu, le temps de la mesure.
+    */}
+    <SafeAreaProvider initialMetrics={initialWindowMetrics} style={{ flex: 1 }}>
     <Stack screenOptions={{ contentStyle: { backgroundColor: themeColors.canvas } }}>
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -591,6 +604,7 @@ export default function RootLayout() {
         options={{ headerShown: false, animation: "slide_from_bottom" }}
       />
     </Stack>
+    </SafeAreaProvider>
     </Animated.View>
     </KeyboardProvider>
     </GestureHandlerRootView>

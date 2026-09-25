@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { callFacts, callLabel, formatDuration, type CallInfo } from '../lib/callHistory';
 import { useTranslation } from 'react-i18next';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { UserAvatar } from './UserAvatar';
@@ -22,6 +23,8 @@ export type RowMessage = {
   mediaType: string | null;
   createdAt: string;
   conversationId?: string;
+  /** Bulle d'appel : l'appel lui-même, qui donne l'aperçu (« Appel manqué »…). */
+  call?: CallInfo | null;
 };
 
 export type RowConversation = {
@@ -76,6 +79,15 @@ export function useConversationLabels(currentUserId: string | null) {
     const msg = conv.messages[0];
     if (!msg) return t('chat.no_messages');
     if (msg.type === 'system') return systemText(msg.content);
+    // Bulle d'appel : le même libellé que dans le fil et l'onglet Appels, précédé du combiné.
+    if (msg.type === 'call') {
+      if (!msg.call) return `📞 ${t('calls.audio_call')}`;
+      const facts = callFacts(msg.call, currentUserId);
+      const label = callLabel(facts, t);
+      return `📞 ${
+        msg.call.status === 'ended' ? `${label} · ${formatDuration(msg.call.duration ?? 0)}` : label
+      }`;
+    }
     // Une position n'a pas de `mediaType` : son `content` est l'adresse, qu'on n'étale pas
     // dans la liste — le pictogramme dit l'essentiel.
     if (msg.type === 'location') return t('preview.location');

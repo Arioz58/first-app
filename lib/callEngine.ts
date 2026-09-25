@@ -9,6 +9,7 @@ import { apiRequest } from './api';
 import { enterIdleMode } from './audioMode';
 import { playRingback, playRingtone, stopCallSounds } from './callSounds';
 import {
+  answerNativeCall,
   displayIncomingCall,
   endNativeCall,
   reportConnected,
@@ -65,6 +66,12 @@ export type CallState = {
    * haut-parleur.
    */
   nativeUI?: boolean;
+  /**
+   * L'écran d'appel est RÉDUIT : l'appel continue, et un bandeau vert en haut de
+   * l'application permet d'y revenir (`CallBanner`). C'est ce qui permet de retourner au
+   * chat pendant un appel — pour lire un message, ou voir la bulle de l'appel en cours.
+   */
+  minimized?: boolean;
 };
 
 let engine: IRtcEngine | null = null;
@@ -349,6 +356,19 @@ export const acceptCall = async (callIdFromSystem?: string): Promise<boolean> =>
   }
 };
 
+/**
+ * Décrocher depuis l'APPLICATION — la bulle « Appel en cours… » du chat.
+ *
+ * Si le système fait sonner l'appel (écran d'appel natif), c'est à lui de décrocher : il
+ * coupe sa sonnerie et nous renvoie le décroché par le chemin habituel (`answerCall` →
+ * `acceptCall`). Sinon on décroche directement, comme le bouton vert de notre écran.
+ */
+export const answerFromApp = async (): Promise<boolean> => {
+  if (!state || state.direction !== 'incoming' || state.status !== 'ringing') return false;
+  if (state.nativeUI && answerNativeCall(state.callId)) return true;
+  return acceptCall();
+};
+
 /** L'autre a décroché : c'est notre tour de rejoindre le canal. */
 export const peerAccepted = () => {
   if (!state || state.direction !== 'outgoing') return;
@@ -441,12 +461,31 @@ export const toggleSpeaker = () => {
  * exactement le défaut rencontré sur `useMyLiveShare` le 6 août.
  */
 /**
+ * Réduire l'écran d'appel. ⚠️ Refusé pendant qu'un appel ENTRANT sonne : il faut d'abord
+ * répondre ou refuser, sinon la sonnerie continuerait sans écran pour l'arrêter.
+ */
+export const minimizeCall = () => {
+  if (!state || state.status === 'ended') return;
+  if (state.direction === 'incoming' && state.status === 'ringing') return;
+  patch({ minimized: true });
+};
+
+/** Revenir à l'écran d'appel (bandeau vert, ou bulle de l'appel dans le chat). */
+export const expandCall = () => {
+  if (!state) return;
+  patch({ minimized: false });
+};
+
+/**
  * Un appel sonne ou est en cours.
  *
  * ⚠️ Lu par les sons de messages, qui ne doivent PAS jouer pendant un appel : un lecteur
  * `expo-audio` qui se termine coupe la session audio de toute l'application — celle d'Agora
  * comprise — et la voix se tairait au premier message reçu.
  */
+/** L'appel de ce téléphone, lu hors de React (gestionnaires d'appui). */
+export const getCurrentCall = () => state;
+
 export const isCallActive = () => state !== null && state.status !== 'ended';
 
 export const useCall = () => useSyncExternalStore(subscribe, snapshot, snapshot);

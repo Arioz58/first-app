@@ -27,33 +27,79 @@ export const formatDuration = (s: number) =>
   `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
 /**
+ * L'appel BRUT tel que le serveur le joint à une bulle d'appel (`message.call`) — il n'a
+ * pas été « mis en perspective » pour le lecteur, puisque `new_message` part avec une
+ * seule charge pour les deux personnes.
+ */
+export type CallInfo = {
+  id: string;
+  type: string;
+  status: string;
+  callerId: string;
+  receiverId: string;
+  answeredAt: string | null;
+  endedAt: string | null;
+  duration: number | null;
+  createdAt: string;
+};
+
+/** Ce qui suffit pour nommer un appel, qu'il vienne de l'historique ou d'une bulle. */
+type CallFacts = Pick<CallItem, 'outgoing' | 'missed' | 'duration' | 'status'>;
+
+/**
+ * Manqué, POUR CETTE PERSONNE : elle était appelée, et l'appel a sonné sans qu'elle
+ * décroche (`missed`) ou l'appelant a renoncé avant (`cancelled`).
+ *
+ * ⚠️ Même règle que le serveur (`isMissedFor`, `calls.service`) — qui la calcule pour
+ * l'historique — et que le SQL des non-lus. Elle est répétée ici parce que la bulle reçoit
+ * l'appel brut. Les trois doivent rester alignées. `declined` n'en est pas : refuser, c'est
+ * savoir qu'on a été appelé.
+ */
+export const isMissedCall = (call: CallInfo, me: string | null) =>
+  call.receiverId === me && (call.status === 'missed' || call.status === 'cancelled');
+
+/** Un appel qui sonne encore, ou dont la conversation a lieu en ce moment. */
+export const isLiveCall = (call: CallInfo) => call.status === 'pending' || call.status === 'accepted';
+
+/** L'appel brut d'une bulle, vu par le lecteur. */
+export const callFacts = (call: CallInfo, me: string | null): CallFacts => ({
+  outgoing: call.callerId === me,
+  missed: isMissedCall(call, me),
+  duration: call.duration,
+  status: call.status,
+});
+
+/**
  * Ce qu'a été l'appel, en un mot.
  *
- * ⚠️ « Manqué » ne se dit que chez celui qui n'a pas décroché (le serveur le calcule) ; pour
- * l'appelant, le même appel est « sans réponse ». Un appel qui a duré, dans un sens ou dans
- * l'autre, est simplement « sortant » ou « entrant ».
- *
- * ⚠️ Reste un cas : un appel ENTRANT sans durée et non manqué — l'appelant a raccroché avant
- * qu'on décroche (`cancelled`, que le serveur ne compte pas comme manqué). D'où « annulé ».
+ * ⚠️ « Manqué » ne se dit que chez celui qui était appelé (voir `isMissedCall`) ; pour
+ * l'appelant, le même appel est « sans réponse ».
+ * ⚠️ « Décroché » se lit sur le STATUT `ended`, pas sur la durée : un appel décroché puis
+ * raccroché dans la seconde dure 0 s, et `0` se lirait « sans réponse ».
  */
-export const callKind = (item: CallItem) => {
+export const callKind = (item: CallFacts) => {
+  if (item.status === 'pending' || item.status === 'accepted') return 'live' as const;
   if (item.missed) return 'missed' as const;
-  if (!item.duration) return item.outgoing ? ('no_answer' as const) : ('cancelled' as const);
-  return item.outgoing ? ('outgoing' as const) : ('incoming' as const);
+  if (item.status === 'ended') return item.outgoing ? ('outgoing' as const) : ('incoming' as const);
+  if (item.outgoing) return item.status === 'cancelled' ? ('cancelled' as const) : ('no_answer' as const);
+  // Appelé, non manqué, non abouti : il a refusé lui-même.
+  return 'declined' as const;
 };
 
 const LABEL_KEYS = {
+  live: 'calls.history_live',
   missed: 'calls.missed',
   no_answer: 'calls.no_answer',
   cancelled: 'calls.history_cancelled',
+  declined: 'calls.history_declined',
   outgoing: 'calls.history_outgoing',
   incoming: 'calls.history_incoming',
 } as const;
 
-export const callLabel = (item: CallItem, t: TFunction) => t(LABEL_KEYS[callKind(item)]);
+export const callLabel = (item: CallFacts, t: (k: string) => string) => t(LABEL_KEYS[callKind(item)]);
 
 /** Icône du sens : la flèche dit qui a appelé, comme sur l'app Téléphone. */
-export const callIcon = (item: CallItem) =>
+export const callIcon = (item: Pick<CallItem, 'outgoing'>) =>
   item.outgoing ? ('arrow-up-outline' as const) : ('arrow-down-outline' as const);
 
 const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
