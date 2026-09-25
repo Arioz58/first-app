@@ -40,6 +40,22 @@ const GAIN_SONNERIE = 0.8;
  */
 const MOTIF_VIBRATION = [0, 1000, 2000];
 
+/**
+ * ⚠️ `keepAudioSessionActive` : C'EST LE CORRECTIF DU SON À SENS UNIQUE (24/09).
+ *
+ * Sans cette option, `expo-audio` COUPE LA SESSION AUDIO DE TOUTE L'APPLICATION 100 ms après
+ * chaque `pause()` (`deactivateSession` → `AVAudioSession.setActive(false)`, voir
+ * `node_modules/expo-audio/ios/AudioModule.swift`). Or on met la tonalité en pause au
+ * décroché, juste avant qu'Agora ne rejoigne le canal : la session qu'Agora venait de prendre
+ * était donc éteinte sous lui, et l'appelant n'entendait plus rien — dans les deux sens
+ * d'appel, toujours du côté de celui qui avait appelé. Signalé par Berke et par le client.
+ *
+ * ⚠️ `stopCallSounds()` met en pause les DEUX lecteurs à chaque fois, même muets : un
+ * téléphone qui avait déjà passé un appel coupait donc aussi la session en DÉCROCHANT. Ne
+ * jamais retirer cette option, sur aucun des deux.
+ */
+const OPTIONS_LECTEUR = { keepAudioSessionActive: true };
+
 let tonalite: AudioPlayer | null = null;
 let sonnerie: AudioPlayer | null = null;
 
@@ -82,7 +98,7 @@ const arreter = (p: AudioPlayer | null) => {
 /** La tonalité d'attente, côté appelant. */
 export const playRingback = () => {
   tonalite = jouer(
-    () => (tonalite ??= createAudioPlayer(require('../assets/sounds/ringback.wav'))),
+    () => (tonalite ??= createAudioPlayer(require('../assets/sounds/ringback.wav'), OPTIONS_LECTEUR)),
     GAIN_TONALITE,
   );
 };
@@ -90,7 +106,7 @@ export const playRingback = () => {
 /** La sonnerie et la vibration, côté appelé. */
 export const playRingtone = () => {
   sonnerie = jouer(
-    () => (sonnerie ??= createAudioPlayer(require('../assets/sounds/ringtone.wav'))),
+    () => (sonnerie ??= createAudioPlayer(require('../assets/sounds/ringtone.wav'), OPTIONS_LECTEUR)),
     GAIN_SONNERIE,
   );
   try {

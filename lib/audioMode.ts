@@ -22,3 +22,24 @@ export const enterRecordingMode = () =>
     playsInSilentMode: true,
     allowsRecording: true,
   }).catch(() => {});
+
+/**
+ * Session audio RENDUE après un appel : l'état qu'avait l'application à son démarrage.
+ *
+ * ⚠️ Indispensable : Agora laisse la session en mode appel (`PlayAndRecord`, sortie sur
+ * l'ÉCOUTEUR) après avoir quitté le canal, et personne ne la reprenait. Les sons d'envoi et
+ * de réception sortaient alors presque inaudibles — c'est le « les sons de messages ont
+ * disparu » signalé par le client le 24/09.
+ *
+ * ⚠️ `playsInSilentMode: false` + `doNotMix` = catégorie `SoloAmbient`, celle qu'iOS donne
+ * par défaut à une application : les sons d'interface RESPECTENT le bouton silencieux, comme
+ * chez WhatsApp. Choix validé par Berke le 24/09. Les vocaux, eux, reposent leur propre mode
+ * (`enterPlaybackMode`) avant de jouer.
+ */
+export const enterIdleMode = () =>
+  setAudioModeAsync({
+    playsInSilentMode: false,
+    allowsRecording: false,
+    interruptionMode: 'doNotMix',
+    shouldRouteThroughEarpiece: false,
+  }).catch(() => {});

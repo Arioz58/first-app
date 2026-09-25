@@ -1,6 +1,7 @@
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import * as SecureStore from 'expo-secure-store';
 import { useSyncExternalStore } from 'react';
+import { isCallActive } from './callEngine';
 
 /**
  * Sons d'interface : envoi et réception d'un message.
@@ -102,6 +103,12 @@ export const useSoundsEnabled = () => useSyncExternalStore(subscribe, getSnapsho
  */
 const jouer = (obtenir: () => AudioPlayer, gain: number) => {
   if (!actif) return;
+  /**
+   * ⚠️ Silence pendant un appel. Ce n'est pas qu'une question de gêne : à la fin de sa
+   * lecture, un lecteur `expo-audio` COUPE la session audio de l'application — celle
+   * qu'Agora utilise comprise —, et la conversation deviendrait muette au premier message.
+   */
+  if (isCallActive()) return;
   try {
     const p = obtenir();
     // ⚠️ Reposé à chaque lecture : le lecteur est réutilisé, et rien ne garantit que le

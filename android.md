@@ -66,6 +66,7 @@ Le rendu iOS est validé sur iPhone. **Rien n'a été testé sur Android.**
 - [?] **expo-camera** (`StoryCamera`) : le zoom continu et la bascule vers l'ultra grand angle reposent sur `getAvailableLensesAsync()`, dont le comportement diffère (et manque souvent) sur Android. Prévoir un repli propre : zoom numérique seul, sans sélecteur 0,5×.
 - [?] **react-native-video-trim** (rognage des vidéos de story) : vérifier que `enablePreciseTrimming` donne le même résultat.
 - [?] **expo-audio** : le routage audio. `enterPlaybackMode()` pose `shouldRouteThroughEarpiece: false` pour Android, à confirmer après un enregistrement vocal.
+- [?] **expo-audio pendant un appel** (24/09) : le correctif du son à sens unique (`keepAudioSessionActive` sur la tonalité et la sonnerie, `lib/callSounds.ts`) est une option **iOS seulement**. Sur Android, `expo-audio` gère le *focus audio* et non une session : vérifier qu'après le décroché les deux personnes s'entendent, dans les deux sens d'appel, et que les sons de messages reviennent après un appel.
 - [?] **Enregistrement vocal** : `metering` (niveaux de l'onde) n'est pas garanti sur toutes les versions d'Android — le tracé peut rester plat.
 - [?] **expo-contacts** : lecture du carnet et normalisation des numéros, permission runtime.
 - [?] **expo-sms** : l'invitation SMS pré-remplie.

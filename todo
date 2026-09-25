@@ -2968,3 +2968,50 @@ PUSH.
     ⚠️ La notification d'appel actuelle est un REPLI assume : elle previent, elle ne fait
     pas sonner le telephone comme un appel. Sans elle, un appel vers quelqu'un dont l'app
     est fermee n'arriverait nulle part.
+
+================================================================================
+RETOUR CLIENT DU 24/09/2026 (4e retour, apres la livraison des appels audio)
+================================================================================
+Ordre arrete avec Berke : 1) son des appels + sons de messages, 2) reponse depuis la
+notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule audio -> video.
+
+[CORRIGE 24/09, A VERIFIER SUR 2 TELEPHONES] Appels : celui qui APPELLE n'entend pas l'autre
+  (l'autre l'entend). Constate par Berke sur TestFlight dans les DEUX sens d'appel, et deja vu
+  sur le simulateur. Chez Hakan : « on entend rien ».
+  ⚠️ Cause, lue dans `node_modules/expo-audio/ios/AudioModule.swift` : `pause()` d'un lecteur
+  appelle `deactivateSession()`, qui fait `AVAudioSession.setActive(false)` 100 ms plus tard —
+  pour TOUTE l'application. Au decroche, `peerAccepted` met la tonalite en pause puis rejoint
+  le canal : la session d'Agora etait eteinte sous lui. `stopCallSounds()` mettant en pause
+  les DEUX lecteurs, un telephone ayant deja passe un appel la coupait aussi en decrochant.
+  → `keepAudioSessionActive: true` sur tonalite et sonnerie (`lib/callSounds.ts`).
+  → sons de messages muets PENDANT un appel (`isCallActive`, `lib/sounds.ts`) : leur fin de
+    lecture couperait la session de la meme facon, au premier message recu.
+  → traces Agora en __DEV__ (`[call] audio distant / local / sortie audio / erreur`), a
+    retirer une fois les appels eprouves.
+  ⚠️ Zone floue : pourquoi le MICRO de l'appelant continuait de passer. Si le correctif ne
+  suffit pas, les traces le diront.
+
+[CORRIGE 24/09, A VERIFIER] Les sons d'envoi ont disparu (Hakan).
+  Cause probable, meme famille : apres un appel, Agora laisse la session en PlayAndRecord,
+  sortie sur l'ECOUTEUR, et rien ne la reprenait. → `enterIdleMode()` (`lib/audioMode.ts`)
+  a la sortie du canal : retour a SoloAmbient, l'etat de demarrage de l'app.
+  ⚠️ Decision de Berke : les sons d'interface RESPECTENT le bouton silencieux (comme
+  WhatsApp). Si le telephone de Hakan est en silencieux, c'est normal qu'il ne les entende pas.
+  ⚠️ Dette toujours ouverte : apres un VOCAL, `enterPlaybackMode()` repasse en Playback, et les
+  sons sonnent de nouveau malgre le silencieux jusqu'au prochain appel.
+  ⚠️ Non couvert : lire un vocal PENDANT un appel repasse la session en Playback (micro coupe).
+
+[A DIAGNOSTIQUER] Reponse depuis la notification : clavier OK, mais « Message non envoye ».
+  C'est NOTRE notification d'echec : `POST /conversations/:id/messages` echoue. Verifie : la
+  route est bien sur origin/main du backend ; la session est lisible verrouille
+  (AFTER_FIRST_UNLOCK). Valide le 22/09 contre le backend LOCAL uniquement — premiere fois via
+  Railway. → lire les logs Railway pendant un essai (pas de CLI Railway sur la machine).
+
+[A FAIRE] Onglet Appels : titre « Recents » en gras en haut a gauche, bulle (i) sur chaque
+  ligne. Proposition : fiche d'appel facon iPhone (historique avec la personne + actions
+  appel / video / message / profil). A confirmer avec Berke.
+
+[PLUS TARD] Appels video + bascule audio -> video en cours d'appel (Agora le permet dans le
+  meme canal). Traite apres l'audio.
+
+[QUESTION] Son par type de notification : toujours sans reponse de Hakan (3e fois).

@@ -6,6 +6,7 @@ import {
   type IRtcEngine,
 } from 'react-native-agora';
 import { apiRequest } from './api';
+import { enterIdleMode } from './audioMode';
 import { playRingback, playRingtone, stopCallSounds } from './callSounds';
 import {
   displayIncomingCall,
@@ -122,6 +123,24 @@ const ensureEngine = (appId: string): IRtcEngine => {
      * ensuite puisque le correspondant n'a jamais vraiment quitté le canal — donc aucun
      * `onUserJoined` ne vient remettre l'état en place. Signalé par Berke le 22/09.
      */
+    /**
+     * TRACES DE TEST (24/09), en développement seulement : elles disent si le son du
+     * correspondant ARRIVE, s'il est DÉCODÉ, et par quelle sortie il part. C'est ce qui
+     * manquait pour diagnostiquer le son à sens unique — on ne savait pas distinguer « rien
+     * ne vient » de « ça vient mais ça ne sort pas ». À retirer une fois les appels éprouvés.
+     */
+    onRemoteAudioStateChanged: (_c, remoteUid, st, reason) => {
+      if (__DEV__) console.log('[call] audio distant', { remoteUid, state: st, reason });
+    },
+    onLocalAudioStateChanged: (_c, st, reason) => {
+      if (__DEV__) console.log('[call] audio local', { state: st, reason });
+    },
+    onAudioRoutingChanged: (routing) => {
+      if (__DEV__) console.log('[call] sortie audio', routing);
+    },
+    onError: (err, msg) => {
+      if (__DEV__) console.warn('[call] erreur Agora', err, msg);
+    },
     onUserOffline: () => {
       remoteCount = Math.max(0, remoteCount - 1);
       /**
@@ -178,6 +197,9 @@ const leave = () => {
   } catch {
     // Canal déjà quitté : rien à faire.
   }
+  // Rendre la session audio : Agora la laisse en mode appel, son sur l'écouteur, et les
+  // sons de messages en sortaient presque inaudibles (voir `enterIdleMode`).
+  enterIdleMode();
 };
 
 /** Ce qu'il faudra pour rejoindre, gardé de côté jusqu'au décroché. */
@@ -418,4 +440,13 @@ export const toggleSpeaker = () => {
  * React a le droit de mémoïser cet appel sur des arguments qui ne changent pas. C'est
  * exactement le défaut rencontré sur `useMyLiveShare` le 6 août.
  */
+/**
+ * Un appel sonne ou est en cours.
+ *
+ * ⚠️ Lu par les sons de messages, qui ne doivent PAS jouer pendant un appel : un lecteur
+ * `expo-audio` qui se termine coupe la session audio de toute l'application — celle d'Agora
+ * comprise — et la voix se tairait au premier message reçu.
+ */
+export const isCallActive = () => state !== null && state.status !== 'ended';
+
 export const useCall = () => useSyncExternalStore(subscribe, snapshot, snapshot);
