@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Keyboard, Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -57,6 +57,22 @@ export function CallOverlay() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [status, startedAt]);
+
+  /**
+   * Un appel commence — passé ou reçu : on FERME LE CLAVIER.
+   *
+   * ⚠️ Demande de Berke (24/09), pour l'accessibilité : resté ouvert, le clavier recouvre le
+   * bas de l'écran d'appel, là où sont décrocher, raccrocher et le haut-parleur, et un
+   * lecteur d'écran continue de proposer un champ de saisie qui n'est plus à l'écran.
+   *
+   * ⚠️ Déclenché sur l'IDENTIFIANT de l'appel, pas sur son état : le fermer une fois au début
+   * suffit, et le refaire à chaque changement d'état (sonnerie → connexion → en cours)
+   * refermerait un clavier que la personne aurait rouvert exprès pendant l'appel.
+   */
+  const callId = call?.callId;
+  useEffect(() => {
+    if (callId) Keyboard.dismiss();
+  }, [callId]);
 
   // L'appel est fini : on laisse le dernier message à l'écran, puis on efface.
   useEffect(() => {
