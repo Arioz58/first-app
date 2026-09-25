@@ -554,6 +554,7 @@ export default function RootLayout() {
         options={{ headerShown: false, animation: "slide_from_right" }}
       />
       <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="calls/[id]" options={{ headerShown: false, animation: "slide_from_right" }} />
       <Stack.Screen
         name="web-login"
         options={{ headerShown: false, animation: 'slide_from_right' }}

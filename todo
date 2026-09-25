@@ -3007,9 +3007,25 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
   (AFTER_FIRST_UNLOCK). Valide le 22/09 contre le backend LOCAL uniquement — premiere fois via
   Railway. → lire les logs Railway pendant un essai (pas de CLI Railway sur la machine).
 
-[A FAIRE] Onglet Appels : titre « Recents » en gras en haut a gauche, bulle (i) sur chaque
-  ligne. Proposition : fiche d'appel facon iPhone (historique avec la personne + actions
-  appel / video / message / profil). A confirmer avec Berke.
+[FAIT 25/09, verifie sur simulateur clair + sombre] Onglet Appels : « Recents » en gras en
+  haut a gauche, bulle (i) sur chaque ligne → fiche d'appel facon iPhone (`app/calls/[id].tsx`).
+  → liste : libelle (sortant / entrant / manque / sans reponse / annule) + duree, date a
+    l'echelle de l'app Telephone (heure, Hier, jour de la semaine, date) ; le (i) a sa propre
+    zone tactile, la ligne rappelle toujours.
+  → fiche : en-tete, actions Message / Appeler / Profil (droits de `GET /users/:id/profile`,
+    grisees sinon ; aucune si profil 404 = bloque), historique avec la personne groupe par jour.
+  → serveur : `GET /calls?peerId=` (filtre cote serveur, sinon les 50 derniers appels peuvent
+    n'en contenir aucun avec elle). L'app refiltre aussi, tant que Railway n'est pas a jour.
+  → regles partagees dans `lib/callHistory.ts` (un seul endroit pour nommer un appel).
+  → PAS de bouton video tant que la video n'existe pas (decision du 24/09).
+  [A TRANCHER] la photo des lignes (`peer.photoUrl` de `GET /calls`) ignore `privacyPhoto` —
+  meme famille que les deux fuites deja notees. La fiche, elle, prend la photo filtree du profil.
+  [FAIT 25/09, demande de Berke] regroupement « UserA (3) » + filtre Tous / Manques.
+  → regroupe les appels CONSECUTIFS avec la meme personne ET de meme type (`callKind`).
+    ⚠️ Un premier essai ne separait que les manques : « UserA (30) · Appel sortant » pour
+    trente appels dans les deux sens — la ligne ne montre que le libelle du plus recent.
+  → pas de duree sur une ligne groupee (elle se lirait comme un total).
+  → filtre local sur `missed`, calcule par le serveur ; memes puces que l'onglet Discussion.
 
 [PLUS TARD] Appels video + bascule audio -> video en cours d'appel (Agora le permet dans le
   meme canal). Traite apres l'audio.

@@ -688,6 +688,21 @@
     "failed": "Arama başlatılamadı.",
     "missed": "Cevapsız arama",
     "no_answer": "Yanıt yok",
-    "empty": "Henüz arama yok."
+    "empty": "Henüz arama yok.",
+    "recents": "Son aramalar",
+    "history_outgoing": "Giden arama",
+    "history_incoming": "Gelen arama",
+    "history_cancelled": "İptal edilen arama",
+    "today": "Bugün",
+    "info": "Arama ayrıntıları",
+    "history": "Arama geçmişi",
+    "action_message": "Mesaj",
+    "action_call": "Ara",
+    "action_profile": "Profil",
+    "no_calls_with": "Bu kişiyle arama yok.",
+    "back": "Geri",
+    "filter_all": "Tümü",
+    "filter_missed": "Cevapsız",
+    "empty_missed": "Cevapsız arama yok."
   }
 }

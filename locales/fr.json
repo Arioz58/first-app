@@ -688,6 +688,21 @@
     "failed": "L'appel n'a pas pu être lancé.",
     "missed": "Appel manqué",
     "no_answer": "Sans réponse",
-    "empty": "Aucun appel pour le moment."
+    "empty": "Aucun appel pour le moment.",
+    "recents": "Récents",
+    "history_outgoing": "Appel sortant",
+    "history_incoming": "Appel entrant",
+    "history_cancelled": "Appel annulé",
+    "today": "Aujourd'hui",
+    "info": "Détails de l'appel",
+    "history": "Historique des appels",
+    "action_message": "Message",
+    "action_call": "Appeler",
+    "action_profile": "Profil",
+    "no_calls_with": "Aucun appel avec cette personne.",
+    "back": "Retour",
+    "filter_all": "Tous",
+    "filter_missed": "Manqués",
+    "empty_missed": "Aucun appel manqué."
   }
 }

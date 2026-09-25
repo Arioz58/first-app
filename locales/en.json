@@ -688,6 +688,21 @@
     "failed": "The call could not be placed.",
     "missed": "Missed call",
     "no_answer": "No answer",
-    "empty": "No calls yet."
+    "empty": "No calls yet.",
+    "recents": "Recents",
+    "history_outgoing": "Outgoing call",
+    "history_incoming": "Incoming call",
+    "history_cancelled": "Cancelled call",
+    "today": "Today",
+    "info": "Call details",
+    "history": "Call history",
+    "action_message": "Message",
+    "action_call": "Call",
+    "action_profile": "Profile",
+    "no_calls_with": "No calls with this person.",
+    "back": "Back",
+    "filter_all": "All",
+    "filter_missed": "Missed",
+    "empty_missed": "No missed calls."
   }
 }
