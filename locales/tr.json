@@ -712,6 +712,8 @@
     "audio_call": "Sesli arama",
     "tap_to_join": "Cevaplamak için dokunun",
     "tap_to_return": "Aramaya dönmek için dokunun",
-    "tap_to_call_back": "Geri aramak için dokunun"
+    "tap_to_call_back": "Geri aramak için dokunun",
+    "last_call": "Son arama",
+    "show_all_history": "Tüm geçmişi göster"
   }
 }

@@ -58,7 +58,19 @@ export default function CallInfoScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const c = useThemeColors();
-  const { id, name, photo } = useLocalSearchParams<{ id: string; name?: string; photo?: string }>();
+  const { id, name, photo, all } = useLocalSearchParams<{
+    id: string;
+    name?: string;
+    photo?: string;
+    all?: string;
+  }>();
+  /**
+   * Historique COMPLET (`all=1`) ou fiche (défaut) — demande de Berke, 26/09 : la liste
+   * entière pouvait être longue, la fiche n'en montre plus que le DERNIER appel, suivi de
+   * « Afficher tout l'historique › » qui rouvre ce même écran avec `all=1`. Un seul écran pour
+   * les deux : le rendu d'une ligne d'appel n'existe qu'à un endroit.
+   */
+  const showAll = all === '1';
 
   const [profile, setProfile] = useState<Profile | null>(null);
   /**
@@ -162,7 +174,7 @@ export default function CallInfoScreen() {
   // Regroupement par jour, comme la fiche d'iOS : la liste arrive déjà triée du plus récent
   // au plus ancien, il suffit de couper à chaque changement de date.
   const days: { key: string; heading: string; items: CallItem[] }[] = [];
-  for (const item of calls ?? []) {
+  for (const item of showAll ? (calls ?? []) : (calls ?? []).slice(0, 1)) {
     const key = new Date(item.createdAt).toDateString();
     const last = days[days.length - 1];
     if (last?.key === key) last.items.push(item);
@@ -182,21 +194,28 @@ export default function CallInfoScreen() {
         >
           <Ionicons name="chevron-back" size={26} color={c.nexa} />
         </TouchableOpacity>
+        {showAll && (
+          <Text className="text-lg font-semibold ml-1 flex-1" style={{ color: c.content }} numberOfLines={1}>
+            {displayName}
+          </Text>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-        <View className="items-center px-6 pb-6">
-          <UserAvatar name={displayName} photoUrl={displayPhoto} size={96} />
-          <Text
-            className="text-2xl font-bold mt-3 text-center"
-            style={{ color: c.content }}
-            numberOfLines={2}
-          >
-            {displayName}
-          </Text>
-        </View>
+        {!showAll && (
+          <View className="items-center px-6 pb-6">
+            <UserAvatar name={displayName} photoUrl={displayPhoto} size={96} />
+            <Text
+              className="text-2xl font-bold mt-3 text-center"
+              style={{ color: c.content }}
+              numberOfLines={2}
+            >
+              {displayName}
+            </Text>
+          </View>
+        )}
 
-        {!hidden && (
+        {!hidden && !showAll && (
           <View className="flex-row px-4 mb-6" style={{ gap: 10 }}>
             {actions.map((a) => (
               <TouchableOpacity
@@ -218,7 +237,7 @@ export default function CallInfoScreen() {
         )}
 
         <Text className="text-lg font-bold px-4 mb-2" style={{ color: c.content }}>
-          {t('calls.history')}
+          {showAll ? t('calls.history') : t('calls.last_call')}
         </Text>
 
         {calls === null ? (
@@ -263,6 +282,26 @@ export default function CallInfoScreen() {
               </View>
             ))}
           </View>
+        )}
+
+        {/* Le lien n'a de sens que s'il y a plus que le dernier appel à montrer. */}
+        {!showAll && !!calls && calls.length > 1 && (
+          <TouchableOpacity
+            onPress={() =>
+              router.push({
+                pathname: '/calls/[id]' as any,
+                params: { id, name: displayName, photo: displayPhoto ?? '', all: '1' },
+              })
+            }
+            accessibilityRole="button"
+            className="flex-row items-center justify-between mx-4 mt-3 px-4 py-3 bg-white dark:bg-zinc-900"
+            style={[CARD_SHADOW, ROUND.bubble]}
+          >
+            <Text className="text-base font-medium" style={{ color: c.nexa }}>
+              {t('calls.show_all_history')}
+            </Text>
+            <Ionicons name="chevron-forward" size={18} color={c.nexa} />
+          </TouchableOpacity>
         )}
       </ScrollView>
     </SafeAreaView>

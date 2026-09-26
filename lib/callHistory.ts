@@ -110,31 +110,51 @@ const yesterdayOf = (now: Date) => {
   return d;
 };
 
+const pad = (n: number) => n.toString().padStart(2, '0');
+
 /**
- * Horodatage d'une ligne de la liste : l'heure aujourd'hui, « Hier », le jour de la semaine
- * dans les 7 derniers jours, la date au-delà — la même échelle que l'app Téléphone.
+ * « 26/09/2026 » — formatée À LA MAIN, chiffre par chiffre.
+ *
+ * ⚠️ Pas de `toLocaleDateString` ici : il suit la langue du TÉLÉPHONE, pas celle de l'app.
+ * Un iPhone réglé en anglais affichait « Friday, September 26, 2026 » dans une app en
+ * français (remarque de Berke, 26/09). JJ/MM/AAAA est demandé tel quel, dans toutes les
+ * langues de l'app.
+ */
+export const formatDate = (iso: string) => {
+  const d = new Date(iso);
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+};
+
+/** « 20:08 » — sur 24 h, même raison : sans cela un téléphone en anglais américain écrit « 8:08 PM ». */
+export const formatTime = (iso: string) => {
+  const d = new Date(iso);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+/**
+ * Horodatage d'une ligne de l'onglet Récents : l'heure aujourd'hui, « Hier », sinon
+ * JJ/MM/AAAA.
+ *
+ * ⚠️ Plus de nom du jour pour la semaine écoulée (26/09, demande de Berke) : il sortait dans
+ * la langue du TÉLÉPHONE (« Friday » dans une app en français). La date chiffrée se lit dans
+ * toutes les langues.
  */
 export const formatListDate = (iso: string, t: TFunction) => {
   const date = new Date(iso);
   const now = new Date();
-  if (sameDay(date, now)) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (sameDay(date, now)) return formatTime(iso);
   if (sameDay(date, yesterdayOf(now))) return t('time.yesterday');
-  const days = (now.getTime() - date.getTime()) / 86_400_000;
-  if (days < 7) return date.toLocaleDateString([], { weekday: 'long' });
-  return date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' });
+  return formatDate(iso);
 };
 
-/** En-tête d'un jour dans la fiche : « Aujourd'hui », « Hier », sinon la date en toutes lettres. */
+/** En-tête d'un jour dans la fiche : « Aujourd'hui », « Hier », sinon JJ/MM/AAAA. */
 export const formatDayHeading = (iso: string, t: TFunction) => {
   const date = new Date(iso);
   const now = new Date();
   if (sameDay(date, now)) return t('calls.today');
   if (sameDay(date, yesterdayOf(now))) return t('time.yesterday');
-  return date.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return formatDate(iso);
 };
-
-export const formatTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 /** Une ligne de la liste : un ou plusieurs appels consécutifs avec la même personne. */
 export type CallGroup = { key: string; latest: CallItem; count: number };

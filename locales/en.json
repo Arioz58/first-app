@@ -712,6 +712,8 @@
     "audio_call": "Voice call",
     "tap_to_join": "Tap to answer",
     "tap_to_return": "Tap to return to the call",
-    "tap_to_call_back": "Tap to call back"
+    "tap_to_call_back": "Tap to call back",
+    "last_call": "Last call",
+    "show_all_history": "Show full history"
   }
 }

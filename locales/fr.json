@@ -712,6 +712,8 @@
     "audio_call": "Appel audio",
     "tap_to_join": "Touchez pour répondre",
     "tap_to_return": "Touchez pour revenir à l'appel",
-    "tap_to_call_back": "Touchez pour rappeler"
+    "tap_to_call_back": "Touchez pour rappeler",
+    "last_call": "Dernier appel",
+    "show_all_history": "Afficher tout l'historique"
   }
 }
