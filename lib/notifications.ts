@@ -6,6 +6,7 @@ import { apiRequest } from "./api";
 import i18n from "./i18n";
 import { clearUnread } from "./unreadMessages";
 import * as SecureStore from "expo-secure-store";
+import { withBackgroundTime } from "../modules/background-time";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -82,7 +83,34 @@ export const registerReplyCategory = async (): Promise<void> => {
  */
 const HANDLED_REPLY_KEY = "lastHandledReply";
 
-export const sendReplyFromNotification = async (
+/**
+ * ⚠️ TOUT l'envoi se fait sous `withBackgroundTime` (26/09) — c'est le correctif du « Message
+ * non envoyé » affiché à tort.
+ *
+ * `expo-notifications` rend la main à iOS dès qu'il a transmis la réponse au JavaScript, et
+ * iOS gèle l'app ~100 ms plus tard. Contre le backend local la réponse arrivait avant ; contre
+ * Railway (Californie) jamais : le téléphone fermait la connexion en cours (`499` dans les
+ * logs, à 77 et 132 ms), le message partait bel et bien, mais l'app croyait avoir échoué.
+ * Avec un temps d'exécution demandé au système, l'app n'est plus gelée avant la fin.
+ *
+ * PROUVÉ le 26/09, même build, même serveur (Railway), même geste : avec le module → 200 puis
+ * `POST /read` du téléphone ; sans lui (contre-test) → 499 à 95 ms, traces figées sur l'envoi.
+ * ⚠️ Ne JAMAIS valider ce chemin contre le backend LOCAL : il répond en quelques ms, avant la
+ * suspension, et masque le problème. C'est ce qui l'a caché jusqu'au 26/09.
+ *
+ * ⚠️ La demande passe AVANT tout le reste, garde anti-doublon comprise : la fenêtre ne dure
+ * qu'une centaine de millisecondes, une lecture du trousseau suffit à la manquer.
+ */
+export const sendReplyFromNotification = (
+  conversationId: string,
+  text: string,
+  notificationId: string,
+): Promise<void> =>
+  withBackgroundTime("notification-reply", () =>
+    sendReplyNow(conversationId, text, notificationId),
+  );
+
+const sendReplyNow = async (
   conversationId: string,
   text: string,
   notificationId: string,

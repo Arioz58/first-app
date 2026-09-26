@@ -3053,3 +3053,24 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
   ⚠️ Verifie en local (curl + simulateur) : creation, passage au rouge en direct, apercu,
     pastille. NON verifie : bandeau vert et bulle verte (demandent un appel decroche sur
     appareil), decrocher depuis la bulle pendant que CallKit sonne (appareil reel), le web.
+
+[CORRIGE 26/09, PROUVE] Reponse depuis la notification : « Message non envoye » alors que le
+  message etait parti (Hakan + Berke, uniquement en TestFlight).
+  ⚠️ Cause, etablie par les logs HTTP Railway + traces + contre-test :
+    - `expo-notifications` rend la main a iOS (`completionHandler()`) des qu'il a transmis la
+      reponse au JavaScript (lu dans `NotificationCenterManager.swift` / `EmitterModule.swift`) ;
+    - iOS gele l'app ~100 ms plus tard ;
+    - contre Railway (Californie) la reponse n'arrive jamais a temps : 499 « client has
+      closed the request » a 77 / 95 / 132 ms. Le serveur, lui, a livre le message (l'extension
+      de l'ami signale la reception 1 s apres). L'app croyait avoir echoue.
+    - en DEV contre le backend LOCAL, la reponse arrivait en quelques ms, avant le gel : d'ou
+      « ca marche en dev ». Meme build de dev contre Railway → meme echec.
+  → module natif local `modules/background-time` (`beginBackgroundTask`) autour de TOUT
+    l'envoi, demande en toute premiere instruction.
+  → verifie : avec le module 200 + `POST /read` du telephone (notification reelle de l'ami) ;
+    contre-test sans le module : 499 a 95 ms, traces figees sur l'envoi.
+  ⚠️ Rebuild natif → nouveau build TestFlight pour Hakan.
+  [A FAIRE] Android : le module n'y fait rien (voir android.md) — a tester contre Railway.
+  [IDEE] Passer le service Railway dans une region EUROPEENNE : chaque requete fait
+    aujourd'hui un aller-retour vers la Californie (France et Turquie). Accelererait toute
+    l'app — mais ce n'est PAS le correctif, on resterait dans une course contre iOS.
