@@ -36,8 +36,8 @@ Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintena
 
 - **Mois 1** ✅ — Architecture, BDD, auth (JWT + OTP), profils, consentement politique de confidentialité, i18n (tr/fr/en)
 - **Mois 2** ✅ — Messagerie temps réel (Socket.io), groupes (API + rooms + gestion membres), push, frontend mobile complet
-- **Mois 3** 🔄 — Stories 24h ✅ (éditeur texte riche + photo/vidéo, voir section dédiée), médias S3 ✅ (upload presigned + CloudFront), chat enrichi ✅ (Phases A→E : header profil, présence/frappe, mute/éphémères/épinglés/favoris, pièces jointes, refonte visuelle « verre » — voir section dédiée), messages système ✅, groupes enrichis (rôles/permissions) ✅, mode sombre ✅, répertoire de contacts façon WhatsApp ✅, QR de profil ✅, notifications push Expo 🔄 (**chantier en cours, non commité — voir section dédiée**), localisation 🔄 (phases 1 et 2 ✅ — ville au profil affichée sur les deux écrans, envoi de position ; **phase 3 arrière-plan à retester sur appareil réel verrouillé**), version web Next.js 🔜
-- **Mois 4** 🔄 — Appels audio/vidéo (Agora.io) : socle serveur ✅, interface et signalisation ✅ (22 sept.) ; **la voix elle-même reste à éprouver sur deux appareils** ; sonnerie système (CallKit / ConnectionService) à venir
+- **Mois 3** 🔄 — Stories 24h ✅ (éditeur texte riche + photo/vidéo, voir section dédiée), médias S3 ✅ (upload presigned + CloudFront), chat enrichi ✅ (Phases A→E : header profil, présence/frappe, mute/éphémères/épinglés/favoris, pièces jointes, refonte visuelle « verre » — voir section dédiée), messages système ✅, groupes enrichis (rôles/permissions) ✅, mode sombre ✅, répertoire de contacts façon WhatsApp ✅, QR de profil ✅, notifications push Expo ✅ (voir section dédiée ; réception Android encore à vérifier), localisation 🔄 (phases 1 et 2 ✅ — ville au profil affichée sur les deux écrans, envoi de position ; **phase 3 arrière-plan à retester sur appareil réel verrouillé**), version web Next.js 🔜
+- **Mois 4** 🔄 — Appels audio/vidéo (Agora.io) : **audio ✅** (socle serveur, signalisation, sonnerie système/PushKit, onglet Récents, bulle d'appel dans le fil, écran réductible — livré à Hakan le 26 sept.) ; **appels vidéo 🔄 en cours depuis le 3 oct.** (étape par étape) ; son de notification au choix de l'utilisateur à venir (demande de Hakan du 3 oct., voir `todo`)
 - **Mois 5** — Points, leaderboard, anti-spam, module B2B, dashboard admin, site vitrine + DA verte + sécurité hardening (rate limiting, helmet, validation stricte)
 - **Mois 6** — QA, corrections, mise en production (App Store + Google Play + AWS)
 
@@ -115,7 +115,7 @@ first-app-web/       → Next.js — client web (Mois 3). Connexion par **QR** (
   - Projet en mode **« Secured mode: APP ID + Token »** — surtout pas « Testing mode », qui laisse entrer quiconque connaît l'App ID
   - `AGORA_APP_ID` + `AGORA_APP_CERTIFICATE` en variables d'environnement backend (et Railway). ⚠️ **Jamais** côté client : `first-app` et `first-app-web` sont des dépôts PUBLICS
   - Facturation à la minute au-delà de 10 000 min/mois — dépense récurrente à cadrer avec le client, comme la clé Google Maps Android
-- **Expo Push** — notifications push (🔄 remplace l'envoi direct Firebase/FCM, chantier en cours — voir la section dédiée)
+- **Expo Push** — notifications push (remplace l'envoi direct Firebase/FCM — voir la section dédiée)
   - Expo relaie vers APNs et FCM avec ses propres identifiants : plus de clé APNs ni de `GoogleService-Info.plist` côté serveur
   - ⚠️ iOS : compte Apple Developer payant (99€/an) toujours nécessaire — c'est lui qui porte l'entitlement `aps-environment`
 - **Google Maps + expo-location** — localisation (Mois 3)
@@ -668,9 +668,9 @@ Livré le 30 juil. 2026 — la saisie manuelle d'un numéro était jugée trop l
 - **QR de profil** : `QrCode` (rendu pur JS) affiche `Linking.createURL('/user/<id>')` → `nexa://user/<id>` en build ; `QrScanner` (expo-camera) ouvre le profil scanné. Le `scheme` de l'app est **`nexa`** (rebranding du 29 juil., ex-`firstapp`).
 - ⏳ Restant : `INVITE_URL` est un **placeholder** (vrai lien store / universal link une fois publié) ; pas de recherche locale dans le répertoire.
 
-## Notifications push — bascule Expo (chantier en cours 🔄)
+## Notifications push — bascule Expo ✅
 
-⚠️ **Non commité au 1er août 2026** (mobile : `app.json`, `app/_layout.tsx`, `lib/notifications.ts`, `app/(tabs)/profile.tsx`, `targets/` — backend : `src/lib/push.ts`, suppression de `src/lib/fcm.ts`, `users.*`, `socket.ts`).
+Commitée et en service (TestFlight). ⏳ Réception sur **Android** encore à vérifier.
 
 - **Pourquoi** : l'app enregistrait un jeton **APNs** (`getDevicePushTokenAsync`) là où firebase-admin attend un jeton **FCM**. Tous les envois échouaient, et le serveur purgeait le jeton en réponse à l'erreur. → passage au **service push d'Expo** (`expo-server-sdk` côté backend, `getExpoPushTokenAsync({ projectId })` côté app), qui relaie vers Apple et Google avec ses propres identifiants : plus de clé APNs ni de `GoogleService-Info.plist` à gérer côté serveur.
 - **Un jeton = un APPAREIL, pas un utilisateur** : `updateFcmToken` est une **transaction** qui retire le jeton de tous les autres comptes ; `DELETE /users/me/fcm-token` le libère à la déconnexion (appelé **avant** `clearTokens()`, la requête a besoin du JWT). Sans ça, deux comptes utilisés successivement sur le même téléphone recevaient tous deux leurs notifications dessus — jusqu'à être notifié de ses propres messages.

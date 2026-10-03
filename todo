@@ -3030,7 +3030,15 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
 [PLUS TARD] Appels video + bascule audio -> video en cours d'appel (Agora le permet dans le
   meme canal). Traite apres l'audio.
 
-[QUESTION] Son par type de notification : toujours sans reponse de Hakan (3e fois).
+[A FAIRE - REPONSE DE HAKAN 03/10] SON DE NOTIFICATION AU CHOIX DE L'UTILISATEUR.
+  Reponse a la question du « son par type » : dans les PARAMETRES, une liste de sons
+  proposes parmi lesquels l'utilisateur choisit le sien, avec un son PAR DEFAUT (l'actuel
+  `notification.wav`). Pas un son impose par type.
+  Pistes a cadrer avant de coder : un seul choix global ou un par categorie (messages /
+  groupes / appels) ; le son d'un push est decide par le SERVEUR (champ `sound`) → le choix
+  doit etre stocke cote serveur ; iOS : chaque son doit etre embarque dans l'app (.wav/.caf,
+  rebuild natif) ; Android 8+ : le son appartient au CANAL, donc un canal par son.
+  Passe apres les appels video.
 
 [FAIT 25/09, backend + mobile + web — A TESTER SUR 2 TELEPHONES] Les appels dans le fil du chat
   (demande de Berke) : une bulle par appel, VERTE tant qu'il vit (« Appel en cours… », puis
