@@ -3071,6 +3071,16 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
     contre-test sans le module : 499 a 95 ms, traces figees sur l'envoi.
   ⚠️ Rebuild natif → nouveau build TestFlight pour Hakan.
   [A FAIRE] Android : le module n'y fait rien (voir android.md) — a tester contre Railway.
+  [NON VERIFIE, choix de Berke 26/09] Deux cas restent a l'aveugle :
+    - app FERMEE PAR iOS (memoire) apres un long arriere-plan : l'app doit redemarrer avant
+      que notre code puisse demander du temps, et `expo-notifications` a deja rendu la main.
+      Risque : reponse envoyee seulement a la prochaine ouverture (via
+      `getLastNotificationResponseAsync`), voire perdue ;
+    - app FERMEE PAR L'UTILISATEUR (balayee) : `expo-notifications` documente que la reponse
+      n'atteint pas le JavaScript.
+    Le cas courant (app suspendue en memoire, jeton expire → 401 + renouvellement + renvoi)
+    est couvert par les ~30 s du module. Si une reponse perdue est signalee un jour, c'est
+    d'ici qu'elle viendra ; la solution robuste serait l'envoi en NATIF (Swift), sans JS.
   [IDEE] Passer le service Railway dans une region EUROPEENNE : chaque requete fait
     aujourd'hui un aller-retour vers la Californie (France et Turquie). Accelererait toute
     l'app — mais ce n'est PAS le correctif, on resterait dans une course contre iOS.
