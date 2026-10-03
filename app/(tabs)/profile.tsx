@@ -430,6 +430,12 @@ export default function ProfileScreen() {
         >
           <Text className="font-semibold text-white">{t('profile_error.retry')}</Text>
         </TouchableOpacity>
+        {/* ⚠️ Toujours une issue : une session dont le compte n'existe plus (base locale
+            réinitialisée, build de dev qui hérite du trousseau de TestFlight) échoue ici
+            à chaque essai, et la déconnexion n'était atteignable que profil chargé. */}
+        <TouchableOpacity onPress={handleLogout} className="px-6 py-2">
+          <Text className="font-semibold text-red-600 dark:text-red-400">{t('logout')}</Text>
+        </TouchableOpacity>
       </View>
     );
   }

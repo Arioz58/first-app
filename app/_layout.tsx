@@ -2,7 +2,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import * as Notifications from "expo-notifications";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef, useState } from "react";
-import { AppState } from "react-native";
+import { AppState, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 // Fournit la position du clavier, mesurée nativement image par image, aux écrans qui
 // s'y adaptent (barre de saisie du chat).
@@ -525,10 +525,7 @@ export default function RootLayout() {
       }}
     >
     <KeyboardProvider>
-    {/* ⚠️ La feuille elle-même n'est PAS ici : elle vit dans un `Modal`, donc au-dessus de
-        cette vue et hors de sa transformation — c'est justement ce qui permet de reculer
-        l'écran sans reculer la feuille avec. */}
-    <Animated.View style={[{ flex: 1, overflow: "hidden" }, recedeStyle]}>
+    <View style={{ flex: 1 }}>
     {/* ⚠️ Hors du `Stack` : un vocal doit continuer d'être signalé quand on QUITTE la
         conversation où il joue — monté dans un écran, ce rappel disparaîtrait avec lui. */}
     <VoiceMiniPlayer />
@@ -549,6 +546,15 @@ export default function RootLayout() {
       `initialWindowMetrics` évite une image vide au premier rendu, le temps de la mesure.
     */}
     <SafeAreaProvider initialMetrics={initialWindowMetrics} style={{ flex: 1 }}>
+    {/* ⚠️ La feuille elle-même n'est PAS ici : elle vit dans un `Modal`, donc au-dessus de
+        cette vue et hors de sa transformation — c'est justement ce qui permet de reculer
+        l'écran sans reculer la feuille avec.
+        ⚠️ Le recul est À L'INTÉRIEUR du `SafeAreaProvider`, jamais autour : le provider
+        natif renvoie ses marges au JS dès que son CADRE À L'ÉCRAN change, et une mise à
+        l'échelle le change à chaque image. Placé dans la vue qui rétrécit, il déclenchait
+        un rendu de toute la navigation 60 fois par seconde — l'ouverture d'un drawer
+        saccadait (régression du 25/09, quand ce second provider est apparu). */}
+    <Animated.View style={[{ flex: 1, overflow: "hidden" }, recedeStyle]}>
     <Stack screenOptions={{ contentStyle: { backgroundColor: themeColors.canvas } }}>
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -604,8 +610,9 @@ export default function RootLayout() {
         options={{ headerShown: false, animation: "slide_from_bottom" }}
       />
     </Stack>
-    </SafeAreaProvider>
     </Animated.View>
+    </SafeAreaProvider>
+    </View>
     </KeyboardProvider>
     </GestureHandlerRootView>
   );
