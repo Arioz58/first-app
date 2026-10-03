@@ -3092,3 +3092,16 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
   [IDEE] Passer le service Railway dans une region EUROPEENNE : chaque requete fait
     aujourd'hui un aller-retour vers la Californie (France et Turquie). Accelererait toute
     l'app — mais ce n'est PAS le correctif, on resterait dans une course contre iOS.
+
+[CONSTATE 03/10 - PIEGE DE DEV, PAS UN BUG] Appel bloque sur « Connexion… » alors que la voix
+  passe. Cause : rechargement de Metro. Le moteur Agora natif est unique pour le processus et
+  jamais libere ; le JS recharge le re-initialise, mais les evenements restent accroches a
+  l'ancienne instance native (`hasListeners` faux → evenement jete sans bruit).
+  Prouve : journaux natifs du simulateur (canal rejoint + `onUserJoined` cote natif), aucun
+  evenement cote JS meme avec le code du 26/09 ; app tuee puis relancee → chrono OK.
+  → TOUJOURS tuer l'app apres un rechargement de Metro avant de tester un appel.
+  [IDEE] Protection en dev (liberer le moteur au rechargement) : non faite, a evaluer.
+  [A VOIR] Au raccroche, l'AUTRE telephone repasse un instant sur « Connexion… » avant
+    « Appel termine » : Agora signale le depart (`onUserOffline`) avant que `call_ended`
+    arrive. Vu dans les traces du 03/10, preexistant.
+
