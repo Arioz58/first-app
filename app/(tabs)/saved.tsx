@@ -11,6 +11,7 @@ import { startCall } from '../../lib/callEngine';
 import {
   callIcon,
   callLabel,
+  isVideoCall,
   formatDuration,
   formatListDate,
   groupCalls,
@@ -58,8 +59,12 @@ export default function CallsScreen() {
     }, [load]),
   );
 
+  // On rappelle comme on avait parlé : en vidéo si c'était un appel vidéo, comme l'app Téléphone.
   const rappeler = async (item: CallItem) => {
-    const r = await startCall({ id: item.peer.id, name: item.peer.name, photoUrl: item.peer.photoUrl });
+    const r = await startCall(
+      { id: item.peer.id, name: item.peer.name, photoUrl: item.peer.photoUrl },
+      isVideoCall(item) ? 'video' : 'audio',
+    );
     if (r.ok) return;
     Alert.alert(
       '',
@@ -67,7 +72,9 @@ export default function CallsScreen() {
         ? t('calls.peer_busy')
         : r.reason === 'refused'
           ? t('details.call_unavailable')
-          : t('calls.failed'),
+          : r.reason === 'camera_denied'
+            ? t('calls.camera_denied')
+            : t('calls.failed'),
     );
   };
 
@@ -106,6 +113,15 @@ export default function CallsScreen() {
           </Text>
           <View className="flex-row items-center mt-0.5">
             <Ionicons name={callIcon(item)} size={14} color={item.missed ? MISSED_COLOR : c.muted} />
+            {isVideoCall(item) && (
+              <Ionicons
+                name="videocam"
+                size={14}
+                color={item.missed ? MISSED_COLOR : c.muted}
+                style={{ marginLeft: 2 }}
+                accessibilityLabel={t('calls.video_call')}
+              />
+            )}
             <Text numberOfLines={1} style={{ color: c.muted, fontSize: 14, marginLeft: 4, flexShrink: 1 }}>
               {callLabel(item, t)}
               {/* La durée n'a de sens que pour un appel seul : sur un groupe, elle ne dirait

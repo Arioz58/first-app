@@ -3187,6 +3187,14 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
     `.vscode/settings.json`. Les extensions Java importaient chaque dossier `android/` et
     lancaient 9 demons Gradle de 5 versions : ~/.gradle repassait a 6 Go en quelques heures.
 
+[CODE 06/10 - NON VERIFIE - ETAPE 5/5 DES APPELS VIDEO] La video dans l'historique.
+  → bulle d'appel (mobile + web) : camera au lieu du combine, « Appel video · chrono ».
+  → Recents : petite camera a cote de la fleche ; RAPPELER repart dans le meme type.
+  → fiche d'appel : bouton « Video » a cote de « Appeler ».
+  → serveur inchange : `type` etait deja renvoye (bulle, historique).
+  Le web reste en LECTURE SEULE pour les appels (decision d'origine : les appels passent par
+  le telephone).
+
 ================================================================================
 A TESTER SUR TESTFLIGHT (Berke + un ami, deux vrais telephones) — liste tenue a jour
 ================================================================================
@@ -3203,5 +3211,8 @@ Appels video (etapes 1 a 4, octobre 2026) :
   [ ] App mise en arriere-plan pendant un appel video : ce que voit l'autre.
   [ ] Apres une bascule, l'app Telephone d'iOS (Recents) montre un appel video.
   [ ] Couper / rallumer / retourner la camera entre deux vrais telephones.
+  [ ] Historique / bulle / fiche (etape 5) : camera sur les appels video (Recents, fiche, bulle
+      du chat, bulle web), « Appel video · chrono » pendant l'appel, bulle qui passe en video
+      lors d'une bascule ; rappeler depuis Recents, la fiche ou la bulle repart en video.
   [ ] Android : rien de la video n'y a ete teste.
 

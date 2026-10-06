@@ -9,6 +9,7 @@ import {
   isLiveCall,
   MISSED_COLOR,
   type CallInfo,
+  isVideoCall,
 } from '../lib/callHistory';
 import { useCall } from '../lib/callEngine';
 import { ROUND } from '../lib/radius';
@@ -83,9 +84,10 @@ export function CallBubble({ call, currentUserId, time, t, onPress, onLongPress 
         ? t('calls.tap_to_join')
         : null;
   const missed = kind === 'missed';
+  const video = isVideoCall(call);
 
   const title = ongoing
-    ? `${t('calls.audio_call')} · ${formatDuration(elapsed)}`
+    ? `${t(video ? 'calls.video_call' : 'calls.audio_call')} · ${formatDuration(elapsed)}`
     : kind === 'outgoing' || kind === 'incoming'
       ? `${callLabel(facts, t)} · ${formatDuration(call.duration ?? 0)}`
       : callLabel(facts, t);
@@ -134,7 +136,8 @@ export function CallBubble({ call, currentUserId, time, t, onPress, onLongPress 
           }}
         >
           <Ionicons
-            name={missed ? 'call' : live ? 'call' : isMe ? 'arrow-up' : 'arrow-down'}
+            // Vidéo : la caméra dans tous les états — le côté de la bulle dit déjà qui a appelé.
+            name={video ? 'videocam' : missed ? 'call' : live ? 'call' : isMe ? 'arrow-up' : 'arrow-down'}
             size={18}
             color={live ? '#FFFFFF' : missed ? MISSED_COLOR : c.nexa}
           />

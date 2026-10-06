@@ -7,10 +7,11 @@ import { ActivityIndicator, Alert, ScrollView, Text, TouchableOpacity, View } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
-import { startCall } from '../../lib/callEngine';
+import { startCall, type CallType } from '../../lib/callEngine';
 import {
   callIcon,
   callLabel,
+  isVideoCall,
   formatDayHeading,
   formatDuration,
   formatTime,
@@ -113,8 +114,8 @@ export default function CallInfoScreen() {
   const displayName = profile?.name ?? name ?? '';
   const displayPhoto = profile ? profile.photoUrl : photo || null;
 
-  const call = async () => {
-    const r = await startCall({ id, name: displayName, photoUrl: displayPhoto });
+  const call = async (type: CallType = 'audio') => {
+    const r = await startCall({ id, name: displayName, photoUrl: displayPhoto }, type);
     if (r.ok) return;
     Alert.alert(
       '',
@@ -122,7 +123,9 @@ export default function CallInfoScreen() {
         ? t('calls.peer_busy')
         : r.reason === 'refused'
           ? t('details.call_unavailable')
-          : t('calls.failed'),
+          : r.reason === 'camera_denied'
+            ? t('calls.camera_denied')
+            : t('calls.failed'),
     );
   };
 
@@ -160,7 +163,15 @@ export default function CallInfoScreen() {
       icon: 'call',
       label: t('calls.action_call'),
       enabled: !!profile?.canCall,
-      onPress: call,
+      onPress: () => call('audio'),
+    },
+    // Comme la fiche de l'app Téléphone : appel audio ET appel vidéo, côte à côte.
+    {
+      key: 'video',
+      icon: 'videocam',
+      label: t('calls.video'),
+      enabled: !!profile?.canCall,
+      onPress: () => call('video'),
     },
     {
       key: 'profile',
@@ -266,6 +277,15 @@ export default function CallInfoScreen() {
                       size={14}
                       color={item.missed ? MISSED_COLOR : c.muted}
                     />
+                    {isVideoCall(item) && (
+                      <Ionicons
+                        name="videocam"
+                        size={14}
+                        color={item.missed ? MISSED_COLOR : c.muted}
+                        style={{ marginLeft: 2 }}
+                        accessibilityLabel={t('calls.video_call')}
+                      />
+                    )}
                     <Text
                       className="flex-1 ml-1"
                       numberOfLines={1}

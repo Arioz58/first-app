@@ -716,6 +716,7 @@
     "history_declined": "Declined call",
     "call_other_device": "This call is taking place on another device.",
     "audio_call": "Voice call",
+    "video_call": "Video call",
     "tap_to_join": "Tap to answer",
     "tap_to_return": "Tap to return to the call",
     "tap_to_call_back": "Tap to call back",

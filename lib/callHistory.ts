@@ -98,6 +98,9 @@ const LABEL_KEYS = {
 
 export const callLabel = (item: CallFacts, t: (k: string) => string) => t(LABEL_KEYS[callKind(item)]);
 
+/** Appel vidéo (dès le départ, ou passé en vidéo en cours de route — le serveur l'inscrit). */
+export const isVideoCall = (item: { type?: string | null }) => item.type === 'video';
+
 /** Icône du sens : la flèche dit qui a appelé, comme sur l'app Téléphone. */
 export const callIcon = (item: Pick<CallItem, 'outgoing'>) =>
   item.outgoing ? ('arrow-up-outline' as const) : ('arrow-down-outline' as const);

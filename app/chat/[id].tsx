@@ -4392,7 +4392,8 @@ export default function ChatScreen() {
       const call = m.call;
       if (!call) return;
       if (call.status !== 'pending' && call.status !== 'accepted') {
-        placeCallRef.current();
+        // Rappeler comme on avait parlé : en vidéo si c'était un appel vidéo.
+        placeCallRef.current(call.type === 'video' ? 'video' : 'audio');
         return;
       }
       const local = getCurrentCall();
