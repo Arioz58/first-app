@@ -13,7 +13,7 @@
       "bundleIdentifier": "com.berke.nexa2",
       "icon": "./assets/images/Nexa-icon-comp.icon",
       "infoPlist": {
-        "NSCameraUsageDescription": "Nexa utilise la caméra pour prendre des photos et vidéos de vos stories.",
+        "NSCameraUsageDescription": "Nexa utilise la caméra pour vos appels vidéo et pour prendre des photos et vidéos de vos stories.",
         "NSPhotoLibraryUsageDescription": "Nexa accède à votre galerie pour choisir des photos et vidéos à publier en story.",
         "NSPhotoLibraryAddUsageDescription": "Nexa peut enregistrer des médias dans votre galerie.",
         "NSContactsUsageDescription": "Nexa utilise vos contacts pour retrouver qui utilise déjà l'application et inviter les autres. Vos contacts ne sont jamais stockés.",
@@ -80,7 +80,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Nexa utilise la caméra pour prendre des photos et vidéos de vos stories.",
+          "cameraPermission": "Nexa utilise la caméra pour vos appels vidéo et pour prendre des photos et vidéos de vos stories.",
           "microphonePermission": "Nexa utilise le micro pour vos appels, vos messages vocaux et le son de vos vidéos.",
           "recordAudioAndroid": true
         }

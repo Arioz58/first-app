@@ -216,6 +216,19 @@ export const endNativeCall = (callId?: string) => {
   if (uuid === currentUuid) currentUuid = null;
 };
 
+/**
+ * L'appel est passé en vidéo en cours de route : l'écran système doit le dire aussi.
+ * ⚠️ Sans cela, l'historique téléphonique d'iOS garderait un « appel audio ».
+ */
+export const setNativeVideo = (callId: string, name: string) => {
+  if (!ready || Platform.OS !== 'ios') return;
+  try {
+    RNCallKeep.updateDisplay(callId, name, name, { hasVideo: true });
+  } catch {
+    // L'écran système continuera d'annoncer un appel audio : sans gravité.
+  }
+};
+
 /** Reflète dans l'écran système la sourdine décidée dans l'application, et inversement. */
 export const setNativeMuted = (callId: string, muted: boolean) => {
   if (!ready || Platform.OS !== 'ios') return;

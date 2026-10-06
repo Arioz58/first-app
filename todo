@@ -3171,3 +3171,37 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
   NON VERIFIE : bascule ecran VERROUILLE chez l'autre (le cas qui justifie le canal Agora) ;
     Android ; ecran systeme CallKit qui annonce encore « audio » apres la bascule.
 
+[CODE 06/10 - NON VERIFIE - ETAPE 4/5 DES APPELS VIDEO] Ecran verrouille et CallKit en video.
+  → serveur : le push VoIP porte `callType` (contrat avec l'AppDelegate, comme `callId`). Les
+    builds anterieurs ignorent le champ et affichent un appel audio, sans rien casser.
+  → natif (`plugins/withVoipPush.js`) : `hasVideo: video` a `reportNewIncomingCall`.
+    Verifie dans l'AppDelegate GENERE apres `prebuild --clean`.
+  → decroche app PAS au premier plan : l'autorisation camera est LUE (`getCameraPermissionsAsync`),
+    jamais DEMANDEE — la fenetre ne peut pas s'afficher ecran verrouille et l'attendre
+    retarderait l'entree dans le canal. Pas accordee = camera coupee, a allumer ensuite.
+  → bascule audio -> video : l'ecran systeme passe aussi en video (`updateDisplay` hasVideo).
+  → libelle camera : « … pour vos appels video et pour prendre des photos et videos de vos
+    stories. » (app.json, deux endroits — le plugin expo-camera ecrase l'Info.plist).
+  ⚠️ Rebuild natif → nouveau build TestFlight.
+  → VS Code : `java.import.gradle.enabled: false` + `gradle.autoDetect: off` dans
+    `.vscode/settings.json`. Les extensions Java importaient chaque dossier `android/` et
+    lancaient 9 demons Gradle de 5 versions : ~/.gradle repassait a 6 Go en quelques heures.
+
+================================================================================
+A TESTER SUR TESTFLIGHT (Berke + un ami, deux vrais telephones) — liste tenue a jour
+================================================================================
+Appels video (etapes 1 a 4, octobre 2026) :
+  [ ] Deux vraies cameras face a face : chacun voit l'autre en grand et soi en vignette.
+  [ ] Telephone VERROUILLE, appel video entrant : l'ecran systeme annonce un appel VIDEO.
+      Decrocher, deverrouiller : l'image de l'autre et sa propre camera apparaissent.
+  [ ] Telephone verrouille, appel AUDIO entrant : l'ecran systeme reste en audio.
+  [ ] Bascule audio -> video quand l'AUTRE a l'ecran verrouille (le cas qui justifie le signal
+      par Agora) : en deverrouillant, il est passe en video.
+  [ ] Decrocher une video ecran verrouille SANS avoir jamais accorde la camera : arrivee camera
+      coupee, puis on peut l'allumer apres deverrouillage (la demande d'autorisation s'affiche).
+  [ ] Libelle de la permission camera (installation neuve seulement).
+  [ ] App mise en arriere-plan pendant un appel video : ce que voit l'autre.
+  [ ] Apres une bascule, l'app Telephone d'iOS (Recents) montre un appel video.
+  [ ] Couper / rallumer / retourner la camera entre deux vrais telephones.
+  [ ] Android : rien de la video n'y a ete teste.
+

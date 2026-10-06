@@ -9,6 +9,7 @@ import {
   type IMediaPlayer,
   type IRtcEngine,
 } from 'react-native-agora';
+import { AppState } from 'react-native';
 import { Camera } from 'expo-camera';
 import * as Device from 'expo-device';
 import { apiRequest } from './api';
@@ -20,6 +21,7 @@ import {
   endNativeCall,
   reportConnected,
   setNativeMuted,
+  setNativeVideo,
   startOutgoingCall,
 } from './callKit';
 
@@ -328,9 +330,11 @@ const stopVideo = () => {
  * déclencherait bien la demande lui-même, mais sans qu'on puisse réagir à un refus — d'où
  * une demande explicite des deux côtés.
  */
-const ensureCameraPermission = async (): Promise<boolean> => {
+const ensureCameraPermission = async (prompt = true): Promise<boolean> => {
   try {
-    const r = await Camera.requestCameraPermissionsAsync();
+    const r = prompt
+      ? await Camera.requestCameraPermissionsAsync()
+      : await Camera.getCameraPermissionsAsync();
     return r.granted;
   } catch {
     return false;
@@ -570,7 +574,15 @@ export const acceptCall = async (callIdFromSystem?: string): Promise<boolean> =>
      * ⚠️ Caméra refusée par l'appelé : l'appel n'est PAS refusé pour autant. Il a décroché,
      * il veut parler — il voit l'autre et se fait entendre, sans être vu.
      */
-    const camera = type === 'video' ? await ensureCameraPermission() : true;
+    /**
+     * ⚠️ DÉCROCHÉ DEPUIS L'ÉCRAN VERROUILLÉ (app pas au premier plan) : on ne DEMANDE pas
+     * l'autorisation, on la LIT. La fenêtre de demande ne peut pas s'afficher écran
+     * verrouillé, et l'attendre retarderait l'entrée dans le canal — l'appelant entendrait
+     * le silence. Pas encore accordée = caméra coupée, à allumer une fois l'app ouverte (le
+     * bouton redemande alors l'autorisation).
+     */
+    const camera =
+      type === 'video' ? await ensureCameraPermission(AppState.currentState === 'active') : true;
     if (!camera) patch({ cameraOff: true });
     join(info, type, camera);
     return true;
@@ -844,6 +856,7 @@ export const switchToVideo = async (): Promise<boolean> => {
    * afficherait une vue noire au lieu de son avatar. La première image reçue lève l'indication.
    */
   patch({ type: 'video', cameraOff: false, cameraPausedByMinimize: false, remoteCameraOff: true, speaker: true });
+  setNativeVideo(callId, state.peer.name);
   sendVideoSignal(e);
   // Pour l'historique et la bulle. Sans l'attendre : la bascule a déjà eu lieu ici.
   apiRequest(`/calls/${callId}/upgrade`, { method: 'POST' }).catch(() => {});
@@ -868,6 +881,7 @@ const peerSwitchedToVideo = () => {
     return;
   }
   patch({ type: 'video', cameraOff: true, cameraPausedByMinimize: false, remoteCameraOff: false });
+  setNativeVideo(state.callId, state.peer.name);
 };
 
 /** Caméra avant ↔ arrière. Sans effet caméra coupée (rien à retourner) et au simulateur. */

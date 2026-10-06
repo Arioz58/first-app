@@ -67,6 +67,9 @@ const PUSHKIT_BODY = `
     let data = payload.dictionaryPayload
     let uuid = (data["callId"] as? String) ?? UUID().uuidString
     let name = (data["callerName"] as? String) ?? "Appel"
+    // « video » : l'écran système annonce un appel vidéo. Absent (serveur antérieur au
+    // 06/10) = appel audio, comme avant.
+    let video = (data["callType"] as? String) == "video"
 
     /**
      * ⚠️ AVANT TOUT LE RESTE. iOS exige que l'appel soit signalé à CallKit dans le même
@@ -78,7 +81,7 @@ const PUSHKIT_BODY = `
       uuid,
       handle: name,
       handleType: "generic",
-      hasVideo: false,
+      hasVideo: video,
       localizedCallerName: name,
       supportsHolding: false,
       supportsDTMF: false,
