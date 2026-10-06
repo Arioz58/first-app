@@ -6,12 +6,14 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import * as Haptics from 'expo-haptics';
+import * as Device from 'expo-device';
 import {
   acceptCall,
   clearCall,
   flipCamera,
   hangUp,
   minimizeCall,
+  switchToVideo,
   toggleCamera,
   toggleMute,
   toggleSpeaker,
@@ -29,6 +31,23 @@ import { UserAvatar } from './UserAvatar';
  * un écran empilé survivrait mal à la fin de l'appel (retour arrière vers un écran d'appel
  * terminé, pile à nettoyer). Ici, il apparaît et disparaît avec l'état de l'appel.
  */
+
+/**
+ * Le simulateur ne sait pas dessiner la vidéo d'Agora : son moteur de rendu échoue à compiler
+ * ses shaders Metal à CHAQUE image (« [Metal] Compiler failed to build request », 1 636 fois
+ * en 30 min le 06/10). On n'y monte donc aucune vue vidéo — un cadre neutre à la place, qui
+ * garde la mise en page. Sans effet sur un vrai téléphone.
+ */
+const CAN_RENDER_VIDEO = Device.isDevice;
+
+/** Ce qui tient lieu de vue vidéo au simulateur. */
+function SimulatorVideoFrame({ style }: { style: object }) {
+  return (
+    <View style={[style, { backgroundColor: '#111827', alignItems: 'center', justifyContent: 'center' }]}>
+      <Ionicons name="videocam-outline" size={22} color="rgba(255,255,255,0.35)" />
+    </View>
+  );
+}
 
 /** Une fois l'appel fini, on laisse le temps de lire pourquoi avant de disparaître. */
 const CLOSE_DELAY_MS = 1400;
@@ -169,7 +188,8 @@ export function CallOverlay() {
         justifyContent: 'space-between',
       }}
     >
-      {showRemote && (
+      {showRemote && !CAN_RENDER_VIDEO && <SimulatorVideoFrame style={StyleSheet.absoluteFill} />}
+      {showRemote && CAN_RENDER_VIDEO && (
         <RtcSurfaceView
           key="remote"
           style={StyleSheet.absoluteFill}
@@ -186,7 +206,8 @@ export function CallOverlay() {
         caméra. Les deux flux se disputaient la même vue et celui de l'autre ne s'affichait
         pas (constaté le 03/10 dans les journaux Agora : même adresse de vue pour les deux).
       */}
-      {showLocal && (
+      {showLocal && !CAN_RENDER_VIDEO && <SimulatorVideoFrame style={localStyle} />}
+      {showLocal && CAN_RENDER_VIDEO && (
         <RtcSurfaceView
           key="local"
           style={localStyle}
@@ -265,6 +286,18 @@ export function CallOverlay() {
               onVideo={onVideo}
               onPress={toggleMute}
             />
+            {/* Appel audio décroché : on peut passer en vidéo (étape 3). */}
+            {!isVideo && call.status === 'active' && (
+              <RoundButton
+                icon="videocam"
+                active={false}
+                label={t('calls.video')}
+                onVideo={onVideo}
+                onPress={async () => {
+                  if (!(await switchToVideo())) Alert.alert('', t('calls.camera_denied'));
+                }}
+              />
+            )}
             {isVideo && (
               <RoundButton
                 icon={call.cameraOff ? 'videocam-off' : 'videocam'}

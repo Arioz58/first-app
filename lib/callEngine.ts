@@ -189,6 +189,16 @@ const ensureEngine = (appId: string): IRtcEngine => {
         if (state.remoteCameraOff) patch({ remoteCameraOff: false });
       }
     },
+    /**
+     * Message dans le canal : le correspondant vient de passer l'appel en vidéo.
+     *
+     * ⚠️ Par Agora et non par le socket : pendant un appel audio l'écran est souvent
+     * verrouillé, l'app en arrière-plan et son socket FERMÉ — un événement socket serait
+     * perdu. Le canal, lui, vit tant que l'appel dure.
+     */
+    onStreamMessage: (_c, _uid, _streamId, data) => {
+      if (decodeSignal(data) === VIDEO_SIGNAL) peerSwitchedToVideo();
+    },
     onRemoteAudioStateChanged: (_c, remoteUid, st, reason) => {
       if (__DEV__) console.log('[call] audio distant', { remoteUid, state: st, reason });
     },
@@ -380,6 +390,8 @@ const join = (
 const leave = () => {
   remoteCount = 0;
   joined = false;
+  // Le canal de messages appartient à l'appel : le suivant en créera un neuf.
+  signalStream = null;
   try {
     engine?.leaveChannel();
   } catch {
@@ -720,6 +732,12 @@ const applyCamera = (on: boolean) => {
   const e = engine;
   if (!e) return;
   try {
+    // Simulateur : la vidéo de test n'existe pas encore si l'appel a commencé en audio.
+    if (on && useTestVideo && !testPlayer && joined) {
+      const id = startTestVideo(e);
+      e.updateChannelMediaOptions({ publishMediaPlayerVideoTrack: true, publishMediaPlayerId: id });
+      return;
+    }
     if (testPlayer) {
       if (joined) e.updateChannelMediaOptions({ publishMediaPlayerVideoTrack: on });
       return;
@@ -749,6 +767,107 @@ export const toggleCamera = async (): Promise<boolean> => {
   applyCamera(on);
   patch({ cameraOff: !on, cameraPausedByMinimize: false });
   return true;
+};
+
+/**
+ * BASCULE AUDIO → VIDÉO en cours d'appel (étape 3, 06/10).
+ *
+ * Choix de Berke : chez l'autre, l'écran passe en vidéo et il VOIT celui qui a basculé, mais
+ * SA caméra reste coupée — il l'allume d'un appui s'il le veut. Rien n'est filmé chez lui
+ * sans son geste, et il n'y a pas de demande à accepter.
+ */
+const VIDEO_SIGNAL = 'video';
+const encodeSignal = (text: string) => new Uint8Array(Array.from(text, (ch) => ch.charCodeAt(0)));
+const decodeSignal = (data: Uint8Array) => String.fromCharCode(...Array.from(data ?? []));
+
+/** Canal de messages Agora de l'appel, créé à la première bascule. */
+let signalStream: number | null = null;
+
+/**
+ * Prévient l'autre téléphone par le canal.
+ *
+ * ⚠️ RÉPÉTÉ trois fois à une seconde d'écart : les messages de canal d'Agora sont ordonnés
+ * mais pas garantis. La réception est idempotente (déjà en vidéo = rien à faire).
+ */
+const sendVideoSignal = (e: IRtcEngine) => {
+  try {
+    if (signalStream === null) signalStream = e.createDataStream({ ordered: true, syncWithAudio: false });
+    const id = signalStream;
+    if (id === null || id < 0) return;
+    const bytes = encodeSignal(VIDEO_SIGNAL);
+    const callId = state?.callId;
+    [0, 1000, 2000].forEach((delay) =>
+      setTimeout(() => {
+        if (!state || state.callId !== callId || state.status === 'ended') return;
+        try {
+          e.sendStreamMessage(id, bytes, bytes.length);
+        } catch {
+          // Canal quitté entre-temps.
+        }
+      }, delay),
+    );
+  } catch {
+    // Sans canal de messages, l'autre ne basculera pas — l'appel continue en audio chez lui.
+  }
+};
+
+/**
+ * Bouton « Vidéo » d'un appel audio en cours.
+ *
+ * Renvoie `false` si la caméra est refusée : rien ne bascule, et l'appelant dit pourquoi.
+ */
+export const switchToVideo = async (): Promise<boolean> => {
+  const e = engine;
+  if (!e || !state || state.type !== 'audio' || state.status !== 'active') return true;
+  if (!useTestVideo && !(await ensureCameraPermission())) return false;
+  const callId = state.callId;
+  try {
+    e.enableVideo();
+    if (useTestVideo) {
+      const id = startTestVideo(e);
+      e.updateChannelMediaOptions({
+        autoSubscribeVideo: true,
+        publishMediaPlayerVideoTrack: true,
+        publishMediaPlayerId: id,
+      });
+    } else {
+      e.startPreview();
+      e.updateChannelMediaOptions({ autoSubscribeVideo: true, publishCameraTrack: true });
+    }
+    // Celui qui bascule regarde son écran : haut-parleur, comme un appel vidéo dès le départ.
+    e.setEnableSpeakerphone(true);
+  } catch {
+    return true;
+  }
+  /**
+   * ⚠️ `remoteCameraOff: true` : l'autre n'a pas encore de caméra allumée, et sans cela on
+   * afficherait une vue noire au lieu de son avatar. La première image reçue lève l'indication.
+   */
+  patch({ type: 'video', cameraOff: false, cameraPausedByMinimize: false, remoteCameraOff: true, speaker: true });
+  sendVideoSignal(e);
+  // Pour l'historique et la bulle. Sans l'attendre : la bascule a déjà eu lieu ici.
+  apiRequest(`/calls/${callId}/upgrade`, { method: 'POST' }).catch(() => {});
+  return true;
+};
+
+/**
+ * L'autre vient de passer en vidéo : on reçoit son image, MA caméra reste coupée.
+ *
+ * ⚠️ On ne touche PAS à la sortie audio : si je tiens le téléphone à l'oreille, basculer sur
+ * le haut-parleur à cause d'un geste de l'autre serait désagréable — c'est à moi de choisir.
+ */
+const peerSwitchedToVideo = () => {
+  const e = engine;
+  if (!e || !state || state.type === 'video' || state.status === 'ended') return;
+  try {
+    e.enableVideo();
+    // ⚠️ Activer le module vidéo ne doit pas allumer MA caméra.
+    e.enableLocalVideo(false);
+    e.updateChannelMediaOptions({ autoSubscribeVideo: true });
+  } catch {
+    return;
+  }
+  patch({ type: 'video', cameraOff: true, cameraPausedByMinimize: false, remoteCameraOff: false });
 };
 
 /** Caméra avant ↔ arrière. Sans effet caméra coupée (rien à retourner) et au simulateur. */

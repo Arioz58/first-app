@@ -3154,3 +3154,20 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
     simulateur (1 636 fois en 30 min). C'est LA raison pour laquelle il n'affiche aucune video.
     Sans effet sur un vrai telephone.
 
+[FAIT 06/10 - ETAPE 3/5 DES APPELS VIDEO] Bascule audio -> video en cours d'appel.
+  Choix de Berke : chez l'autre, l'ecran passe en video et il VOIT celui qui a bascule, mais
+  SA camera reste coupee (il l'allume d'un appui). Pas de demande a accepter.
+  → bouton « Video » sur un appel audio decroche. Celui qui bascule passe sur le haut-parleur ;
+    l'autre NON (telephone peut-etre a l'oreille : a lui de choisir).
+  ⚠️ SIGNAL PAR AGORA, PAS PAR LE SOCKET : pendant un appel audio l'ecran est souvent verrouille,
+    l'app en arriere-plan et son socket ferme. Message dans le canal (`createDataStream` /
+    `onStreamMessage`), envoye 3 fois a 1 s d'ecart (messages ordonnes mais non garantis),
+    reception idempotente.
+  → serveur : `POST /calls/:id/upgrade` inscrit seulement `type: 'video'` (historique, bulle).
+  → simulateur : cadre neutre a la place des vues video (plus d'erreurs Metal en boucle).
+  VERIFIE 06/10 (iPhone + simulateur) : bascule dans les deux sens, camera de l'autre coupee
+  puis allumee, son reste dans l'ecouteur chez l'autre, appel audio simple inchange, plus de
+  lignes Metal. Appels bascules inscrits « video » en base.
+  NON VERIFIE : bascule ecran VERROUILLE chez l'autre (le cas qui justifie le canal Agora) ;
+    Android ; ecran systeme CallKit qui annonce encore « audio » apres la bascule.
+
