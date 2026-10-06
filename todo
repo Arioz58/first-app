@@ -3136,3 +3136,21 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
   [A FAIRE] Boutons d'appel de la fiche de details et du profil : encore des maquettes, AUDIO
     COMPRIS.
 
+[FAIT 06/10 - ETAPE 2/5 DES APPELS VIDEO] Commandes video en cours d'appel.
+  → couper / rallumer la camera : `enableLocalVideo(false)` (la CAPTURE s'arrete, voyant
+    eteint) et non `muteLocalVideoStream` (qui filme encore sans envoyer). Ma vignette devient
+    une tuile sombre « camera barree ».
+  → chez l'autre : avatar + « Camera desactivee » a la place d'une image figee, sur les MOTIFS
+    d'Agora (5 coupee / 6 retablie, ou image qui redefile) — pas sur une coupure reseau.
+  → retourner la camera (`switchCamera`).
+  → ecran REDUIT : camera coupee a la reduction, rallumee au retour — sauf si je l'avais
+    coupee moi-meme (`cameraPausedByMinimize`). Choix de Berke plutot qu'une fenetre flottante.
+  → camera coupee pendant la sonnerie : le reste a l'entree dans le canal.
+  ⚠️ Rien n'est DEMONTE quand une camera se coupe : cache pose par-dessus la vue, sinon le
+    recyclage de l'etape 1 reviendrait.
+  VERIFIE 06/10 (iPhone + simulateur) : les 5 cas du protocole.
+  ⚠️ Le simulateur inonde la console de « [Metal] Compiler failed to build request » pendant un
+    appel video : c'est le moteur de rendu d'Agora qui n'arrive pas a compiler ses shaders sur
+    simulateur (1 636 fois en 30 min). C'est LA raison pour laquelle il n'affiche aucune video.
+    Sans effet sur un vrai telephone.
+

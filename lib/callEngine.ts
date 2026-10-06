@@ -4,6 +4,8 @@ import {
   ClientRoleType,
   createAgoraRtcEngine,
   MediaPlayerState,
+  RemoteVideoState,
+  RemoteVideoStateReason,
   type IMediaPlayer,
   type IRtcEngine,
 } from 'react-native-agora';
@@ -72,6 +74,16 @@ export type CallState = {
   startedAt: number | null;
   muted: boolean;
   speaker: boolean;
+  /** Ma caméra est coupée (par moi, ou parce que l'écran d'appel est réduit). */
+  cameraOff: boolean;
+  /**
+   * C'est la RÉDUCTION de l'écran qui a coupé la caméra, pas moi : elle se rallume au retour.
+   * ⚠️ Distinct de `cameraOff` : une caméra que j'ai coupée moi-même doit rester coupée quand
+   * je reviens à l'appel.
+   */
+  cameraPausedByMinimize: boolean;
+  /** Le correspondant a coupé sa caméra : on montre son avatar au lieu d'une image figée. */
+  remoteCameraOff: boolean;
   /** Motif de fin, une fois l'appel terminé — sert au dernier écran affiché. */
   endedReason?: string;
   /**
@@ -157,6 +169,26 @@ const ensureEngine = (appId: string): IRtcEngine => {
      * manquait pour diagnostiquer le son à sens unique — on ne savait pas distinguer « rien
      * ne vient » de « ça vient mais ça ne sort pas ». À retirer une fois les appels éprouvés.
      */
+    /**
+     * Le correspondant coupe ou rallume sa caméra.
+     *
+     * ⚠️ Lu sur le MOTIF et non sur l'état seul : « arrêtée » arrive aussi pour une coupure
+     * réseau ou un départ, et l'on afficherait alors « caméra coupée » à tort. Seuls les
+     * motifs « coupée / rétablie par lui » disent ce qu'il a voulu ; une image qui se remet
+     * à défiler (`Decoding`) suffit à lever l'indication, quelle qu'en soit la raison.
+     */
+    onRemoteVideoStateChanged: (_c, remoteUid, st, reason) => {
+      if (__DEV__) console.log('[call] vidéo distante', { remoteUid, state: st, reason });
+      if (!state || state.status === 'ended') return;
+      if (reason === RemoteVideoStateReason.RemoteVideoStateReasonRemoteMuted) {
+        patch({ remoteCameraOff: true });
+      } else if (
+        reason === RemoteVideoStateReason.RemoteVideoStateReasonRemoteUnmuted ||
+        st === RemoteVideoState.RemoteVideoStateDecoding
+      ) {
+        if (state.remoteCameraOff) patch({ remoteCameraOff: false });
+      }
+    },
     onRemoteAudioStateChanged: (_c, remoteUid, st, reason) => {
       if (__DEV__) console.log('[call] audio distant', { remoteUid, state: st, reason });
     },
@@ -295,6 +327,9 @@ const ensureCameraPermission = async (): Promise<boolean> => {
   }
 };
 
+/** Dans le canal — certaines commandes (republier la caméra) n'ont de sens qu'ici. */
+let joined = false;
+
 /** Rejoint le canal de l'appel avec le jeton que le serveur vient de remettre. */
 const join = (
   info: { appId: string; channel: string; token: string; uid: number },
@@ -324,11 +359,15 @@ const join = (
     publishCameraTrack: sendVideo && testPlayerId === null,
     autoSubscribeVideo: video,
     ...(testPlayerId !== null && {
-      publishMediaPlayerVideoTrack: true,
+      publishMediaPlayerVideoTrack: !state?.cameraOff,
       publishMediaPlayerAudioTrack: false,
       publishMediaPlayerId: testPlayerId,
     }),
   });
+  joined = true;
+  // Caméra coupée PENDANT LA SONNERIE (ou appel réduit avant le décroché) : elle doit le
+  // rester une fois dans le canal, sinon l'autre recevrait l'image qu'on a voulu cacher.
+  if (sendVideo && testPlayerId === null && state?.cameraOff) applyCamera(false);
 };
 
 /**
@@ -340,6 +379,7 @@ const join = (
  */
 const leave = () => {
   remoteCount = 0;
+  joined = false;
   try {
     engine?.leaveChannel();
   } catch {
@@ -385,6 +425,9 @@ export const startCall = async (
       startedAt: null,
       muted: false,
       speaker: type === 'video',
+      cameraOff: false,
+      cameraPausedByMinimize: false,
+      remoteCameraOff: false,
     };
     emit();
     if (type === 'video') startVideo(call.appId);
@@ -432,6 +475,9 @@ export const incomingCall = (callId: string, peer: CallPeer, type: CallType = 'a
     startedAt: null,
     muted: false,
     speaker: type === 'video',
+    cameraOff: false,
+    cameraPausedByMinimize: false,
+    remoteCameraOff: false,
   };
   emit();
   /**
@@ -496,6 +542,9 @@ export const acceptCall = async (callIdFromSystem?: string): Promise<boolean> =>
         startedAt: Date.now(),
         muted: false,
         speaker: type === 'video',
+        cameraOff: false,
+        cameraPausedByMinimize: false,
+        remoteCameraOff: false,
         nativeUI: true,
       };
       emit();
@@ -510,6 +559,7 @@ export const acceptCall = async (callIdFromSystem?: string): Promise<boolean> =>
      * il veut parler — il voit l'autre et se fait entendre, sans être vu.
      */
     const camera = type === 'video' ? await ensureCameraPermission() : true;
+    if (!camera) patch({ cameraOff: true });
     join(info, type, camera);
     return true;
   } catch {
@@ -632,13 +682,83 @@ export const toggleSpeaker = () => {
 export const minimizeCall = () => {
   if (!state || state.status === 'ended') return;
   if (state.direction === 'incoming' && state.status === 'ringing') return;
+  /**
+   * ⚠️ En vidéo, la caméra se COUPE à la réduction : on ne voit plus son image, l'autre ne
+   * doit plus la recevoir à notre insu. Choix validé par Berke le 06/10, plutôt qu'une
+   * fenêtre vidéo flottante façon WhatsApp.
+   */
+  if (state.type === 'video' && !state.cameraOff) {
+    applyCamera(false);
+    patch({ minimized: true, cameraOff: true, cameraPausedByMinimize: true });
+    return;
+  }
   patch({ minimized: true });
 };
 
 /** Revenir à l'écran d'appel (bandeau vert, ou bulle de l'appel dans le chat). */
 export const expandCall = () => {
   if (!state) return;
+  // Rallumée seulement si c'est la réduction qui l'avait coupée — pas si c'était moi.
+  if (state.cameraPausedByMinimize && state.status !== 'ended') {
+    applyCamera(true);
+    patch({ minimized: false, cameraOff: false, cameraPausedByMinimize: false });
+    return;
+  }
   patch({ minimized: false });
+};
+
+/**
+ * Coupe ou rallume l'ENVOI de ma vidéo, sans toucher à l'état affiché.
+ *
+ * ⚠️ `enableLocalVideo(false)` et non `muteLocalVideoStream` : ce dernier cesse d'envoyer
+ * mais laisse la caméra FILMER, voyant vert allumé — on croirait être encore vu. Couper la
+ * capture est la seule réponse honnête à « caméra coupée ».
+ *
+ * Simulateur en développement : c'est la vidéo de test qu'on cesse de publier.
+ */
+const applyCamera = (on: boolean) => {
+  const e = engine;
+  if (!e) return;
+  try {
+    if (testPlayer) {
+      if (joined) e.updateChannelMediaOptions({ publishMediaPlayerVideoTrack: on });
+      return;
+    }
+    e.enableLocalVideo(on);
+    if (on) {
+      e.startPreview();
+      // Caméra refusée au décroché puis autorisée en cours d'appel : elle n'était pas
+      // publiée du tout, il faut l'ajouter au canal.
+      if (joined) e.updateChannelMediaOptions({ publishCameraTrack: true });
+    }
+  } catch {
+    // Moteur pas prêt : l'état affiché reste juste, l'envoi suivra au prochain basculement.
+  }
+};
+
+/**
+ * Bouton « caméra » de l'écran d'appel.
+ *
+ * Renvoie `false` si l'autorisation est refusée au moment de la rallumer : l'appelant dit
+ * alors pourquoi rien ne se passe.
+ */
+export const toggleCamera = async (): Promise<boolean> => {
+  if (!state || state.type !== 'video' || state.status === 'ended') return true;
+  const on = state.cameraOff;
+  if (on && !testPlayer && !(await ensureCameraPermission())) return false;
+  applyCamera(on);
+  patch({ cameraOff: !on, cameraPausedByMinimize: false });
+  return true;
+};
+
+/** Caméra avant ↔ arrière. Sans effet caméra coupée (rien à retourner) et au simulateur. */
+export const flipCamera = () => {
+  if (!state || state.type !== 'video' || state.cameraOff || testPlayer) return;
+  try {
+    engine?.switchCamera();
+  } catch {
+    // Appareil à une seule caméra.
+  }
 };
 
 /**

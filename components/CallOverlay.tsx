@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import { RenderModeType, RtcSurfaceView } from 'react-native-agora';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,8 +9,10 @@ import * as Haptics from 'expo-haptics';
 import {
   acceptCall,
   clearCall,
+  flipCamera,
   hangUp,
   minimizeCall,
+  toggleCamera,
   toggleMute,
   toggleSpeaker,
   useCall,
@@ -124,6 +126,20 @@ export function CallOverlay() {
    */
   const showLocal = isVideo && call.status !== 'ended' && !incomingRinging;
   const showRemote = isVideo && call.status === 'active' && call.remoteUid !== null;
+  // Caméra coupée chez l'autre : sa vue reste MONTÉE (voir le recyclage plus bas), on la
+  // recouvre de son avatar plutôt que de laisser une image figée.
+  const remoteHidden = showRemote && call.remoteCameraOff;
+  const localStyle = showRemote
+    ? ({
+        position: 'absolute',
+        top: insets.top + 56,
+        right: 16,
+        width: 108,
+        height: 160,
+        borderRadius: 14,
+        overflow: 'hidden',
+      } as const)
+    : StyleSheet.absoluteFill;
   // Par-dessus une image, le texte passe en blanc : les couleurs du thème y seraient illisibles.
   const onVideo = showLocal || showRemote;
   const fg = onVideo ? '#FFFFFF' : c.content;
@@ -160,6 +176,7 @@ export function CallOverlay() {
           canvas={{ uid: call.remoteUid!, renderMode: RenderModeType.RenderModeHidden }}
         />
       )}
+      {remoteHidden && <View style={[StyleSheet.absoluteFill, { backgroundColor: '#111827' }]} />}
       {/*
         Mon image : plein écran tant que l'autre n'est pas là, vignette ensuite.
         ⚠️ UNE SEULE vue, jamais démontée pendant l'appel — seul son style change. Sous la
@@ -172,24 +189,27 @@ export function CallOverlay() {
       {showLocal && (
         <RtcSurfaceView
           key="local"
-          style={
-            showRemote
-              ? {
-                  position: 'absolute',
-                  top: insets.top + 56,
-                  right: 16,
-                  width: 108,
-                  height: 160,
-                  borderRadius: 14,
-                  overflow: 'hidden',
-                }
-              : StyleSheet.absoluteFill
-          }
+          style={localStyle}
           // ⚠️ Sur Android, deux SurfaceView se superposent dans un ordre indéfini sans ceci :
           // la vignette pourrait passer DERRIÈRE l'image plein écran.
           zOrderMediaOverlay
           canvas={{ uid: 0, renderMode: RenderModeType.RenderModeHidden }}
         />
+      )}
+      {/*
+        Ma caméra coupée : un cache PAR-DESSUS la vue, jamais un démontage. ⚠️ Démonter la vue
+        locale la rendrait au recyclage, et l'image de l'autre pourrait hériter d'une vue
+        qu'Agora tient encore pour la mienne — le défaut corrigé à l'étape 1.
+      */}
+      {showLocal && call.cameraOff && (
+        <View
+          style={[
+            localStyle,
+            { backgroundColor: '#1F2937', alignItems: 'center', justifyContent: 'center' },
+          ]}
+        >
+          {showRemote && <Ionicons name="videocam-off" size={26} color="#FFFFFF" />}
+        </View>
       )}
       {canMinimize && (
         <Pressable
@@ -204,20 +224,40 @@ export function CallOverlay() {
       )}
       <View style={{ alignItems: 'center' }}>
         {/* L'avatar s'efface devant le visage de l'autre : il ne servait qu'à le remplacer. */}
-        {!showRemote && <UserAvatar name={call.peer.name} photoUrl={call.peer.photoUrl} size={112} />}
+        {(!showRemote || remoteHidden) && (
+          <UserAvatar name={call.peer.name} photoUrl={call.peer.photoUrl} size={112} />
+        )}
         <Text
-          style={{ color: fg, fontSize: 28, fontWeight: '700', marginTop: showRemote ? 0 : 24 }}
+          style={{
+            color: fg,
+            fontSize: 28,
+            fontWeight: '700',
+            marginTop: showRemote && !remoteHidden ? 0 : 24,
+          }}
           numberOfLines={1}
         >
           {call.peer.name}
         </Text>
         <Text style={{ color: fgMuted, fontSize: 17, marginTop: 8 }}>{label}</Text>
+        {remoteHidden && (
+          <Text style={{ color: fgMuted, fontSize: 15, marginTop: 6 }}>
+            {t('calls.peer_camera_off')}
+          </Text>
+        )}
       </View>
 
       <View style={{ width: '100%', paddingHorizontal: 32 }}>
         {/* Sourdine et haut-parleur n'ont de sens qu'une fois dans le canal. */}
         {!incomingRinging && call.status !== 'ended' && (
-          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 28, marginBottom: 36 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'center',
+              // Quatre boutons en vidéo : l'écart d'origine les ferait déborder.
+              gap: isVideo ? 16 : 28,
+              marginBottom: 36,
+            }}
+          >
             <RoundButton
               icon={call.muted ? 'mic-off' : 'mic'}
               active={call.muted}
@@ -225,6 +265,26 @@ export function CallOverlay() {
               onVideo={onVideo}
               onPress={toggleMute}
             />
+            {isVideo && (
+              <RoundButton
+                icon={call.cameraOff ? 'videocam-off' : 'videocam'}
+                active={call.cameraOff}
+                label={t('calls.camera')}
+                onVideo={onVideo}
+                onPress={async () => {
+                  if (!(await toggleCamera())) Alert.alert('', t('calls.camera_denied'));
+                }}
+              />
+            )}
+            {isVideo && (
+              <RoundButton
+                icon="camera-reverse"
+                active={false}
+                label={t('calls.flip')}
+                onVideo={onVideo}
+                onPress={flipCamera}
+              />
+            )}
             <RoundButton
               icon={call.speaker ? 'volume-high' : 'volume-medium'}
               active={call.speaker}
