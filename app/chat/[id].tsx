@@ -37,6 +37,7 @@ import {
   expandCall,
   getCurrentCall,
   startCall,
+  type CallType,
 } from '../../lib/callEngine';
 import type { CallInfo } from '../../lib/callHistory';
 import { CallBubble } from '../../components/CallBubble';
@@ -4293,13 +4294,16 @@ export default function ChatScreen() {
    * ⚠️ Blocage et confidentialité donnent le MÊME message : les distinguer apprendrait à
    * l'appelant qu'il a été bloqué.
    */
-  const placeCall = async () => {
+  const placeCall = async (type: CallType = 'audio') => {
     if (!otherUserId) return;
     if (!header?.canCall) {
       Alert.alert('', t('details.call_unavailable'));
       return;
     }
-    const r = await startCall({ id: otherUserId, name: displayName, photoUrl: header?.photoUrl });
+    const r = await startCall(
+      { id: otherUserId, name: displayName, photoUrl: header?.photoUrl },
+      type,
+    );
     if (r.ok) return;
     const message =
       r.reason === 'busy'
@@ -4308,7 +4312,9 @@ export default function ChatScreen() {
           ? t('calls.unavailable')
           : r.reason === 'refused'
             ? t('details.call_unavailable')
-            : t('calls.failed');
+            : r.reason === 'camera_denied'
+              ? t('calls.camera_denied')
+              : t('calls.failed');
     Alert.alert('', message);
   };
 
@@ -4543,19 +4549,14 @@ export default function ChatScreen() {
             <TouchableOpacity
               className="px-2 py-1"
               style={{ opacity: header?.canCall ? 1 : 0.4 }}
-              onPress={placeCall}
+              onPress={() => placeCall('audio')}
             >
               <Ionicons name="call" size={21} color={NEXA} />
             </TouchableOpacity>
             <TouchableOpacity
               className="px-2 py-1"
               style={{ opacity: header?.canCall ? 1 : 0.4 }}
-              onPress={() =>
-                Alert.alert(
-                  '',
-                  header?.canCall ? t('details.calls_coming') : t('details.call_unavailable'),
-                )
-              }
+              onPress={() => placeCall('video')}
             >
               <Ionicons name="videocam" size={21} color={NEXA} />
             </TouchableOpacity>

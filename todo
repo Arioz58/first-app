@@ -3105,3 +3105,34 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
     « Appel termine » : Agora signale le depart (`onUserOffline`) avant que `call_ended`
     arrive. Vu dans les traces du 03/10, preexistant.
 
+[FAIT 06/10 - ETAPE 1/5 DES APPELS VIDEO] Un appel video s'etablit, app ouverte des deux cotes.
+  Decoupage arrete avec Berke (une etape a la fois) : 1) appel video de base, 2) couper /
+  retourner la camera + « camera coupee » chez l'autre, 3) bascule audio -> video en cours
+  d'appel, 4) ecran verrouille / CallKit en video (push VoIP avec le type) + libelle de la
+  permission camera (rebuild natif), 5) historique, bulle et web : icone video.
+  → moteur : `CallType` audio|video, camera allumee/eteinte APPEL PAR APPEL (jamais pendant un
+    audio), apercu des la sonnerie chez l'appelant (rien publie avant le decroche, donc rien
+    facture), haut-parleur par defaut en video. Serveur inchange (`type` deja accepte).
+  → ecran : image de l'autre en plein ecran, la mienne en vignette ; bouton camera du chat.
+  → autorisation camera demandee explicitement (Android ne la demande pas seul) : refusee chez
+    l'appelant = appel non lance ; chez l'appele = il voit sans etre vu.
+  ⚠️ RECYCLAGE DES VUES (New Architecture) : remonter l'apercu en vignette (cle differente)
+    liberait la vue plein ecran, aussitot reutilisee pour l'image de l'autre — qu'Agora tenait
+    encore pour la sortie de MA camera. Prouve par les journaux Agora (meme adresse de vue).
+    → UNE vue locale jamais demontee pendant l'appel (seul le style change) + vues DETACHEES
+      au raccroche (`view: null`).
+  ⚠️ LE SIMULATEUR N'AFFICHE AUCUNE VIDEO AGORA (ni la sienne ni celle recue : image recue et
+    decodee, jamais dessinee) et n'a pas de camera. → en __DEV__ sur simulateur, il publie une
+    VIDEO DE TEST (Big Buck Bunny 10 s, Creative Commons) a la place de la camera : c'est ce
+    qui permet de verifier avec UN SEUL telephone qu'un vrai appareil affiche l'image distante.
+    ⚠️ `open(url, 0)` puis `play()` a l'etat OPEN_COMPLETED : `openWithMediaSource` renvoyait -2.
+  VERIFIE 06/10 sur iPhone : apercu pendant la sonnerie, image distante (video de test) en
+  plein ecran + vignette, voyant camera eteint au raccroche, appel audio suivant sans camera.
+  NON VERIFIE : deux vraies cameras face a face (pas de second appareil) ; Android.
+  [ETAPE 2] Ecran reduit pendant un appel video : la camera continue d'emettre sans que l'on
+    voie l'image. A traiter avec couper/retourner la camera.
+  [ETAPE 4] Decrocher une video depuis l'ecran verrouille : le push VoIP ne porte pas le type,
+    et la demande d'autorisation camera ne peut pas s'afficher ecran verrouille.
+  [A FAIRE] Boutons d'appel de la fiche de details et du profil : encore des maquettes, AUDIO
+    COMPRIS.
+

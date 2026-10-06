@@ -3,8 +3,12 @@ import {
   ChannelProfileType,
   ClientRoleType,
   createAgoraRtcEngine,
+  MediaPlayerState,
+  type IMediaPlayer,
   type IRtcEngine,
 } from 'react-native-agora';
+import { Camera } from 'expo-camera';
+import * as Device from 'expo-device';
 import { apiRequest } from './api';
 import { enterIdleMode } from './audioMode';
 import { playRingback, playRingtone, stopCallSounds } from './callSounds';
@@ -31,6 +35,13 @@ import {
 
 export type CallPeer = { id: string; name: string; photoUrl?: string | null };
 
+/**
+ * Audio ou vidéo. ⚠️ Même canal, même signalisation, même facturation de sonnerie : la
+ * vidéo n'est qu'un flux de plus publié dans le canal. D'où un champ, et non un second
+ * moteur ou un second cycle de vie.
+ */
+export type CallType = 'audio' | 'video';
+
 export type CallStatus =
   /** Ça sonne — chez l'autre si l'appel est sortant, chez nous s'il est entrant. */
   | 'ringing'
@@ -44,7 +55,13 @@ export type CallState = {
   callId: string;
   peer: CallPeer;
   direction: 'outgoing' | 'incoming';
+  type: CallType;
   status: CallStatus;
+  /**
+   * Identifiant Agora du correspondant une fois entré dans le canal — c'est lui qu'on donne
+   * à la vue vidéo pour afficher SON image. `null` tant qu'il n'est pas là.
+   */
+  remoteUid: number | null;
   /**
    * Instant du DÉCROCHÉ, pour le chronomètre affiché.
    *
@@ -104,18 +121,22 @@ const ensureEngine = (appId: string): IRtcEngine => {
   if (engine) return engine;
   const e = createAgoraRtcEngine();
   e.initialize({ appId, channelProfile: ChannelProfileType.ChannelProfileCommunication });
-  // Appel vocal : on n'active jamais la vidéo, elle allumerait la caméra.
   e.enableAudio();
+  /**
+   * ⚠️ La vidéo n'est PAS activée ici : le moteur est partagé entre tous les appels, et
+   * l'activer une fois pour toutes allumerait la caméra pendant les appels audio. Elle est
+   * allumée et éteinte appel par appel (`startVideo` / `stopVideo`).
+   */
   e.registerEventHandler({
     /**
      * Le correspondant est entré dans le canal : c'est à cet instant précis, et pas au
      * décroché, qu'on peut dire que la voix passe.
      */
-    onUserJoined: () => {
+    onUserJoined: (_c, remoteUid) => {
       remoteCount += 1;
       // ⚠️ Voir la garde de `onUserOffline` : un appel terminé ne se rouvre pas.
       if (state?.status === 'ended') return;
-      patch({ status: 'active', startedAt: state?.startedAt ?? Date.now() });
+      patch({ status: 'active', startedAt: state?.startedAt ?? Date.now(), remoteUid });
     },
     /**
      * Il est parti.
@@ -161,7 +182,7 @@ const ensureEngine = (appId: string): IRtcEngine => {
        * Signalé par Berke le 22/09 — régression introduite par le compteur de participants.
        */
       if (state?.status === 'ended') return;
-      if (remoteCount === 0) patch({ status: 'connecting' });
+      if (remoteCount === 0) patch({ status: 'connecting', remoteUid: null });
     },
   });
   engine = e;
@@ -177,9 +198,122 @@ const ensureEngine = (appId: string): IRtcEngine => {
  */
 let remoteCount = 0;
 
+/**
+ * Allume la caméra et son aperçu local.
+ *
+ * ⚠️ Appelé dès que l'appelant lance un appel vidéo, AVANT de rejoindre le canal : on se
+ * voit pendant que ça sonne, comme sur WhatsApp. L'aperçu ne publie rien — rien ne part
+ * tant qu'on n'a pas rejoint le canal, donc rien n'est facturé pendant la sonnerie.
+ */
+const startVideo = (appId: string) => {
+  const e = ensureEngine(appId);
+  e.enableVideo();
+  e.startPreview();
+};
+
+/**
+ * DÉVELOPPEMENT : le simulateur n'a pas de caméra, il publie une vidéo de test à la place.
+ *
+ * Sans cela, impossible de vérifier avec un seul téléphone qu'un VRAI appareil affiche bien
+ * l'image de l'autre : le simulateur n'envoie rien, et il ne dessine pas lui-même la vidéo
+ * reçue (constaté le 06/10 — image reçue et décodée, jamais affichée).
+ *
+ * ⚠️ Jamais en production ni sur un téléphone : `__DEV__` ET simulateur. Extrait de 10 s de
+ * « Big Buck Bunny » (Blender Foundation, Creative Commons), joué en boucle.
+ */
+const SIMULATOR_TEST_VIDEO =
+  'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4';
+const useTestVideo = __DEV__ && !Device.isDevice;
+let testPlayer: IMediaPlayer | null = null;
+
+const startTestVideo = (e: IRtcEngine): number => {
+  const player = e.createMediaPlayer();
+  /**
+   * ⚠️ La lecture ne se lance qu'une fois l'ouverture TERMINÉE : avant, le lecteur refuse
+   * `play` et `mute` (-3, « pas prêt »). Et `open` plutôt que `openWithMediaSource`, qui
+   * renvoyait -2 (argument invalide) avec la même adresse (constaté le 06/10).
+   */
+  player.registerPlayerSourceObserver({
+    onPlayerSourceStateChanged: (st, reason) => {
+      if (__DEV__) console.log('[call] vidéo de test', { state: st, reason });
+      if (st !== MediaPlayerState.PlayerStateOpenCompleted) return;
+      // -1 : en boucle, l'appel peut durer plus longtemps que l'extrait.
+      player.setLoopCount(-1);
+      // Le son de la vidéo n'est pas publié, mais on le coupe aussi en local.
+      player.mute(true);
+      player.play();
+    },
+  });
+  player.open(SIMULATOR_TEST_VIDEO, 0);
+  testPlayer = player;
+  return player.getMediaPlayerId();
+};
+
+const stopTestVideo = () => {
+  if (!testPlayer) return;
+  try {
+    testPlayer.stop();
+    engine?.destroyMediaPlayer(testPlayer);
+  } catch {
+    // Lecteur déjà détruit.
+  }
+  testPlayer = null;
+};
+
+/** Éteint la caméra. ⚠️ Silencieux et rejouable, comme `leave` dont il fait partie. */
+const stopVideo = () => {
+  stopTestVideo();
+  try {
+    engine?.stopPreview();
+    engine?.disableVideo();
+    /**
+     * ⚠️ DÉTACHER les vues d'Agora. Une vue démontée est recyclée par React Native pour la
+     * suivante : si Agora la tient encore pour la sortie de ma caméra (ou de l'image de
+     * l'autre), l'appel suivant afficherait deux flux dans la même vue — et l'un des deux
+     * jamais. `view: null` est la façon documentée de délier une vue.
+     */
+    engine?.setupLocalVideo({ uid: 0, view: null });
+    if (state?.remoteUid) engine?.setupRemoteVideo({ uid: state.remoteUid, view: null });
+  } catch {
+    // Moteur jamais créé, ou vidéo déjà éteinte.
+  }
+};
+
+/**
+ * Autorisation caméra, demandée au moment de l'appel vidéo.
+ *
+ * ⚠️ Indispensable sur ANDROID : Agora n'y demande rien et filmerait du noir. Sur iOS il
+ * déclencherait bien la demande lui-même, mais sans qu'on puisse réagir à un refus — d'où
+ * une demande explicite des deux côtés.
+ */
+const ensureCameraPermission = async (): Promise<boolean> => {
+  try {
+    const r = await Camera.requestCameraPermissionsAsync();
+    return r.granted;
+  } catch {
+    return false;
+  }
+};
+
 /** Rejoint le canal de l'appel avec le jeton que le serveur vient de remettre. */
-const join = (info: { appId: string; channel: string; token: string; uid: number }) => {
+const join = (
+  info: { appId: string; channel: string; token: string; uid: number },
+  type: CallType,
+  /** Caméra refusée : on reçoit l'image de l'autre sans publier la sienne. */
+  publishCamera = true,
+) => {
   const e = ensureEngine(info.appId);
+  const video = type === 'video';
+  const sendVideo = video && publishCamera;
+  if (sendVideo) startVideo(info.appId);
+  else if (video) e.enableVideo();
+  /**
+   * ⚠️ Un appel vidéo part sur le HAUT-PARLEUR : on regarde l'écran, le téléphone n'est
+   * pas collé à l'oreille. En audio, l'écouteur reste la sortie par défaut.
+   */
+  e.setDefaultAudioRouteToSpeakerphone(video);
+  // Simulateur en développement : la vidéo de test remplace la caméra absente.
+  const testPlayerId = sendVideo && useTestVideo ? startTestVideo(e) : null;
   // Nouveau canal : personne d'autre n'y est encore.
   remoteCount = 0;
   e.joinChannel(info.token, info.channel, info.uid, {
@@ -187,6 +321,13 @@ const join = (info: { appId: string; channel: string; token: string; uid: number
     // Un appel : tout le monde publie et reçoit.
     publishMicrophoneTrack: true,
     autoSubscribeAudio: true,
+    publishCameraTrack: sendVideo && testPlayerId === null,
+    autoSubscribeVideo: video,
+    ...(testPlayerId !== null && {
+      publishMediaPlayerVideoTrack: true,
+      publishMediaPlayerAudioTrack: false,
+      publishMediaPlayerId: testPlayerId,
+    }),
   });
 };
 
@@ -204,6 +345,8 @@ const leave = () => {
   } catch {
     // Canal déjà quitté : rien à faire.
   }
+  // ⚠️ La caméra s'éteint avec l'appel : laissée allumée, son voyant resterait vert.
+  stopVideo();
   // Rendre la session audio : Agora la laisse en mode appel, son sur l'écouteur, et les
   // sons de messages en sortaient presque inaudibles (voir `enterIdleMode`).
   enterIdleMode();
@@ -215,8 +358,14 @@ let pendingJoin: { appId: string; channel: string; token: string; uid: number } 
 /** Lancer un appel. Le retour dit seulement s'il a pu PARTIR, pas s'il aboutira. */
 export const startCall = async (
   peer: CallPeer,
+  type: CallType = 'audio',
 ): Promise<{ ok: true } | { ok: false; reason: string }> => {
   if (state && state.status !== 'ended') return { ok: false, reason: 'busy_local' };
+  // ⚠️ AVANT de faire sonner chez l'autre : un appel vidéo lancé sans caméra le ferait
+  // décrocher sur un écran noir.
+  if (type === 'video' && !(await ensureCameraPermission())) {
+    return { ok: false, reason: 'camera_denied' };
+  }
   try {
     const call = await apiRequest<{
       callId: string;
@@ -224,24 +373,27 @@ export const startCall = async (
       channel: string;
       token: string;
       uid: number;
-    }>('/calls', { method: 'POST', body: { receiverId: peer.id, type: 'audio' } });
+    }>('/calls', { method: 'POST', body: { receiverId: peer.id, type } });
 
     state = {
       callId: call.callId,
       peer,
       direction: 'outgoing',
+      type,
       status: 'ringing',
+      remoteUid: null,
       startedAt: null,
       muted: false,
-      speaker: false,
+      speaker: type === 'video',
     };
     emit();
+    if (type === 'video') startVideo(call.appId);
     // La tonalité d'attente, dès que le serveur a accepté de faire sonner chez l'autre —
     // pas avant : un appel refusé ne doit pas laisser un « brrr » derrière lui.
     playRingback();
     // L'appel apparaît dans l'historique téléphonique du système. ⚠️ La tonalité reste la
     // NÔTRE : CallKit ne fournit pas de tonalité d'attente pour un appel sortant.
-    startOutgoingCall(call.callId, peer.name);
+    startOutgoingCall(call.callId, peer.name, type === 'video');
     /**
      * ⚠️ On NE rejoint PAS le canal tout de suite, alors que le jeton est déjà là : Agora
      * facture à la minute et par participant, et une sonnerie sans réponse coûterait
@@ -266,7 +418,7 @@ export const startCall = async (
 };
 
 /** Une sonnerie arrive (event socket `call_incoming`). */
-export const incomingCall = (callId: string, peer: CallPeer) => {
+export const incomingCall = (callId: string, peer: CallPeer, type: CallType = 'audio') => {
   // Déjà en ligne : le serveur a normalement refusé l'appel côté appelant, mais deux
   // appels peuvent se croiser. On ignore plutôt que d'écraser l'appel en cours.
   if (state && state.status !== 'ended') return;
@@ -274,10 +426,12 @@ export const incomingCall = (callId: string, peer: CallPeer) => {
     callId,
     peer,
     direction: 'incoming',
+    type,
     status: 'ringing',
+    remoteUid: null,
     startedAt: null,
     muted: false,
-    speaker: false,
+    speaker: type === 'video',
   };
   emit();
   /**
@@ -286,7 +440,7 @@ export const incomingCall = (callId: string, peer: CallPeer) => {
    * sonnerie n'est donc qu'un REPLI, pour le cas où l'écran système n'est pas disponible
    * (autorisation refusée, Android sans compte d'appel, module indisponible).
    */
-  const native = displayIncomingCall(callId, peer.name);
+  const native = displayIncomingCall(callId, peer.name, type === 'video');
   if (native) state = { ...state, nativeUI: true };
   else playRingtone();
   emit();
@@ -321,7 +475,11 @@ export const acceptCall = async (callIdFromSystem?: string): Promise<boolean> =>
       token: string;
       uid: number;
       peer: CallPeer;
+      type?: string;
     }>(`/calls/${callId}/accept`, { method: 'POST' });
+    // ⚠️ Le type fait foi côté SERVEUR : à froid (écran verrouillé), le JavaScript n'a
+    // jamais vu la sonnerie et ne sait pas si l'appel était vidéo.
+    const type: CallType = info.type === 'video' ? 'video' : 'audio';
 
     /**
      * L'application démarrée à froid n'a aucun état : on le reconstruit à partir de ce que
@@ -332,10 +490,12 @@ export const acceptCall = async (callIdFromSystem?: string): Promise<boolean> =>
         callId,
         peer: info.peer,
         direction: 'incoming',
+        type,
         status: 'connecting',
+        remoteUid: null,
         startedAt: Date.now(),
         muted: false,
-        speaker: false,
+        speaker: type === 'video',
         nativeUI: true,
       };
       emit();
@@ -345,7 +505,12 @@ export const acceptCall = async (callIdFromSystem?: string): Promise<boolean> =>
     stopCallSounds();
     reportConnected(callId);
     patch({ status: 'connecting', startedAt: state?.startedAt ?? Date.now() });
-    join(info);
+    /**
+     * ⚠️ Caméra refusée par l'appelé : l'appel n'est PAS refusé pour autant. Il a décroché,
+     * il veut parler — il voit l'autre et se fait entendre, sans être vu.
+     */
+    const camera = type === 'video' ? await ensureCameraPermission() : true;
+    join(info, type, camera);
     return true;
   } catch {
     // L'appel n'existe plus (raccroché pendant qu'on décrochait) : on ferme proprement.
@@ -376,7 +541,7 @@ export const peerAccepted = () => {
   reportConnected(state.callId);
   patch({ status: 'connecting', startedAt: Date.now() });
   if (pendingJoin) {
-    join(pendingJoin);
+    join(pendingJoin, state.type);
     pendingJoin = null;
   }
 };

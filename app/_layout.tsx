@@ -391,7 +391,8 @@ export default function RootLayout() {
             socket,
             "call_incoming",
             "root",
-            (p: { callId: string; from: CallPeer }) => incomingCall(p.callId, p.from),
+            (p: { callId: string; from: CallPeer; type?: string }) =>
+              incomingCall(p.callId, p.from, p.type === 'video' ? 'video' : 'audio'),
           );
           // L'autre a décroché : c'est à cet instant que l'appelant rejoint le canal — pas
           // avant, une sonnerie sans réponse serait facturée comme une conversation.

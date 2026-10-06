@@ -69,7 +69,7 @@ export const setupCallKit = async (): Promise<boolean> => {
         // Ce nom est celui que l'utilisateur lit sur l'écran d'appel et dans l'historique
         // téléphonique du système.
         appName: 'Nexa',
-        supportsVideo: false,
+        supportsVideo: true,
         maximumCallGroups: '1',
         maximumCallsPerCallGroup: '1',
       },
@@ -138,11 +138,12 @@ export const bindCallKit = (h: Handlers) => {
  * ⚠️ C'est LE SYSTÈME qui sonne à partir d'ici : l'application ne doit surtout pas jouer sa
  * propre sonnerie en plus, sans quoi on entendrait les deux superposées.
  */
-export const displayIncomingCall = (callId: string, callerName: string) => {
+export const displayIncomingCall = (callId: string, callerName: string, video = false) => {
   if (!ready) return false;
   try {
     currentUuid = callId;
-    RNCallKeep.displayIncomingCall(callId, callerName, callerName, 'generic', false);
+    // `video` : le système l'annonce comme un appel vidéo (« Appel vidéo Nexa »).
+    RNCallKeep.displayIncomingCall(callId, callerName, callerName, 'generic', video);
     return true;
   } catch {
     return false;
@@ -150,11 +151,11 @@ export const displayIncomingCall = (callId: string, callerName: string) => {
 };
 
 /** Un appel sortant, pour qu'il apparaisse dans l'historique téléphonique du système. */
-export const startOutgoingCall = (callId: string, calleeName: string) => {
+export const startOutgoingCall = (callId: string, calleeName: string, video = false) => {
   if (!ready) return;
   try {
     currentUuid = callId;
-    RNCallKeep.startCall(callId, calleeName, calleeName, 'generic', false);
+    RNCallKeep.startCall(callId, calleeName, calleeName, 'generic', video);
   } catch {
     // Sans conséquence : l'appel a lieu, il n'apparaît simplement pas dans l'historique
     // du système.

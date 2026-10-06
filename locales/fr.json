@@ -676,6 +676,7 @@
   "calls": {
     "calling": "Appel…",
     "incoming": "Appel entrant",
+    "incoming_video": "Appel vidéo entrant",
     "connecting": "Connexion…",
     "ended": "Appel terminé",
     "accept": "Répondre",
@@ -686,6 +687,7 @@
     "peer_busy": "Cette personne est déjà en ligne.",
     "unavailable": "Les appels ne sont pas disponibles pour le moment.",
     "failed": "L'appel n'a pas pu être lancé.",
+    "camera_denied": "Autorisez l'accès à la caméra dans les réglages pour passer un appel vidéo.",
     "missed": "Appel manqué",
     "no_answer": "Sans réponse",
     "empty": "Aucun appel pour le moment.",

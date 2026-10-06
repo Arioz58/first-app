@@ -676,6 +676,7 @@
   "calls": {
     "calling": "Aranıyor…",
     "incoming": "Gelen arama",
+    "incoming_video": "Gelen görüntülü arama",
     "connecting": "Bağlanıyor…",
     "ended": "Arama sona erdi",
     "accept": "Cevapla",
@@ -686,6 +687,7 @@
     "peer_busy": "Bu kişi şu anda başka bir aramada.",
     "unavailable": "Aramalar şu anda kullanılamıyor.",
     "failed": "Arama başlatılamadı.",
+    "camera_denied": "Görüntülü arama yapmak için Ayarlar’dan kamera erişimine izin verin.",
     "missed": "Cevapsız arama",
     "no_answer": "Yanıt yok",
     "empty": "Henüz arama yok.",

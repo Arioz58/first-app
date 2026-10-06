@@ -676,6 +676,7 @@
   "calls": {
     "calling": "Calling…",
     "incoming": "Incoming call",
+    "incoming_video": "Incoming video call",
     "connecting": "Connecting…",
     "ended": "Call ended",
     "accept": "Answer",
@@ -686,6 +687,7 @@
     "peer_busy": "This person is already on a call.",
     "unavailable": "Calls are unavailable right now.",
     "failed": "The call could not be placed.",
+    "camera_denied": "Allow camera access in Settings to make a video call.",
     "missed": "Missed call",
     "no_answer": "No answer",
     "empty": "No calls yet.",

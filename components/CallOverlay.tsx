@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { Keyboard, Pressable, Text, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
+import { RenderModeType, RtcSurfaceView } from 'react-native-agora';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -101,6 +102,7 @@ export function CallOverlay() {
   // On peut réduire tant que l'appel vit — sauf pendant qu'un appel ENTRANT sonne, où il
   // faut d'abord répondre ou refuser (même règle que `minimizeCall`).
   const canMinimize = !incomingRinging && call.status !== 'ended';
+  const isVideo = call.type === 'video';
   const label =
     call.status === 'ended'
       ? t('calls.ended')
@@ -110,7 +112,22 @@ export function CallOverlay() {
           ? t('calls.connecting')
           : call.direction === 'outgoing'
             ? t('calls.calling')
-            : t('calls.incoming');
+            : isVideo
+              ? t('calls.incoming_video')
+              : t('calls.incoming');
+
+  /**
+   * VIDÉO. ⚠️ Ma caméra n'est montrée que si elle tourne : chez l'appelant dès la sonnerie
+   * (aperçu), chez l'appelé seulement après le décroché — on ne l'allume pas pour un appel
+   * qu'on n'a pas encore accepté. ⚠️ Et jamais une fois l'appel fini : la caméra est éteinte,
+   * la vue resterait noire.
+   */
+  const showLocal = isVideo && call.status !== 'ended' && !incomingRinging;
+  const showRemote = isVideo && call.status === 'active' && call.remoteUid !== null;
+  // Par-dessus une image, le texte passe en blanc : les couleurs du thème y seraient illisibles.
+  const onVideo = showLocal || showRemote;
+  const fg = onVideo ? '#FFFFFF' : c.content;
+  const fgMuted = onVideo ? 'rgba(255,255,255,0.8)' : c.muted;
 
   return (
     <Animated.View
@@ -129,13 +146,51 @@ export function CallOverlay() {
          * simplement invisible. Un appel prime sur tout le reste.
          */
         zIndex: 200,
-        backgroundColor: c.canvas,
+        backgroundColor: onVideo ? '#000000' : c.canvas,
         paddingTop: insets.top + 48,
         paddingBottom: insets.bottom + 32,
         alignItems: 'center',
         justifyContent: 'space-between',
       }}
     >
+      {showRemote && (
+        <RtcSurfaceView
+          key="remote"
+          style={StyleSheet.absoluteFill}
+          canvas={{ uid: call.remoteUid!, renderMode: RenderModeType.RenderModeHidden }}
+        />
+      )}
+      {/*
+        Mon image : plein écran tant que l'autre n'est pas là, vignette ensuite.
+        ⚠️ UNE SEULE vue, jamais démontée pendant l'appel — seul son style change. Sous la
+        New Architecture, une vue native démontée est RECYCLÉE pour la suivante : remonter
+        l'aperçu en vignette (clé différente) libérait l'ancienne vue plein écran, aussitôt
+        réutilisée pour l'image de l'autre — qu'Agora tenait encore pour la sortie de MA
+        caméra. Les deux flux se disputaient la même vue et celui de l'autre ne s'affichait
+        pas (constaté le 03/10 dans les journaux Agora : même adresse de vue pour les deux).
+      */}
+      {showLocal && (
+        <RtcSurfaceView
+          key="local"
+          style={
+            showRemote
+              ? {
+                  position: 'absolute',
+                  top: insets.top + 56,
+                  right: 16,
+                  width: 108,
+                  height: 160,
+                  borderRadius: 14,
+                  overflow: 'hidden',
+                }
+              : StyleSheet.absoluteFill
+          }
+          // ⚠️ Sur Android, deux SurfaceView se superposent dans un ordre indéfini sans ceci :
+          // la vignette pourrait passer DERRIÈRE l'image plein écran.
+          zOrderMediaOverlay
+          canvas={{ uid: 0, renderMode: RenderModeType.RenderModeHidden }}
+        />
+      )}
       {canMinimize && (
         <Pressable
           onPress={minimizeCall}
@@ -144,18 +199,19 @@ export function CallOverlay() {
           accessibilityLabel={t('calls.minimize')}
           style={{ position: 'absolute', top: insets.top + 8, left: 16, padding: 8 }}
         >
-          <Ionicons name="chevron-down" size={28} color={c.content} />
+          <Ionicons name="chevron-down" size={28} color={fg} />
         </Pressable>
       )}
       <View style={{ alignItems: 'center' }}>
-        <UserAvatar name={call.peer.name} photoUrl={call.peer.photoUrl} size={112} />
+        {/* L'avatar s'efface devant le visage de l'autre : il ne servait qu'à le remplacer. */}
+        {!showRemote && <UserAvatar name={call.peer.name} photoUrl={call.peer.photoUrl} size={112} />}
         <Text
-          style={{ color: c.content, fontSize: 28, fontWeight: '700', marginTop: 24 }}
+          style={{ color: fg, fontSize: 28, fontWeight: '700', marginTop: showRemote ? 0 : 24 }}
           numberOfLines={1}
         >
           {call.peer.name}
         </Text>
-        <Text style={{ color: c.muted, fontSize: 17, marginTop: 8 }}>{label}</Text>
+        <Text style={{ color: fgMuted, fontSize: 17, marginTop: 8 }}>{label}</Text>
       </View>
 
       <View style={{ width: '100%', paddingHorizontal: 32 }}>
@@ -166,12 +222,14 @@ export function CallOverlay() {
               icon={call.muted ? 'mic-off' : 'mic'}
               active={call.muted}
               label={t('calls.mute')}
+              onVideo={onVideo}
               onPress={toggleMute}
             />
             <RoundButton
               icon={call.speaker ? 'volume-high' : 'volume-medium'}
               active={call.speaker}
               label={t('calls.speaker')}
+              onVideo={onVideo}
               onPress={toggleSpeaker}
             />
           </View>
@@ -188,6 +246,7 @@ export function CallOverlay() {
               color="#16A34A"
               icon="call"
               label={t('calls.accept')}
+              onVideo={onVideo}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 acceptCall();
@@ -200,6 +259,7 @@ export function CallOverlay() {
               icon="call"
               rotate
               label={incomingRinging ? t('calls.decline') : t('calls.hang_up')}
+              onVideo={onVideo}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 hangUp();
@@ -216,11 +276,13 @@ function RoundButton({
   icon,
   label,
   active,
+  onVideo,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   active: boolean;
+  onVideo?: boolean;
   onPress: () => void;
 }) {
   const c = useThemeColors();
@@ -239,7 +301,7 @@ function RoundButton({
       >
         <Ionicons name={icon} size={26} color={active ? c.canvas : c.content} />
       </Pressable>
-      <Text style={{ color: c.muted, fontSize: 13 }}>{label}</Text>
+      <Text style={{ color: onVideo ? '#FFFFFF' : c.muted, fontSize: 13 }}>{label}</Text>
     </View>
   );
 }
@@ -249,12 +311,14 @@ function Action({
   icon,
   label,
   rotate,
+  onVideo,
   onPress,
 }: {
   color: string;
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   rotate?: boolean;
+  onVideo?: boolean;
   onPress: () => void;
 }) {
   const c = useThemeColors();
@@ -279,7 +343,7 @@ function Action({
           style={rotate ? { transform: [{ rotate: '135deg' }] } : undefined}
         />
       </Pressable>
-      <Text style={{ color: c.muted, fontSize: 13 }}>{label}</Text>
+      <Text style={{ color: onVideo ? '#FFFFFF' : c.muted, fontSize: 13 }}>{label}</Text>
     </View>
   );
 }
