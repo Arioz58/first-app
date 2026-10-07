@@ -1,8 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
-import { Alert, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Keyboard, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { RenderModeType, RtcSurfaceView } from 'react-native-agora';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import * as Haptics from 'expo-haptics';
@@ -49,6 +57,23 @@ function SimulatorVideoFrame({ style }: { style: object }) {
   );
 }
 
+/**
+ * VIGNETTE (ma caméra pendant un appel vidéo) : déplaçable au doigt, et AIMANTÉE à l'un des
+ * quatre coins, comme FaceTime et WhatsApp — on la lance, elle file vers le coin visé.
+ */
+const PIP_W = 108;
+const PIP_H = 160;
+const PIP_MARGIN = 16;
+/** Sous le chevron « réduire » : la vignette ne doit pas le recouvrir. */
+const PIP_TOP_OFFSET = 56;
+/**
+ * Arrivée au coin SANS rebond (préférence de Berke : aucun dépassement) — `overshootClamping`
+ * arrête le ressort net sur sa cible, la vitesse du lancer n'en garde que l'élan.
+ */
+const PIP_SPRING = { damping: 22, stiffness: 220, overshootClamping: true } as const;
+/** Part de la vitesse du lancer prise en compte pour choisir le coin (en secondes). */
+const PIP_THROW = 0.15;
+
 /** Une fois l'appel fini, on laisse le temps de lire pourquoi avant de disparaître. */
 const CLOSE_DELAY_MS = 1400;
 
@@ -64,6 +89,74 @@ export function CallOverlay() {
   const c = useThemeColors();
   const { t } = useTranslation();
   const [elapsed, setElapsed] = useState(0);
+  const { width: screenW } = useWindowDimensions();
+
+  /**
+   * Position de la vignette. `corner` : 0 haut-gauche, 1 haut-droite, 2 bas-gauche,
+   * 3 bas-droite — haut-droite par défaut. `offX`/`offY` : écart au coin pendant le geste,
+   * ramené à zéro par le ressort au lâcher.
+   */
+  const corner = useSharedValue(1);
+  const offX = useSharedValue(0);
+  const offY = useSharedValue(0);
+  const pipActive = useSharedValue(false);
+  const minX = useSharedValue(PIP_MARGIN);
+  const maxX = useSharedValue(screenW - PIP_W - PIP_MARGIN);
+  const minY = useSharedValue(insets.top + PIP_TOP_OFFSET);
+  const maxY = useSharedValue(insets.top + PIP_TOP_OFFSET);
+  /**
+   * Haut des commandes, mesuré : c'est la limite basse de la vignette. ⚠️ Mesuré plutôt que
+   * calculé — le bloc change de hauteur selon l'état (sonnerie, 3 ou 4 boutons), et une
+   * vignette posée sur « raccrocher » empêcherait de raccrocher.
+   */
+  const [controlsTop, setControlsTop] = useState<number | null>(null);
+  useEffect(() => {
+    minX.value = PIP_MARGIN;
+    maxX.value = screenW - PIP_W - PIP_MARGIN;
+    minY.value = insets.top + PIP_TOP_OFFSET;
+    maxY.value = Math.max(minY.value, (controlsTop ?? minY.value + PIP_H) - PIP_MARGIN - PIP_H);
+  }, [screenW, insets.top, controlsTop, minX, maxX, minY, maxY]);
+
+  // La vignette n'existe qu'une fois l'image de l'autre affichée (même règle que `showRemote`).
+  const pipOn = call?.type === 'video' && call.status === 'active' && call.remoteUid !== null;
+  useEffect(() => {
+    pipActive.value = pipOn;
+  }, [pipOn, pipActive]);
+
+  const pipGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .onChange((e) => {
+          offX.value += e.changeX;
+          offY.value += e.changeY;
+        })
+        .onEnd((e) => {
+          const baseX = corner.value % 2 === 0 ? minX.value : maxX.value;
+          const baseY = corner.value < 2 ? minY.value : maxY.value;
+          const x = baseX + offX.value;
+          const y = baseY + offY.value;
+          // Le coin visé : celui du côté où la vignette ARRIVERAIT, élan compris.
+          const right = x + e.velocityX * PIP_THROW + PIP_W / 2 > (minX.value + maxX.value + PIP_W) / 2;
+          const bottom = y + e.velocityY * PIP_THROW + PIP_H / 2 > (minY.value + maxY.value + PIP_H) / 2;
+          const next = (bottom ? 2 : 0) + (right ? 1 : 0);
+          if (next !== corner.value) runOnJS(Haptics.selectionAsync)();
+          corner.value = next;
+          // Le coin change sous la vignette : on reporte l'écart pour qu'elle ne saute pas,
+          // puis le ressort l'amène au coin.
+          offX.value = x - (right ? maxX.value : minX.value);
+          offY.value = y - (bottom ? maxY.value : minY.value);
+          offX.value = withSpring(0, { ...PIP_SPRING, velocity: e.velocityX });
+          offY.value = withSpring(0, { ...PIP_SPRING, velocity: e.velocityY });
+        }),
+    [corner, offX, offY, minX, maxX, minY, maxY],
+  );
+
+  const pipStyle = useAnimatedStyle(() => {
+    if (!pipActive.value) return { transform: [{ translateX: 0 }, { translateY: 0 }] };
+    const x = (corner.value % 2 === 0 ? minX.value : maxX.value) + offX.value;
+    const y = (corner.value < 2 ? minY.value : maxY.value) + offY.value;
+    return { transform: [{ translateX: x }, { translateY: y }] };
+  });
 
   const status = call?.status;
   const startedAt = call?.startedAt ?? null;
@@ -148,15 +241,18 @@ export function CallOverlay() {
   // Caméra coupée chez l'autre : sa vue reste MONTÉE (voir le recyclage plus bas), on la
   // recouvre de son avatar plutôt que de laisser une image figée.
   const remoteHidden = showRemote && call.remoteCameraOff;
+  // Plein écran tant que l'autre n'est pas là ; vignette ensuite, placée par `pipStyle`.
   const localStyle = showRemote
     ? ({
         position: 'absolute',
-        top: insets.top + 56,
-        right: 16,
-        width: 108,
-        height: 160,
+        top: 0,
+        left: 0,
+        width: PIP_W,
+        height: PIP_H,
         borderRadius: 14,
         overflow: 'hidden',
+        // Au-dessus du nom et des commandes : on doit pouvoir la saisir partout.
+        zIndex: 10,
       } as const)
     : StyleSheet.absoluteFill;
   // Par-dessus une image, le texte passe en blanc : les couleurs du thème y seraient illisibles.
@@ -206,31 +302,40 @@ export function CallOverlay() {
         caméra. Les deux flux se disputaient la même vue et celui de l'autre ne s'affichait
         pas (constaté le 03/10 dans les journaux Agora : même adresse de vue pour les deux).
       */}
-      {showLocal && !CAN_RENDER_VIDEO && <SimulatorVideoFrame style={localStyle} />}
-      {showLocal && CAN_RENDER_VIDEO && (
-        <RtcSurfaceView
-          key="local"
-          style={localStyle}
-          // ⚠️ Sur Android, deux SurfaceView se superposent dans un ordre indéfini sans ceci :
-          // la vignette pourrait passer DERRIÈRE l'image plein écran.
-          zOrderMediaOverlay
-          canvas={{ uid: 0, renderMode: RenderModeType.RenderModeHidden }}
-        />
-      )}
       {/*
+        ⚠️ Le CONTENEUR est lui aussi toujours monté pendant l'appel : c'est lui qu'on fait
+        glisser, et la vue vidéo ne change jamais de parent — en changer la démonterait.
         Ma caméra coupée : un cache PAR-DESSUS la vue, jamais un démontage. ⚠️ Démonter la vue
         locale la rendrait au recyclage, et l'image de l'autre pourrait hériter d'une vue
         qu'Agora tient encore pour la mienne — le défaut corrigé à l'étape 1.
       */}
-      {showLocal && call.cameraOff && (
-        <View
-          style={[
-            localStyle,
-            { backgroundColor: '#1F2937', alignItems: 'center', justifyContent: 'center' },
-          ]}
-        >
-          {showRemote && <Ionicons name="videocam-off" size={26} color="#FFFFFF" />}
-        </View>
+      {showLocal && (
+        <GestureDetector gesture={pipGesture}>
+          <Animated.View key="local-frame" style={[localStyle, pipStyle]} pointerEvents={showRemote ? 'auto' : 'none'}>
+            {CAN_RENDER_VIDEO ? (
+              <RtcSurfaceView
+                key="local"
+                style={StyleSheet.absoluteFill}
+                // ⚠️ Sur Android, deux SurfaceView se superposent dans un ordre indéfini sans
+                // ceci : la vignette pourrait passer DERRIÈRE l'image plein écran.
+                zOrderMediaOverlay
+                canvas={{ uid: 0, renderMode: RenderModeType.RenderModeHidden }}
+              />
+            ) : (
+              <SimulatorVideoFrame style={StyleSheet.absoluteFill} />
+            )}
+            {call.cameraOff && (
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  { backgroundColor: '#1F2937', alignItems: 'center', justifyContent: 'center' },
+                ]}
+              >
+                {showRemote && <Ionicons name="videocam-off" size={26} color="#FFFFFF" />}
+              </View>
+            )}
+          </Animated.View>
+        </GestureDetector>
       )}
       {canMinimize && (
         <Pressable
@@ -267,7 +372,10 @@ export function CallOverlay() {
         )}
       </View>
 
-      <View style={{ width: '100%', paddingHorizontal: 32 }}>
+      <View
+        style={{ width: '100%', paddingHorizontal: 32 }}
+        onLayout={(e) => setControlsTop(e.nativeEvent.layout.y)}
+      >
         {/* Sourdine et haut-parleur n'ont de sens qu'une fois dans le canal. */}
         {!incomingRinging && call.status !== 'ended' && (
           <View

@@ -3195,6 +3195,13 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
   Le web reste en LECTURE SEULE pour les appels (decision d'origine : les appels passent par
   le telephone).
 
+[FAIT 07/10 - VERIFIE] Appels video : la vignette se deplace au doigt et s'aimante a l'un des
+  QUATRE COINS (lancer = coin vise, elan compris), sans rebond (`overshootClamping`), haptique
+  au changement de coin. Limite basse = haut des commandes MESURE (le bloc change de hauteur),
+  jamais sur « raccrocher ». Coin memorise d'un appel a l'autre.
+  ⚠️ Vue video DANS un conteneur toujours monte : c'est le conteneur qui glisse, la vue ne
+    change jamais de parent (sinon recyclage, cf. etape 1).
+
 ================================================================================
 A TESTER SUR TESTFLIGHT (Berke + un ami, deux vrais telephones) — liste tenue a jour
 ================================================================================
