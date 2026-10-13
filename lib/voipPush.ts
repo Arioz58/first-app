@@ -19,15 +19,29 @@ import { apiRequest } from './api';
  */
 
 let registered = false;
+// Dernier jeton délivré par le système. ⚠️ Il ne le redonne pas sur demande : après une
+// déconnexion (qui le retire du serveur) suivie d'une connexion, c'est ce jeton gardé qu'on
+// renvoie, sans quoi le nouveau compte ne sonnerait plus écran verrouillé.
+let lastToken: string | null = null;
+
+const sendToken = (token: string) =>
+  apiRequest('/users/me/voip-token', { method: 'POST', body: { voipToken: token } })
+    .then(() => console.log('[voip] Jeton enregistré'))
+    .catch((e) => console.warn('[voip] Enregistrement refusé :', e?.message));
 
 export const registerVoipPush = () => {
-  if (Platform.OS !== 'ios' || !Device.isDevice || registered) return;
+  if (Platform.OS !== 'ios' || !Device.isDevice) return;
+  // Déjà inscrit dans ce lancement (nouvelle session) : écouteurs en place, on renvoie
+  // seulement le jeton connu au compte qui vient de se connecter.
+  if (registered) {
+    if (lastToken) sendToken(lastToken);
+    return;
+  }
   registered = true;
 
   VoipPushNotification.addEventListener('register', (token: string) => {
-    apiRequest('/users/me/voip-token', { method: 'POST', body: { voipToken: token } })
-      .then(() => console.log('[voip] Jeton enregistré'))
-      .catch((e) => console.warn('[voip] Enregistrement refusé :', e?.message));
+    lastToken = token;
+    sendToken(token);
   });
 
   /**

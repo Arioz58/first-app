@@ -3030,6 +3030,19 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
 [PLUS TARD] Appels video + bascule audio -> video en cours d'appel (Agora le permet dans le
   meme canal). Traite apres l'audio.
 
+[FAIT 13/10 - RETOUR DE HAKAN sur le build 27] APPELS MUETS APRES UNE CONNEXION.
+  Signale : 1) l'appele, app ouverte, ne voit pas l'appel ; 2) l'appelant continue de sonner
+  apres le decroche ou le raccroche d'en face ; 3) en video, l'appelant ne voit jamais l'autre.
+  CAUSE UNIQUE (reproduite sur simulateur par Berke) : les ecouteurs `call_incoming` /
+  `call_accepted` / `call_ended` (et les bandeaux de messages / demandes d'ami, le jeton VoIP,
+  CallKit) n'etaient poses qu'au LANCEMENT, et seulement si une session existait deja. Se
+  connecter sans relancer l'app = personne n'ecoute. Le serveur, voyant l'appele en ligne,
+  n'envoie pas de push VoIP ; l'appelant ne rejoint le canal Agora qu'a `call_accepted`,
+  d'ou la video absente. Ce n'etait PAS un probleme de connectivite.
+  → `startSession()` (app/_layout.tsx) rejoue a la fin de la connexion (verify.tsx, relais
+    `lib/session.ts`) ; `registerVoipPush` renvoie le jeton connu au nouveau compte apres une
+    deconnexion ; tache d'accuses de reception posee aussi depuis `/permissions`.
+
 [A FAIRE - REPONSE DE HAKAN 03/10] SON DE NOTIFICATION AU CHOIX DE L'UTILISATEUR.
   Reponse a la question du « son par type » : dans les PARAMETRES, une liste de sons
   proposes parmi lesquels l'utilisateur choisit le sien, avec un son PAR DEFAUT (l'actuel
@@ -3222,4 +3235,7 @@ Appels video (etapes 1 a 4, octobre 2026) :
       du chat, bulle web), « Appel video · chrono » pendant l'appel, bulle qui passe en video
       lors d'une bascule ; rappeler depuis Recents, la fiche ou la bulle repart en video.
   [ ] Android : rien de la video n'y a ete teste.
+Connexion sans relancer l'app (correctif du 13/10) :
+  [ ] Se deconnecter puis se reconnecter SANS tuer l'app, verrouiller le telephone : un appel
+      entrant sonne bien sur l'ecran systeme (jeton VoIP renvoye au compte).
 

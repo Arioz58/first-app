@@ -26,6 +26,7 @@ import {
 // rendu, et une tâche non définie est simplement perdue.
 import { registerDeliveryReceiptTask } from "../lib/deliveryReceipt";
 import { bindSocket, connectSocket, pauseSocket, resumeSocket } from "../lib/socket";
+import { setSessionStarter } from "../lib/session";
 import { hydrateLiveShares } from "../lib/liveLocation";
 import { clearTokens, getAccessToken, getRefreshToken, getUserId, hydrateLocalSettings, migrateSessionAccessibility } from "../lib/storage";
 import { BOOT_KEYS, hydrateCache } from "../lib/cache";
@@ -163,6 +164,151 @@ const RECEDE_RADIUS = 38;
 // Léger enfoncement vers le bas : la feuille arrivant du bas, un recul centré laisserait
 // autant de noir en haut qu'en bas et l'écran semblerait flotter.
 const RECEDE_LIFT = 10;
+
+let callKitBound = false;
+
+/**
+ * Tout ce qui suppose un utilisateur CONNECTÉ : écouteurs temps réel (appels, bandeaux),
+ * jeton VoIP, écran d'appel du système, compteur des demandes d'ami.
+ *
+ * ⚠️ Appelé à DEUX endroits : au lancement si une session existe déjà, ET à la fin de la
+ * connexion (`verify.tsx`, via `lib/session.ts`). Jusqu'au 13/10 il ne l'était qu'au
+ * lancement : après s'être connecté sans relancer l'app, personne n'écoutait
+ * `call_incoming` / `call_accepted` / `call_ended`. L'appelé ne voyait pas l'appel (le
+ * serveur, le voyant en ligne, n'envoie pas de push VoIP), l'appelant sonnait dans le vide
+ * et, ne rejoignant le canal qu'à `call_accepted`, ne voyait jamais la vidéo. Remonté par
+ * Hakan, reproduit sur simulateur.
+ *
+ * ⚠️ Rejouable sans risque : `bindSocket` remplace l'écouteur du même nom, et les
+ * enregistrements (VoIP, CallKit) ont chacun leur garde.
+ *
+ * ⚠️ N'y met PAS `registerForPushNotifications` : il DEMANDE l'autorisation, et à la
+ * connexion c'est l'écran `/permissions` qui doit l'expliquer avant.
+ */
+const startSession = () => {
+  connectSocket()
+    .then((socket) => {
+      /**
+       * ⚠️ `bindSocket` et non `socket.on` : le socket survit au rechargement de ce
+       * module, et un écouteur rebranché sans retirer le précédent traite l'événement
+       * deux fois, puis trois (le même message affichait trois bandeaux). Voir
+       * `lib/socket.ts`.
+       *
+       * ⚠️ Ce qui suit n'a PAS de nettoyage : ces écouteurs vivent aussi longtemps que la
+       * session, comme le socket. C'est `bindSocket` qui garantit l'unicité, pas le cycle
+       * de vie du composant.
+       */
+      // Notifications in-app temps réel (demandes d'amis) quand l'app est ouverte.
+      bindSocket(socket, "friend_request_received", "root", (p: { from: Actor }) => {
+        socialToast(p.from, i18n.t("notifications.friend_request"));
+        incrementPendingFriendRequests();
+      });
+      bindSocket(socket, "friend_request_accepted", "root", (p: { by: Actor }) => {
+        socialToast(p.by, i18n.t("notifications.friend_accepted"));
+      });
+
+      /**
+       * APPELS. ⚠️ Écoutés au niveau de l'APPLICATION, comme les messages : un appel
+       * arrive quel que soit l'écran affiché, et c'est justement quand on regarde
+       * ailleurs qu'il doit s'imposer. L'affichage est un calque
+       * (`components/CallOverlay.tsx`), pas un écran de navigation.
+       */
+      bindSocket(
+        socket,
+        "call_incoming",
+        "root",
+        (p: { callId: string; from: CallPeer; type?: string }) =>
+          incomingCall(p.callId, p.from, p.type === 'video' ? 'video' : 'audio'),
+      );
+      // L'autre a décroché : c'est à cet instant que l'appelant rejoint le canal — pas
+      // avant, une sonnerie sans réponse serait facturée comme une conversation.
+      bindSocket(socket, "call_accepted", "root", () => peerAccepted());
+      bindSocket(
+        socket,
+        "call_ended",
+        "root",
+        (p: { callId: string; status: string }) => callEnded(p.callId, p.status),
+      );
+
+      /**
+       * MESSAGE REÇU PENDANT QUE L'APPLICATION EST OUVERTE.
+       *
+       * ⚠️ Écouté ICI, au niveau de l'application, et non dans la liste des
+       * conversations : celle-ci n'est montée que sur son propre onglet, alors qu'un
+       * message peut arriver depuis n'importe quel écran — et c'est précisément le cas
+       * où il faut prévenir.
+       *
+       * ⚠️ `conversation_updated` (room `user:`) et non `new_message` (room `conv:`) :
+       * le second n'arrive qu'à ceux qui ont la conversation ouverte, donc jamais à qui
+       * regarde ailleurs.
+       *
+       * ⚠️ C'est le SERVEUR qui décide s'il y a matière à alerter (champ `alert`) : lui
+       * seul connaît la sourdine de chaque membre, l'état d'une demande de message et le
+       * premier média d'un album. Sans alerte, l'événement ne sert qu'à la liste.
+       */
+      /**
+       * ⚠️ Branché sous un NOM (« root ») : la liste des conversations écoute le même
+       * événement pour une autre raison, et un `socket.off('conversation_updated')` sans
+       * argument détacherait TOUT — quitter l'onglet Discussion aurait emporté celui-ci
+       * avec lui, sans le moindre signe.
+       *
+       * ⚠️ La pastille des non-lus n'est PAS touchée ici : la liste s'en charge déjà, et
+       * la compter deux fois la ferait monter par pas de deux.
+       */
+      bindSocket(socket, "conversation_updated", "root", onConversationUpdated);
+    })
+    .catch(() => {});
+  // ⚠️ Séparée de l'enregistrement du jeton, qui s'arrête au simulateur (pas de push
+  // distant) : la catégorie, elle, sert aussi aux notifications locales, et c'est ce
+  // qui permet de l'essayer sans appareil réel.
+  registerReplyCategory();
+
+  /**
+   * Écran d'appel du SYSTÈME (CallKit / ConnectionService).
+   *
+   * ⚠️ Déclaré au DÉMARRAGE et non au premier appel : sur iOS, le système doit
+   * connaître l'application avant qu'un appel arrive, sinon le premier appel de la
+   * session n'affiche rien.
+   *
+   * ⚠️ Les actions viennent de l'écran système et non de l'application : décrocher
+   * depuis l'écran verrouillé doit produire exactement le même effet que le bouton
+   * vert de l'application — d'où le passage par les mêmes fonctions du moteur.
+   */
+  /**
+   * Jeton PushKit : c'est lui qui permet au serveur de faire sonner ce téléphone même
+   * verrouillé. ⚠️ Séparé de `setupCallKit` : l'un déclare l'application au système,
+   * l'autre donne au serveur une adresse où pousser. L'un sans l'autre ne sonne pas.
+   */
+  /**
+   * ⚠️ AVANT tout le reste : réécrit la session pour qu'elle reste lisible écran
+   * verrouillé. Sans cela, décrocher un appel depuis l'écran verrouillé échoue — le
+   * trousseau est illisible et la requête part sans authentification.
+   */
+  migrateSessionAccessibility();
+
+  registerVoipPush();
+
+  setupCallKit().then((ok) => {
+    // Trace explicite : sans elle, l'absence d'écran système est indiscernable d'un
+    // appel qui n'arrive pas. ⚠️ CallKit ne s'affiche PAS sur simulateur (pas de
+    // téléphonie) — l'application retombe alors sur son propre écran, ce qui est le
+    // comportement voulu.
+    console.log(ok ? "[callkit] Écran d'appel système actif" : '[callkit] Indisponible');
+    // ⚠️ Une seule fois par lancement : `bindCallKit` AJOUTE ses écouteurs à chaque appel,
+    // et une session rouverte (déconnexion puis connexion) décrocherait deux fois.
+    if (!ok || callKitBound) return;
+    callKitBound = true;
+    bindCallKit({
+      // ⚠️ L'identifiant du système est transmis : décroché depuis l'écran
+      // verrouillé, c'est la SEULE trace de l'appel que l'application possède.
+      onAnswer: (callId) => acceptCall(callId),
+      onEnd: () => hangUp(),
+      onMute: (muted) => setMutedFromSystem(muted),
+    });
+  });
+  refreshPendingFriendRequests();
+};
+setSessionStarter(startSession);
 
 export default function RootLayout() {
   const router = useRouter();
@@ -360,127 +506,10 @@ export default function RootLayout() {
 
       if (!authenticated) return;
 
-      connectSocket()
-        .then((socket) => {
-          /**
-           * ⚠️ `bindSocket` et non `socket.on` : le socket survit au rechargement de ce
-           * module, et un écouteur rebranché sans retirer le précédent traite l'événement
-           * deux fois, puis trois (le même message affichait trois bandeaux). Voir
-           * `lib/socket.ts`.
-           *
-           * ⚠️ Ce qui suit n'a PAS de nettoyage : ces écouteurs vivent aussi longtemps que la
-           * session, comme le socket. C'est `bindSocket` qui garantit l'unicité, pas le cycle
-           * de vie du composant.
-           */
-          // Notifications in-app temps réel (demandes d'amis) quand l'app est ouverte.
-          bindSocket(socket, "friend_request_received", "root", (p: { from: Actor }) => {
-            socialToast(p.from, i18n.t("notifications.friend_request"));
-            incrementPendingFriendRequests();
-          });
-          bindSocket(socket, "friend_request_accepted", "root", (p: { by: Actor }) => {
-            socialToast(p.by, i18n.t("notifications.friend_accepted"));
-          });
-
-          /**
-           * APPELS. ⚠️ Écoutés au niveau de l'APPLICATION, comme les messages : un appel
-           * arrive quel que soit l'écran affiché, et c'est justement quand on regarde
-           * ailleurs qu'il doit s'imposer. L'affichage est un calque
-           * (`components/CallOverlay.tsx`), pas un écran de navigation.
-           */
-          bindSocket(
-            socket,
-            "call_incoming",
-            "root",
-            (p: { callId: string; from: CallPeer; type?: string }) =>
-              incomingCall(p.callId, p.from, p.type === 'video' ? 'video' : 'audio'),
-          );
-          // L'autre a décroché : c'est à cet instant que l'appelant rejoint le canal — pas
-          // avant, une sonnerie sans réponse serait facturée comme une conversation.
-          bindSocket(socket, "call_accepted", "root", () => peerAccepted());
-          bindSocket(
-            socket,
-            "call_ended",
-            "root",
-            (p: { callId: string; status: string }) => callEnded(p.callId, p.status),
-          );
-
-          /**
-           * MESSAGE REÇU PENDANT QUE L'APPLICATION EST OUVERTE.
-           *
-           * ⚠️ Écouté ICI, au niveau de l'application, et non dans la liste des
-           * conversations : celle-ci n'est montée que sur son propre onglet, alors qu'un
-           * message peut arriver depuis n'importe quel écran — et c'est précisément le cas
-           * où il faut prévenir.
-           *
-           * ⚠️ `conversation_updated` (room `user:`) et non `new_message` (room `conv:`) :
-           * le second n'arrive qu'à ceux qui ont la conversation ouverte, donc jamais à qui
-           * regarde ailleurs.
-           *
-           * ⚠️ C'est le SERVEUR qui décide s'il y a matière à alerter (champ `alert`) : lui
-           * seul connaît la sourdine de chaque membre, l'état d'une demande de message et le
-           * premier média d'un album. Sans alerte, l'événement ne sert qu'à la liste.
-           */
-          /**
-           * ⚠️ Branché sous un NOM (« root ») : la liste des conversations écoute le même
-           * événement pour une autre raison, et un `socket.off('conversation_updated')` sans
-           * argument détacherait TOUT — quitter l'onglet Discussion aurait emporté celui-ci
-           * avec lui, sans le moindre signe.
-           *
-           * ⚠️ La pastille des non-lus n'est PAS touchée ici : la liste s'en charge déjà, et
-           * la compter deux fois la ferait monter par pas de deux.
-           */
-          bindSocket(socket, "conversation_updated", "root", onConversationUpdated);
-        })
-        .catch(() => {});
       registerForPushNotifications()
         .then(() => registerDeliveryReceiptTask())
         .catch(() => {});
-      // ⚠️ Séparée de l'enregistrement du jeton, qui s'arrête au simulateur (pas de push
-      // distant) : la catégorie, elle, sert aussi aux notifications locales, et c'est ce
-      // qui permet de l'essayer sans appareil réel.
-      registerReplyCategory();
-
-      /**
-       * Écran d'appel du SYSTÈME (CallKit / ConnectionService).
-       *
-       * ⚠️ Déclaré au DÉMARRAGE et non au premier appel : sur iOS, le système doit
-       * connaître l'application avant qu'un appel arrive, sinon le premier appel de la
-       * session n'affiche rien.
-       *
-       * ⚠️ Les actions viennent de l'écran système et non de l'application : décrocher
-       * depuis l'écran verrouillé doit produire exactement le même effet que le bouton
-       * vert de l'application — d'où le passage par les mêmes fonctions du moteur.
-       */
-      /**
-       * Jeton PushKit : c'est lui qui permet au serveur de faire sonner ce téléphone même
-       * verrouillé. ⚠️ Séparé de `setupCallKit` : l'un déclare l'application au système,
-       * l'autre donne au serveur une adresse où pousser. L'un sans l'autre ne sonne pas.
-       */
-      /**
-       * ⚠️ AVANT tout le reste : réécrit la session pour qu'elle reste lisible écran
-       * verrouillé. Sans cela, décrocher un appel depuis l'écran verrouillé échoue — le
-       * trousseau est illisible et la requête part sans authentification.
-       */
-      migrateSessionAccessibility();
-
-      registerVoipPush();
-
-      setupCallKit().then((ok) => {
-        // Trace explicite : sans elle, l'absence d'écran système est indiscernable d'un
-        // appel qui n'arrive pas. ⚠️ CallKit ne s'affiche PAS sur simulateur (pas de
-        // téléphonie) — l'application retombe alors sur son propre écran, ce qui est le
-        // comportement voulu.
-        console.log(ok ? "[callkit] Écran d'appel système actif" : '[callkit] Indisponible');
-        if (!ok) return;
-        bindCallKit({
-          // ⚠️ L'identifiant du système est transmis : décroché depuis l'écran
-          // verrouillé, c'est la SEULE trace de l'appel que l'application possède.
-          onAnswer: (callId) => acceptCall(callId),
-          onEnd: () => hangUp(),
-          onMute: (muted) => setMutedFromSystem(muted),
-        });
-      });
-      refreshPendingFriendRequests();
+      startSession();
     };
 
     init();

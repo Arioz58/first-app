@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import StepIndicator from '../components/StepIndicator';
 import { registerForPushNotifications } from '../lib/notifications';
+import { registerDeliveryReceiptTask } from '../lib/deliveryReceipt';
 import { ROUND } from '../lib/radius';
 import { requestContactsSegment } from '../lib/tabsNav';
 import { useThemeColors } from '../lib/theme';
@@ -74,6 +75,9 @@ export default function PermissionsScreen() {
      * bloquer l'entrée dans l'app dessus serait une façon de forcer la main.
      */
     await registerForPushNotifications().catch(() => null);
+    // Accusés de réception en arrière-plan (tâche de fond) : posés au lancement par le layout
+    // racine, mais l'app vient d'être lancée DÉCONNECTÉE — il faut le faire ici aussi.
+    registerDeliveryReceiptTask();
     if (goToContacts) {
       // Relais mémoire : un paramètre de route ne se redéclencherait pas au 2ᵉ passage.
       requestContactsSegment('directory');

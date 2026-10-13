@@ -20,6 +20,7 @@ import { apiRequest } from "../../lib/api";
 import { ROUND } from "../../lib/radius";
 import { PRIVACY_POLICY_VERSION } from "../../lib/config";
 import { connectSocket } from "../../lib/socket";
+import { startSession } from "../../lib/session";
 import { saveTokens } from "../../lib/storage";
 
 const OTP_DURATION = 5 * 60; // 5 minutes en secondes
@@ -164,6 +165,13 @@ export default function VerifyScreen() {
         }).catch(() => {});
       }
       await connectSocket();
+      /**
+       * ⚠️ Écouteurs d'appel et de bandeaux, jeton VoIP, écran d'appel du système : le layout
+       * racine ne les pose qu'au LANCEMENT, et l'app était lancée déconnectée. Sans cet appel,
+       * un utilisateur qui vient de se connecter ne recevait aucun appel tant qu'il n'avait
+       * pas relancé l'app (retour de Hakan du 13/10).
+       */
+      startSession();
       /**
        * ⚠️ La demande de notifications a DÉMÉNAGÉ vers `/permissions`, qui l'explique
        * d'abord. Elle partait ici sans le moindre contexte, juste après la saisie du code :
