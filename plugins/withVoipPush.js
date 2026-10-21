@@ -67,6 +67,41 @@ const PUSHKIT_BODY = `
     let data = payload.dictionaryPayload
     let uuid = (data["callId"] as? String) ?? UUID().uuidString
     let name = (data["callerName"] as? String) ?? "Appel"
+
+    /**
+     * FIN D'UN APPEL QUI SONNE (21/10) : l'appelant a raccroché, ou personne n'a répondu.
+     * Le téléphone verrouillé n'a pas de socket ; sans ce push, l'écran système continuait
+     * de sonner (retour de Hakan).
+     *
+     * ⚠️ La règle d'Apple vaut AUSSI pour ce push : il faut signaler un appel à CallKit. On
+     * signale donc le MÊME identifiant — l'appel qui sonne déjà, que CallKit refuse en double
+     * sans rien afficher — puis on le clôt. ⚠️ Raison 2 = « fin par l'autre », 3 = « sans
+     * réponse » (codes de RNCallKeep.endCallWithUUID) : c'est elle qui range l'appel en
+     * « manqué » dans l'historique du téléphone.
+     */
+    if (data["event"] as? String) == "ended" {
+      let reason: Int32 = (data["reason"] as? String) == "missed" ? 3 : 2
+      RNCallKeep.reportNewIncomingCall(
+        uuid,
+        handle: name,
+        handleType: "generic",
+        hasVideo: false,
+        localizedCallerName: name,
+        supportsHolding: false,
+        supportsDTMF: false,
+        supportsGrouping: false,
+        supportsUngrouping: false,
+        fromPushKit: true,
+        payload: data,
+        withCompletionHandler: {
+          RNCallKeep.endCall(withUUID: uuid, reason: reason)
+          completion()
+        }
+      )
+      // Le JavaScript, s'il tourne, doit oublier l'appel lui aussi (lib/voipPush.ts).
+      RNVoipPushNotificationManager.didReceiveIncomingPush(with: payload, forType: type.rawValue as String)
+      return
+    }
     // « video » : l'écran système annonce un appel vidéo. Absent (serveur antérieur au
     // 06/10) = appel audio, comme avant.
     let video = (data["callType"] as? String) == "video"

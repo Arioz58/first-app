@@ -102,3 +102,7 @@ Le rendu iOS est validé sur iPhone. **Rien n'a été testé sur Android.**
 
 - Ne jamais livrer un chemin de code dégradé sur Android en se justifiant par « le développement se fait sur iOS ». Si une différence de plateforme est inévitable, la traiter explicitement **dans les deux branches** et le dire.
 - Toute fonctionnalité livrée doit s'accompagner de son résultat **iOS et Android** — ou de la mention explicite qu'il n'y a aucune différence.
+
+## Appel annulé avant le décroché (21/10/2026)
+
+Sur iOS, un push VoIP de fin (`event: 'ended'`) ferme l'écran d'appel système quand l'appelant raccroche avant le décroché. **Rien d'équivalent sur Android** : l'appel y arrive par une notification ordinaire de repli (`call_incoming`), qui n'est pas retirée quand l'appel s'arrête. À faire avec le reste des appels Android (notification de fin, ou retrait de la notification via une tâche de fond).

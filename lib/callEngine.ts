@@ -643,11 +643,32 @@ export const hangUp = async (): Promise<void> => {
   }
 };
 
+/**
+ * Le système vient de (ré)activer la session audio de l'appel.
+ *
+ * ⚠️ En le faisant, il a interrompu la tonalité d'attente, que rien d'autre ne relancerait
+ * (voir `bindCallKit`). On la reprend tant que ça sonne chez l'autre — et seulement dans ce
+ * cas : après le décroché, la session appartient à Agora et une tonalité s'y mêlerait.
+ */
+export const audioSessionActivated = () => {
+  if (state?.direction === 'outgoing' && state.status === 'ringing') playRingback();
+};
+
 /** L'appel a été clos par l'autre bout ou par le serveur (event `call_ended`). */
-export const callEnded = (callId: string, reason: string) => {
-  if (!state || state.callId !== callId) return;
+export const callEnded = (
+  callId: string,
+  reason: string,
+  /**
+   * L'écran système a DÉJÀ été fermé par le code natif (push VoIP de fin). ⚠️ Le refermer
+   * depuis ici demanderait au système une fin qui n'a plus d'objet ; son écho ne revenant
+   * jamais, `endingOurselves` resterait levé et le prochain raccroché depuis l'écran
+   * système serait ignoré.
+   */
+  opts?: { systemEnded?: boolean },
+) => {
+  if (!state || state.callId.toLowerCase() !== callId.toLowerCase()) return;
   stopCallSounds();
-  endNativeCall(callId);
+  if (!opts?.systemEnded) endNativeCall(callId);
   leave();
   pendingJoin = null;
   patch({ status: 'ended', endedReason: reason });

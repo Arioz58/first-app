@@ -42,6 +42,7 @@ import {
   incomingCall,
   peerAccepted,
   setMutedFromSystem,
+  audioSessionActivated,
   type CallPeer,
 } from "../lib/callEngine";
 import { bindCallKit, setupCallKit } from "../lib/callKit";
@@ -304,6 +305,7 @@ const startSession = () => {
       onAnswer: (callId) => acceptCall(callId),
       onEnd: () => hangUp(),
       onMute: (muted) => setMutedFromSystem(muted),
+      onAudioSessionActivated: () => audioSessionActivated(),
     });
   });
   refreshPendingFriendRequests();

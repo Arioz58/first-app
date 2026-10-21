@@ -32,6 +32,8 @@ type Handlers = {
   onAnswer: (callId?: string) => void;
   onEnd: () => void;
   onMute: (muted: boolean) => void;
+  /** Le système vient de (ré)activer la session audio de l'appel (voir `bindCallKit`). */
+  onAudioSessionActivated: () => void;
 };
 
 let handlers: Handlers | null = null;
@@ -130,6 +132,17 @@ export const bindCallKit = (h: Handlers) => {
   RNCallKeep.addEventListener('didPerformSetMutedCallAction', ({ muted }) =>
     handlers?.onMute(muted),
   );
+  /**
+   * ⚠️ C'EST LE CORRECTIF DU « UN SEUL BIP » (retour de Hakan, 21/10). Un appel sortant
+   * signalé à CallKit (`startOutgoingCall`) fait INTERROMPRE puis réactiver la session audio
+   * par le système. `expo-audio` met alors la tonalité en pause, et ne la relance jamais :
+   * la fin d'interruption que `callkeep` publie à l'activation est postée SANS objet, alors
+   * que `expo-audio` n'écoute que celles de `AVAudioSession.sharedInstance()` (voir
+   * `node_modules/react-native-callkeep/ios/RNCallKeep/RNCallKeep.m`, `didActivateAudioSession`,
+   * et `node_modules/expo-audio/ios/AudioModule.swift`, `setupInterruptionHandling`).
+   * L'appelant entendait le premier bip, puis le silence jusqu'au décroché.
+   */
+  RNCallKeep.addEventListener('didActivateAudioSession', () => handlers?.onAudioSessionActivated());
 };
 
 /**

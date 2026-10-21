@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import VoipPushNotification from 'react-native-voip-push-notification';
 import { apiRequest } from './api';
+import { callEnded } from './callEngine';
 
 /**
  * Jeton PushKit : l'adresse à laquelle le serveur fait sonner un téléphone VERROUILLÉ.
@@ -47,10 +48,20 @@ export const registerVoipPush = () => {
   /**
    * ⚠️ L'appel lui-même est déjà affiché par le code NATIF au moment où cet événement
    * arrive : iOS impose de signaler l'appel à CallKit dans le même cycle que le push, bien
-   * avant que le JavaScript ne démarre. On ne fait donc rien de plus ici — le socket, en se
-   * reconnectant, apportera l'état réel de l'appel.
+   * avant que le JavaScript ne démarre. Pour une SONNERIE, on ne fait donc rien de plus
+   * ici — le socket, en se reconnectant, apportera l'état réel de l'appel.
    */
-  VoipPushNotification.addEventListener('notification', () => {});
+  VoipPushNotification.addEventListener('notification', (payload: any) => {
+    /**
+     * Push de FIN (l'appel a cessé de sonner, 21/10). Le code natif a déjà fermé l'écran
+     * système ; on oublie l'appel ici aussi. ⚠️ Sans cela, un JavaScript resté vivant en
+     * arrière-plan garderait l'appel « en train de sonner » : l'app se croirait occupée et
+     * ignorerait l'appel suivant.
+     */
+    if (payload?.event === 'ended' && typeof payload.callId === 'string') {
+      callEnded(payload.callId, payload.reason ?? 'cancelled', { systemEnded: true });
+    }
+  });
 
   // Déclenche la demande de jeton auprès du système.
   VoipPushNotification.registerVoipToken();

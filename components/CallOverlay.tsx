@@ -259,6 +259,15 @@ export function CallOverlay() {
   const onVideo = showLocal || showRemote;
   const fg = onVideo ? '#FFFFFF' : c.content;
   const fgMuted = onVideo ? 'rgba(255,255,255,0.8)' : c.muted;
+  /**
+   * Appel VIDÉO en cours (ou qui sonne chez l'autre) : toutes les commandes sur UNE ligne,
+   * raccrocher compris, au ras du bas de l'écran. ⚠️ Retour de Hakan (21/10) : les deux
+   * rangées de grands boutons étiquetés de l'appel audio couvraient le bas du visage de
+   * l'autre. Les libellés passent en `accessibilityLabel` — les icônes sont les signes
+   * habituels d'un appel vidéo. L'appel entrant qui sonne garde ses grands boutons :
+   * décrocher et refuser doivent se lire d'un coup d'œil.
+   */
+  const compact = isVideo && !incomingRinging && call.status !== 'ended';
 
   return (
     <Animated.View
@@ -279,7 +288,7 @@ export function CallOverlay() {
         zIndex: 200,
         backgroundColor: onVideo ? '#000000' : c.canvas,
         paddingTop: insets.top + 48,
-        paddingBottom: insets.bottom + 32,
+        paddingBottom: insets.bottom + (compact ? 8 : 32),
         alignItems: 'center',
         justifyContent: 'space-between',
       }}
@@ -372,6 +381,67 @@ export function CallOverlay() {
         )}
       </View>
 
+      {compact ? (
+        <View
+          style={{ width: '100%', paddingHorizontal: 12, alignItems: 'center' }}
+          onLayout={(e) => setControlsTop(e.nativeEvent.layout.y)}
+        >
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 12,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              borderRadius: 40,
+              // Voile sombre : les boutons restent lisibles sur une image claire.
+              backgroundColor: 'rgba(0,0,0,0.45)',
+            }}
+          >
+            <RoundButton
+              compact
+              icon={call.muted ? 'mic-off' : 'mic'}
+              active={call.muted}
+              label={t('calls.mute')}
+              onPress={toggleMute}
+            />
+            <RoundButton
+              compact
+              icon={call.cameraOff ? 'videocam-off' : 'videocam'}
+              active={call.cameraOff}
+              label={t('calls.camera')}
+              onPress={async () => {
+                if (!(await toggleCamera())) Alert.alert('', t('calls.camera_denied'));
+              }}
+            />
+            <RoundButton
+              compact
+              icon="camera-reverse"
+              active={false}
+              label={t('calls.flip')}
+              onPress={flipCamera}
+            />
+            <RoundButton
+              compact
+              icon={call.speaker ? 'volume-high' : 'volume-medium'}
+              active={call.speaker}
+              label={t('calls.speaker')}
+              onPress={toggleSpeaker}
+            />
+            <Action
+              compact
+              color="#DC2626"
+              icon="call"
+              rotate
+              label={t('calls.hang_up')}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                hangUp();
+              }}
+            />
+          </View>
+        </View>
+      ) : (
       <View
         style={{ width: '100%', paddingHorizontal: 32 }}
         onLayout={(e) => setControlsTop(e.nativeEvent.layout.y)}
@@ -382,8 +452,7 @@ export function CallOverlay() {
             style={{
               flexDirection: 'row',
               justifyContent: 'center',
-              // Quatre boutons en vidéo : l'écart d'origine les ferait déborder.
-              gap: isVideo ? 16 : 28,
+              gap: 28,
               marginBottom: 36,
             }}
           >
@@ -394,8 +463,9 @@ export function CallOverlay() {
               onVideo={onVideo}
               onPress={toggleMute}
             />
-            {/* Appel audio décroché : on peut passer en vidéo (étape 3). */}
-            {!isVideo && call.status === 'active' && (
+            {/* Appel audio décroché : on peut passer en vidéo (étape 3). La vidéo, elle, a
+                ses commandes sur une seule ligne (`compact`). */}
+            {call.status === 'active' && (
               <RoundButton
                 icon="videocam"
                 active={false}
@@ -404,26 +474,6 @@ export function CallOverlay() {
                 onPress={async () => {
                   if (!(await switchToVideo())) Alert.alert('', t('calls.camera_denied'));
                 }}
-              />
-            )}
-            {isVideo && (
-              <RoundButton
-                icon={call.cameraOff ? 'videocam-off' : 'videocam'}
-                active={call.cameraOff}
-                label={t('calls.camera')}
-                onVideo={onVideo}
-                onPress={async () => {
-                  if (!(await toggleCamera())) Alert.alert('', t('calls.camera_denied'));
-                }}
-              />
-            )}
-            {isVideo && (
-              <RoundButton
-                icon="camera-reverse"
-                active={false}
-                label={t('calls.flip')}
-                onVideo={onVideo}
-                onPress={flipCamera}
               />
             )}
             <RoundButton
@@ -469,6 +519,7 @@ export function CallOverlay() {
           )}
         </View>
       </View>
+      )}
     </Animated.View>
   );
 }
@@ -478,15 +529,38 @@ function RoundButton({
   label,
   active,
   onVideo,
+  compact,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   active: boolean;
   onVideo?: boolean;
+  /** Ligne unique de l'appel vidéo : plus petit, sans libellé, posé sur l'image. */
+  compact?: boolean;
   onPress: () => void;
 }) {
   const c = useThemeColors();
+  if (compact) {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ selected: active }}
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: 26,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: active ? '#FFFFFF' : 'rgba(255,255,255,0.18)',
+        }}
+      >
+        <Ionicons name={icon} size={24} color={active ? '#000000' : '#FFFFFF'} />
+      </Pressable>
+    );
+  }
   return (
     <View style={{ alignItems: 'center', gap: 8 }}>
       <Pressable
@@ -513,6 +587,7 @@ function Action({
   label,
   rotate,
   onVideo,
+  compact,
   onPress,
 }: {
   color: string;
@@ -520,9 +595,34 @@ function Action({
   label: string;
   rotate?: boolean;
   onVideo?: boolean;
+  compact?: boolean;
   onPress: () => void;
 }) {
   const c = useThemeColors();
+  if (compact) {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: 26,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: color,
+        }}
+      >
+        <Ionicons
+          name={icon}
+          size={24}
+          color="#FFFFFF"
+          style={rotate ? { transform: [{ rotate: '135deg' }] } : undefined}
+        />
+      </Pressable>
+    );
+  }
   return (
     <View style={{ alignItems: 'center', gap: 10 }}>
       <Pressable

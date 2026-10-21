@@ -3216,6 +3216,42 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
     change jamais de parent (sinon recyclage, cf. etape 1).
 
 ================================================================================
+RETOUR CLIENT DU 21/10/2026 (build 28) — « synchro vocale parfaite », trois points
+================================================================================
+[CODE 21/10, A TESTER] 1) Appel video : les commandes cachaient l'image de l'autre.
+  → `CallOverlay` : en video (hors sonnerie entrante), UNE seule ligne au ras du bas —
+    micro, camera, retourner, haut-parleur, raccrocher — boutons 52 px sans libelle
+    (libelles en `accessibilityLabel`), sur un voile sombre. La vignette peut descendre
+    plus bas (limite mesuree, inchangee). Appel audio et sonnerie entrante : inchanges.
+
+[CODE 21/10, A TESTER] 2) Appel sortant : « un seul bip, puis plus rien jusqu'au decroche ».
+  ⚠️ Cause lue dans les sources : `startOutgoingCall` (CallKit) fait interrompre puis
+  reactiver la session audio par le systeme. `expo-audio` met la tonalite en pause a
+  l'interruption, et la fin d'interruption que `callkeep` publie (`didActivateAudioSession`)
+  est postee SANS objet, alors qu'`expo-audio` n'ecoute que celles de la session partagee →
+  jamais relancee.
+  → `didActivateAudioSession` ecoute (`lib/callKit.ts`) → `audioSessionActivated()` relance
+    la tonalite tant que ca sonne chez l'autre.
+  ⚠️ A SURVEILLER : apres reactivation, la session est celle de CallKit (PlayAndRecord) →
+  tonalite sur l'ECOUTEUR, comme un appel classique. En VIDEO (telephone tenu loin), elle
+  pourrait paraitre trop faible.
+
+[CODE 21/10, A TESTER — REBUILD NATIF + DEPLOIEMENT BACKEND] 3) L'appelant raccroche, le
+  telephone verrouille de l'autre continue de sonner ; decrocher → « appel termine ».
+  Cause : `call_ended` ne part que par socket, ferme sur un telephone verrouille.
+  → backend : `stopSystemRing` envoie un 2e push VoIP `{ callId, event: 'ended', reason }`
+    sur annulation (`cancelled`) et sur sonnerie expiree (`missed`, balayage). SEULEMENT si
+    un push de sonnerie est parti pour cet appel (cle Redis `call:voip-rang:<id>`) : les
+    builds <= 28 lisent tout push VoIP comme un appel, un push de fin a un telephone qui
+    n'a pas sonne y creerait un appel fantome. Pas si une app mobile est ouverte (socket).
+  → natif (`plugins/withVoipPush.js`) : `event == "ended"` → re-signale le MEME uuid a
+    CallKit (regle d'Apple : tout push VoIP doit signaler un appel ; le doublon est refuse
+    sans rien afficher) puis le clot (raison 2 = fin par l'autre, 3 = sans reponse →
+    « manque » dans l'historique du telephone).
+  → JS (`lib/voipPush.ts`) : oublie l'appel (`callEnded(..., { systemEnded: true })`).
+  ⚠️ Android : non traite (pas de PushKit ; la notification de repli n'est pas retiree).
+
+================================================================================
 A TESTER SUR TESTFLIGHT (Berke + un ami, deux vrais telephones) — liste tenue a jour
 ================================================================================
 Appels video (etapes 1 a 4, octobre 2026) :
@@ -3238,4 +3274,12 @@ Appels video (etapes 1 a 4, octobre 2026) :
 Connexion sans relancer l'app (correctif du 13/10) :
   [ ] Se deconnecter puis se reconnecter SANS tuer l'app, verrouiller le telephone : un appel
       entrant sonne bien sur l'ecran systeme (jeton VoIP renvoye au compte).
-
+Retour Hakan du 21/10 :
+  [ ] Appel video : commandes sur une ligne en bas, l'image de l'autre degagee ; tous les
+      boutons repondent (dont raccrocher) ; vignette deplacable jusqu'au-dessus de la ligne.
+  [ ] Appel AUDIO sortant : la tonalite se repete (2 s / 4 s) jusqu'au decroche.
+  [ ] Appel VIDEO sortant : tonalite audible ? (ecouteur, voir la note du retour)
+  [ ] Telephone de l'autre VERROUILLE, j'appelle puis je raccroche avant qu'il decroche :
+      son ecran d'appel s'arrete aussitot. Idem sans raccrocher : arret au bout d'~1-2 min,
+      appel « manque » dans ses Recents iOS.
+  [ ] Apres ca, un nouvel appel vers lui sonne normalement (pas « occupe »).
