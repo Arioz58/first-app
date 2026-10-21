@@ -307,7 +307,7 @@ POST /blocks                                      → bloquer `{ userId }` (effe
 DELETE /blocks/:userId                            → débloquer
 POST /reports                                     → signaler `{ userId, category }` (spam | impersonation | inappropriate | other)
 GET  /users/me                                    → profil complet
-PATCH /users/me                                   → mise à jour (name, photoUrl, language sur User ; bio/privacyPresence/privacyPhoto routés sur Profile — `bio` effaçable via chaîne vide)
+PATCH /users/me                                   → mise à jour (name, photoUrl, language sur User ; bio sur Profile — `bio` effaçable via chaîne vide, `photoUrl: null` efface la photo). ⚠️ **Liste blanche** (22/10) : tout autre champ est ignoré — le corps passait auparavant tel quel à Prisma, ce qui permettait de réécrire `phone` sans SMS, `fcmToken`/`voipToken` ou le consentement. Types vérifiés, `language` ∈ tr/fr/en, nom non vide → sinon 400
 POST /users/me/privacy-consent                    → consentement politique de confidentialité (body `{ version }` → privacyConsent + privacyConsentAt + privacyPolicyVersion)
 PATCH /users/me/notification-sound                → son des notifications `{ sound }` (identifiant de `src/lib/notificationSounds.ts`, liste fermée — un nom inconnu désignerait dans chaque push un fichier absent du téléphone). Lu par `sendPushToMany` pour CHAQUE destinataire (une requête) → `sound` iOS + `channelId` Android
 PATCH /users/me/location                          → ville affichée au profil `{ city, country }` (`city: null` efface). ⚠️ Donnée **déclarative** : le géocodage est fait par l'app, le serveur ne vérifie rien — n'en faire dépendre aucune règle
