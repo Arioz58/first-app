@@ -3043,7 +3043,33 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
     `lib/session.ts`) ; `registerVoipPush` renvoie le jeton connu au nouveau compte apres une
     deconnexion ; tache d'accuses de reception posee aussi depuis `/permissions`.
 
-[A FAIRE - REPONSE DE HAKAN 03/10] SON DE NOTIFICATION AU CHOIX DE L'UTILISATEUR.
+[CODE 21/10, A TESTER - REBUILD NATIF + DEPLOIEMENT BACKEND] SON DE NOTIFICATION AU CHOIX.
+  Decisions de Berke (21/10) : UN son pour toutes les notifications (messages + groupes) ;
+  pas les sons du telephone (iOS ne le permet pas — WhatsApp embarque ses propres copies) ;
+  `pop_sound.mp3` devient le son d'ENVOI ; ses autres mp3 + 3 sons fabriques = la liste
+  (Zephyr retire, derniere note de Cascade retiree — a l'ecoute, Berke 21/10).
+  → 12 sons (`lib/notificationSounds.ts`, `assets/sounds/SOURCES.md`), defaut « Nexa » =
+    l'actuel `notification.wav`. Tous ramenes a -28,5 LUFS (niveau valide par Berke), gain
+    cuit dans le fichier. Declares au plugin `expo-notifications` (app.json).
+  → backend : `User.notificationSound` (migration `notification_sound`, defaut `nexa`),
+    `PATCH /users/me/notification-sound` (liste fermee), `sendPushToMany` lit le son de
+    chaque destinataire en UNE requete → `sound` (iOS) + `channelId` (Android). `nexa` garde
+    `notification.wav` / canal `messages` : rien ne change pour les builds installes.
+  → app : ligne « Son des notifications » dans Profil > Preferences ; toucher = ecouter +
+    choisir. App OUVERTE, la reception joue le POP de l'envoi en plus grave (`received.wav`,
+    demande de Berke) — le son choisi ne concerne que les notifications systeme. Android : un canal
+    par son, cree au choix, les anciens supprimes.
+  → « Son du telephone » (`system`, juste sous Nexa, demande de Berke 21/10) : `sound:
+    'default'` (iOS) / canal `messages_system` au son par defaut (Android). Pas d'apercu :
+    l'app ne peut pas lire ce son.
+  ⚠️ CONSTATE le 21/10 : tout son autre que Nexa sonnait avec le son du SYSTEME. Le serveur
+    etait bon (`iris` en base) ; c'est `ios/` qui datait du 6/10 et n'embarquait que
+    `notification.wav` — iOS retombe alors sans rien dire sur le son par defaut. Il FAUT
+    `npx expo prebuild -p ios --clean` avant de tester un son de notification.
+  ⚠️ LICENCES a confirmer (Pixabay) + 3 fichiers intitules « whatsapp message sound »
+    (Echo, Opal, Prisma) : a ecouter / remplacer s'ils imitent WhatsApp.
+
+[HISTORIQUE] Demande initiale :
   Reponse a la question du « son par type » : dans les PARAMETRES, une liste de sons
   proposes parmi lesquels l'utilisateur choisit le sien, avec un son PAR DEFAUT (l'actuel
   `notification.wav`). Pas un son impose par type.
@@ -3283,3 +3309,10 @@ Retour Hakan du 21/10 :
       son ecran d'appel s'arrete aussitot. Idem sans raccrocher : arret au bout d'~1-2 min,
       appel « manque » dans ses Recents iOS.
   [ ] Apres ca, un nouvel appel vers lui sonne normalement (pas « occupe »).
+Son des notifications (21/10) :
+  [ ] Choisir un son dans le profil → une notification recue app FERMEE sonne avec ce son
+      (le son ne se teste pas sur simulateur : pas de push).
+  [ ] Revenir a « Nexa » : son d'origine.
+  [ ] « Son du telephone » : la notification sonne avec le son regle dans l'iPhone.
+  [ ] Android : le son choisi s'applique (canal), une seule entree « Messages (…) » en plus
+      dans les reglages systeme.

@@ -16,7 +16,12 @@ import { isCallActive } from './callEngine';
  *
  * ⚠️ Les deux sons sont FOURNIS PAR BERKE (20/09), après deux essais fabriqués ici — des notes
  * puis des woosh de synthèse. Ce sont les siens qui sont en place ; les miens ne sont plus
- * qu'un repli documenté dans le `todo`.
+ * qu'un repli documenté dans le `todo`. ⚠️ Le 21/10, l'envoi passe à `pop_sound.mp3` (fourni
+ * par Berke, posé sous le nom `sent.mp3`), et la RÉCEPTION devient le MÊME pop, plus grave
+ * (`received.wav`, demande de Berke) : abaissé de ~4 demi-tons par rééchantillonnage
+ * (`asetrate=44100*0.8`), donc un peu plus lent aussi — c'est ce qui le rend naturel. Le son
+ * de notification choisi dans le profil (`lib/notificationSounds.ts`) ne concerne, lui, que
+ * les notifications système, quand l'app n'est pas à l'écran.
  * ⚠️ BAISSÉS À LA LECTURE, pas dans les fichiers. Mesurés à l'installation, ils sortaient à
  * −4,9 dBFS (envoi) et −3,6 (réception), soit une dizaine de décibels au-dessus d'un son
  * d'interface — Berke les a trouvés trop forts à l'usage. Le gain est donc appliqué par le
@@ -47,8 +52,19 @@ let joueurReception: AudioPlayer | null = null;
  * ⚠️ Échelle LINÉAIRE en amplitude, pas en décibels : 0,39 ne veut pas dire « 39 % du volume »
  * mais environ −8 dB, soit à peu près deux fois moins fort à l'oreille.
  */
-const GAIN_ENVOI = 0.39;
-const GAIN_RECEPTION = 0.34;
+/**
+ * ⚠️ 0,08 pour le « pop » du 21/10 : mesuré à −16,2 LUFS, il sort à environ −38 LUFS (pic
+ * −22,5 dBFS). Calé d'abord sur l'ancien son d'envoi (0,34, −25,5 LUFS), puis baissé par paliers
+ * à la demande de Berke jusqu'à 0,08 : « doux à entendre, discret mais présent ».
+ */
+const GAIN_ENVOI = 0.08;
+/**
+ * ⚠️ MÊME gain que l'envoi, choix de Berke À L'ÉCOUTE (21/10). Sur le papier le pop grave est
+ * 3,6 dB plus doux (−19,8 LUFS contre −16,2) et on l'avait compensé (gain plus élevé) : sur le
+ * téléphone, la réception sortait alors PLUS FORT que l'envoi. La mesure LUFS surpondère les
+ * aigus ; l'oreille a tranché.
+ */
+const GAIN_RECEPTION = 0.08;
 
 /** Valeur en mémoire : le stockage est asynchrone, et un son ne peut pas attendre. */
 let actif = true;
@@ -134,6 +150,6 @@ export const playSent = () =>
  */
 export const playReceived = () =>
   jouer(
-    () => (joueurReception ??= createAudioPlayer(require('../assets/sounds/received.mp3'))),
+    () => (joueurReception ??= createAudioPlayer(require('../assets/sounds/received.wav'))),
     GAIN_RECEPTION,
   );

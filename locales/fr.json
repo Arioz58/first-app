@@ -673,6 +673,13 @@
   "sounds": {
     "label": "Sons des messages"
   },
+  "notif_sound": {
+    "label": "Son des notifications",
+    "hint": "Touchez un son pour l'écouter et le choisir.",
+    "default": "par défaut",
+    "error": "Le son n'a pas pu être enregistré. Réessayez.",
+    "system": "Son du téléphone"
+  },
   "calls": {
     "calling": "Appel…",
     "incoming": "Appel entrant",

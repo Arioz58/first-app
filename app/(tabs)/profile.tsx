@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Image,
   Keyboard,
   Linking,
@@ -31,6 +32,14 @@ import { apiRequest } from '../../lib/api';
 import { ROUND } from '../../lib/radius';
 import { TAB_BAR_CLEARANCE } from '../../lib/layout';
 import { setSoundsEnabled, useSoundsEnabled } from '../../lib/sounds';
+import {
+  NOTIFICATION_SOUNDS,
+  notificationSoundName,
+  previewNotificationSound,
+  setNotificationSound,
+  useNotificationSound,
+  type NotificationSoundId,
+} from '../../lib/notificationSounds';
 import { SUPPORTED_LANGUAGES, setAppLanguage } from '../../lib/i18n';
 import { clearTokens } from '../../lib/storage';
 import { unregisterPushToken } from '../../lib/notifications';
@@ -148,6 +157,9 @@ function SettingRow({
   );
 }
 
+// Treize choix : la liste défile dans une feuille de hauteur fixe (comme `CountryPicker`).
+const SOUND_SHEET_HEIGHT = Math.round(Dimensions.get('window').height * 0.75);
+
 export default function ProfileScreen() {
   const router = useRouter();
   const { t } = useTranslation();
@@ -169,6 +181,8 @@ export default function ProfileScreen() {
 
   const [langVisible, setLangVisible] = useState(false);
   const [themeVisible, setThemeVisible] = useState(false);
+  const [soundVisible, setSoundVisible] = useState(false);
+  const notifSound = useNotificationSound();
   const [qrVisible, setQrVisible] = useState(false);
   const [themePref, setThemePrefState] = useState<ThemePref>('system');
 
@@ -386,6 +400,16 @@ export default function ProfileScreen() {
     apiRequest('/users/me', { method: 'PATCH', body: { language: code } }).catch(() => {});
   };
 
+  /**
+   * Toucher un son le fait ENTENDRE et le choisit d'un même geste, et la feuille reste
+   * ouverte : on en essaie plusieurs avant de se décider, comme dans les réglages d'iOS.
+   */
+  const selectNotificationSound = async (id: NotificationSoundId) => {
+    previewNotificationSound(id);
+    if (id === notifSound) return;
+    if (!(await setNotificationSound(id))) Alert.alert('', t('notif_sound.error'));
+  };
+
   const selectTheme = async (pref: ThemePref) => {
     setThemeVisible(false);
     setThemePrefState(pref);
@@ -550,6 +574,14 @@ export default function ProfileScreen() {
             value={currentLang ? `${currentLang.flag} ${currentLang.label}` : ''}
             onPress={() => setLangVisible(true)}
           />
+          {/* ⚠️ Réglage du COMPTE, lui : c'est le serveur qui désigne le son dans chaque
+              notification (`lib/notificationSounds.ts`). */}
+          <SettingRow
+            icon="notifications-outline"
+            label={t('notif_sound.label')}
+            value={notificationSoundName(notifSound)}
+            onPress={() => setSoundVisible(true)}
+          />
           {/* ⚠️ Réglage LOCAL à l'appareil, comme l'apparence : on peut vouloir le son sur
               l'ordinateur et le silence sur le téléphone. */}
           <SettingRow
@@ -681,6 +713,41 @@ export default function ProfileScreen() {
           );
         })}
         <View className="pb-8" />
+      </BottomSheet>
+
+      {/* Drawer son des notifications */}
+      <BottomSheet visible={soundVisible} onClose={() => setSoundVisible(false)} height={SOUND_SHEET_HEIGHT}>
+        <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 px-5 pt-1">{t('notif_sound.label')}</Text>
+        <Text className="text-gray-500 dark:text-zinc-400 text-sm px-5 pt-1 pb-2">{t('notif_sound.hint')}</Text>
+        <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+          {NOTIFICATION_SOUNDS.map((snd) => {
+            const active = snd.id === notifSound;
+            return (
+              <TouchableOpacity
+                key={snd.id}
+                className="flex-row items-center px-5 py-4"
+                onPress={() => selectNotificationSound(snd.id)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+              >
+                <Ionicons
+                  name="musical-note-outline"
+                  size={22}
+                  color={active ? c.nexa : c.muted}
+                  style={{ marginRight: 12 }}
+                />
+                <Text
+                  className={`flex-1 text-lg ${active ? 'font-bold' : 'text-gray-900 dark:text-zinc-100'}`}
+                  style={active ? { color: c.nexa } : undefined}
+                >
+                  {notificationSoundName(snd.id)}
+                  {snd.id === 'nexa' ? ` · ${t('notif_sound.default')}` : ''}
+                </Text>
+                {active && <Ionicons name="checkmark-circle" size={22} color={c.nexa} />}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </BottomSheet>
 
       {/* Drawer QR code */}

@@ -106,3 +106,7 @@ Le rendu iOS est validé sur iPhone. **Rien n'a été testé sur Android.**
 ## Appel annulé avant le décroché (21/10/2026)
 
 Sur iOS, un push VoIP de fin (`event: 'ended'`) ferme l'écran d'appel système quand l'appelant raccroche avant le décroché. **Rien d'équivalent sur Android** : l'appel y arrive par une notification ordinaire de repli (`call_incoming`), qui n'est pas retirée quand l'appel s'arrête. À faire avec le reste des appels Android (notification de fin, ou retrait de la notification via une tâche de fond).
+
+## Son des notifications au choix (21/10/2026)
+
+Android : un canal par son (`messages_<son>`), créé au moment du choix, les anciens supprimés ; `messages` (son par défaut) reste toujours. **Non vérifié sur Android.** À contrôler : le son choisi s'applique, et la liste des catégories dans les réglages système de l'app reste propre.

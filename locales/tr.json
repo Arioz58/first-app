@@ -673,6 +673,13 @@
   "sounds": {
     "label": "Mesaj sesleri"
   },
+  "notif_sound": {
+    "label": "Bildirim sesi",
+    "hint": "Dinlemek ve seçmek için bir sese dokunun.",
+    "default": "varsayılan",
+    "error": "Ses kaydedilemedi. Lütfen tekrar deneyin.",
+    "system": "Telefon sesi"
+  },
   "calls": {
     "calling": "Aranıyor…",
     "incoming": "Gelen arama",

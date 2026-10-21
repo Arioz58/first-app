@@ -673,6 +673,13 @@
   "sounds": {
     "label": "Message sounds"
   },
+  "notif_sound": {
+    "label": "Notification sound",
+    "hint": "Tap a sound to hear it and choose it.",
+    "default": "default",
+    "error": "The sound couldn't be saved. Please try again.",
+    "system": "Phone sound"
+  },
   "calls": {
     "calling": "Calling…",
     "incoming": "Incoming call",

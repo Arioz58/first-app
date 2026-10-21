@@ -32,6 +32,7 @@ import { clearTokens, getAccessToken, getRefreshToken, getUserId, hydrateLocalSe
 import { BOOT_KEYS, hydrateCache } from "../lib/cache";
 import { initTheme, useThemeColors } from "../lib/theme";
 import { initSounds, playReceived } from "../lib/sounds";
+import { initNotificationSound, refreshNotificationSound } from "../lib/notificationSounds";
 import { initHeaderStyle } from "../lib/headerStyle";
 import { VoiceMiniPlayer } from "../components/VoiceMiniPlayer";
 import { CallOverlay } from "../components/CallOverlay";
@@ -263,6 +264,9 @@ const startSession = () => {
   // distant) : la catégorie, elle, sert aussi aux notifications locales, et c'est ce
   // qui permet de l'essayer sans appareil réel.
   registerReplyCategory();
+  // Le son des notifications choisi sur le COMPTE : la copie locale (son joué app ouverte,
+  // canal Android) peut venir d'un autre compte ou d'un autre téléphone.
+  refreshNotificationSound();
 
   /**
    * Écran d'appel du SYSTÈME (CallKit / ConnectionService).
@@ -464,6 +468,7 @@ export default function RootLayout() {
         // ⚠️ PAS attendu non plus : un son qui n'existe pas encore ne se voit pas, et
         // personne n'envoie de message avant que l'application soit montée.
         initSounds().catch(() => {});
+        initNotificationSound().catch(() => {});
         const token = await getAccessToken();
         const refreshToken = await getRefreshToken();
         const inAuth = segments[0] === "(auth)";

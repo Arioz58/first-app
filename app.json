@@ -94,7 +94,18 @@
           "color": "#1E40AF",
           "defaultChannel": "messages",
           "sounds": [
-            "./assets/sounds/notification.wav"
+            "./assets/sounds/notification.wav",
+            "./assets/sounds/notif_cascade.wav",
+            "./assets/sounds/notif_iris.wav",
+            "./assets/sounds/notif_echo.wav",
+            "./assets/sounds/notif_opal.wav",
+            "./assets/sounds/notif_prisma.wav",
+            "./assets/sounds/notif_lumen.wav",
+            "./assets/sounds/notif_orbit.wav",
+            "./assets/sounds/notif_pulse.wav",
+            "./assets/sounds/notif_halo.wav",
+            "./assets/sounds/notif_nova.wav",
+            "./assets/sounds/notif_comet.wav"
           ]
         }
       ],
