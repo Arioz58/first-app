@@ -75,6 +75,8 @@
     "code_sent_to": "Code sent to {{phone}}",
     "wrong_code": "Wrong code. Check the SMS and try again.",
     "resend_failed": "Couldn't resend the code. Try again.",
+    "too_many_attempts": "Too many attempts. Request a new code.",
+    "too_many_codes": "Too many codes requested. Try again in a few minutes.",
     "resend_code": "Resend code",
     "resend_in": "Resend in {{time}}",
     "code_valid_for": "Code valid for",

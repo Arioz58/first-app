@@ -48,7 +48,7 @@ Client : Hakan. Budget : 28 000€ (V1) + 6 000€ (V2) + 1 000€/mois maintena
 ```
 first-app/           → ce repo — app mobile React Native (Expo)
 first-app-backend/   → backend Node.js + Express (repo séparé, même machine)
-first-app-web/       → Next.js — client web (Mois 3). Connexion par **QR** (le mobile approuve), liste + fil temps réel. Backend partagé, sans changement : `cors()` ouvert et Socket.io en `origin: '*'` — à restreindre au Mois 5
+first-app-web/       → Next.js — client web (Mois 3). Connexion par **QR** (le mobile approuve), liste + fil temps réel. Backend partagé. ⚠️ Son adresse est dans la liste CORS du backend (`src/lib/cors.ts`) : la changer = mettre à jour `CORS_ORIGINS` sur Railway
 ```
 
 ---
@@ -749,14 +749,12 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 - `firebase-service-account.json` dans `.gitignore` (devenu inutile depuis la bascule sur Expo Push, mais la règle reste)
 - Jeton push **rattaché à un seul compte** (transaction) et **libéré à la déconnexion** — un appareil ne reçoit jamais les notifications d'un compte qu'il a quitté
 - Répertoire : **pré-consentement** avant lecture du carnet, numéros **non stockés** côté serveur, rate limit 12/h (anti-scraping)
+- **Codes SMS limités** (22 oct. 2026, `auth.service.ts`) : par numéro 1 code / 30 s et 5 / h, par adresse IP 20 / h (tous numéros — la seule qui arrête un script qui change de numéro), **5 essais par code** puis code détruit. Réponse **429** + `code` (`OTP_RATE_LIMITED` / `OTP_TOO_MANY_ATTEMPTS`), traduit côté app (`auth.too_many_*`). Code tiré par `crypto.randomInt`. ⚠️ `trust proxy` à **1** (`index.ts`) : sans lui, l'adresse vue serait celle du relais Railway et la limite par IP bloquerait tout le monde ensemble ; `true` croirait un `X-Forwarded-For` écrit par le client
+- **Helmet** (en-têtes HTTP de sécurité) + **CORS restreint** (22 oct. 2026) : liste unique `src/lib/cors.ts` pour HTTP **et** socket, surchargeable par `CORS_ORIGINS` (Railway) — à mettre à jour le jour du nom de domaine définitif. L'app mobile n'envoie pas d'`Origin`, elle n'est pas concernée
 
 ### À faire en Mois 5 (avant prod) ⚠️
 
-- Rate limiting sur `/auth/send-code` et `/auth/verify-code` (anti-spam OTP)
-- Limite de tentatives OTP (3 essais max)
-- Helmet.js (headers HTTP sécurité)
 - Validation stricte des inputs (zod ou joi)
-- CORS restreint aux domaines autorisés (pas `*`)
 - Validation URLs médias (S3 uniquement en prod)
 - **Trancher le comportement d'« Effacer la conversation »** — aujourd'hui purement local (horodatage SecureStore, voir section Chat) : après réinstallation ou changement d'appareil, la conversation **réapparaît intégralement**. Acceptable pour les réglages cosmétiques (fond, surnom, couleur), discutable ici — un utilisateur qui « efface » attend souvent un effacement durable. Options : garder tel quel mais l'expliciter dans l'UI, ou persister l'horodatage côté serveur (par membre)
 - **Trois fuites de photo de profil restées ouvertes** (deux constatées le 21 sept. 2026 en livrant « mes amis, sauf… »). ⚠️ Ce ne sont PAS des régressions des exceptions : le trou est d'origine, et même « Personne » fuyait — la nouveauté n'a fait que le rendre visible. Les quatre chemins d'affichage ont été colmatés (`makePhotoGate` sur `getUserConversations`, `getConversationDetails`, `getFriends`) ; restent :

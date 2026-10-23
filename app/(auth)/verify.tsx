@@ -179,7 +179,8 @@ export default function VerifyScreen() {
        */
       router.replace("/permissions");
     } catch (e: any) {
-      setError(t("auth.wrong_code"));
+      // 429 = 5 essais ratés : le serveur a détruit le code, le bon ne passerait plus.
+      setError(t(e?.status === 429 ? "auth.too_many_attempts" : "auth.wrong_code"));
       setDigits(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
     } finally {
@@ -199,7 +200,7 @@ export default function VerifyScreen() {
       inputRefs.current[0]?.focus();
       startTimer();
     } catch (e: any) {
-      setError(t("auth.resend_failed"));
+      setError(t(e?.status === 429 ? "auth.too_many_codes" : "auth.resend_failed"));
     } finally {
       setResending(false);
     }

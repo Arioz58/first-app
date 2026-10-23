@@ -75,6 +75,8 @@
     "code_sent_to": "Kod {{phone}} numarasına gönderildi",
     "wrong_code": "Kod hatalı. SMS'i kontrol edip tekrar deneyin.",
     "resend_failed": "Kod tekrar gönderilemedi. Tekrar deneyin.",
+    "too_many_attempts": "Çok fazla deneme yapıldı. Yeni bir kod iste.",
+    "too_many_codes": "Çok fazla kod istendi. Birkaç dakika sonra tekrar dene.",
     "resend_code": "Kodu tekrar gönder",
     "resend_in": "{{time}} içinde tekrar gönder",
     "code_valid_for": "Kod şu süre geçerli:",

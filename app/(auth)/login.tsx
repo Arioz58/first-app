@@ -168,7 +168,9 @@ export default function LoginScreen() {
         params: { phone: fullPhone, name, isNew: isNewUser ? "1" : "0" },
       });
     } catch (e: any) {
-      setServerError(e.message || t("auth.generic_error"));
+      setServerError(
+        e?.status === 429 ? t("auth.too_many_codes") : e.message || t("auth.generic_error"),
+      );
       triggerError();
     } finally {
       setLoading(false);

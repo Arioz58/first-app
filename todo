@@ -1877,7 +1877,7 @@ s'appuie en partie sur les codecs de macOS et ne prouve rien pour un appareil).
   → CHOIX ASSUME pour la V1 (celui de WhatsApp Web / Slack / Discord). L'alternative — cookies `httpOnly` + SameSite — est la « bonne » reponse academique mais demanderait au backend une SECONDE mecanique d'authentification a maintenir a cote de celle du mobile (pose et rafraichissement des cookies, protection CSRF, CORS avec credentials). Non retenu pour la V1.
   ⚠️ CE QUI PROTEGE VRAIMENT, c'est l'absence de XSS — pas le lieu de stockage. D'ou les mesures ci-dessous, a faire de toute facon :
     1. CSP stricte (`Content-Security-Policy`) sur le site Next.js : c'est elle qui empeche un script injecte de s'executer ET d'exfiltrer ;
-    2. CORS restreint cote backend (deja au todo securite, `cors()` est grand ouvert) — sans quoi n'importe quel site peut appeler l'API avec un jeton vole ;
+    2. ~~CORS restreint cote backend~~ ✅ fait le 22/10 (`src/lib/cors.ts`, HTTP + socket) ;
     3. REVOCATION du refresh token a la deconnexion : il dure 7 JOURS et le backend n'a aujourd'hui aucune liste de revocation, donc un jeton vole reste valide jusqu'a son expiration meme apres deconnexion. Demande une petite table ou un champ en base.
   ⚠️ Implication KVKK/RGPD a mentionner au client si l'app vise un usage professionnel : la decision n'est pas que technique.
 
