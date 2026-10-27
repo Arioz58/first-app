@@ -281,8 +281,8 @@ GET  /health
 POST /auth/send-code                              → envoie l'OTP (Twilio ou simulation console) ; `{ phone, mode? }` — `mode:'login'` refuse si compte inexistant, `mode:'signup'` refuse si déjà existant
 POST /auth/verify-code                            → vérifie OTP, crée user si nouveau, retourne JWT
 POST /auth/refresh                                → renouvelle : NOUVELLE paire (accès + rafraîchissement — rotation, 23/10). 401 = session fermée/inconnue, 5xx = panne (les clients ne déconnectent que sur 4xx)
-POST /auth/logout                                 → **sans auth** `{ refreshToken }` : ferme la session de CET appareil (le jeton d'accès peut avoir expiré, c'est le jeton de rafraîchissement qui la désigne) → 204
-POST /auth/logout-all                             → ferme TOUTES les sessions du compte (téléphone perdu/volé), **et** oublie `fcmToken`/`voipToken` + arrête les partages de position — l'appareil retiré ne peut plus le faire lui-même → 204
+POST /auth/logout                                 → **sans auth** `{ refreshToken }` : ferme la session de CET appareil (le jeton d'accès peut avoir expiré, c'est le jeton de rafraîchissement qui la désigne) → `{ ok: true }`
+POST /auth/logout-all                             → ferme TOUTES les sessions du compte (téléphone perdu/volé), **et** oublie `fcmToken`/`voipToken` + arrête les partages de position — l'appareil retiré ne peut plus le faire lui-même → `{ ok: true }`. ⚠️ Jamais un 204 vide : `apiRequest` (mobile) lit toujours du JSON, un corps vide y devient une erreur
 POST /web-sessions                                → **sans auth** : le navigateur demande un jeton de connexion (32 octets aléatoires, 60 s) à afficher en QR
 GET  /web-sessions/:token                         → aperçu de la demande (navigateur, date) pour que le mobile sache **ce qu'il approuve**
 POST /web-sessions/approve                        → le mobile approuve `{ token }`. ⚠️ L'identité vient de SON JWT, jamais du corps ; les jetons partent au navigateur **par socket** (`web_session_approved`), usage unique
