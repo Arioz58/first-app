@@ -101,7 +101,7 @@ first-app-web/       → Next.js — client web (Mois 3). Connexion par **QR** (
 - Prisma v5 + PostgreSQL (RDS en prod, Docker en local)
 - Redis (ElastiCache en prod, Docker en local)
 - Socket.io — messagerie temps réel + vérification membership
-- JWT access (15min) + refresh tokens (7j) — auto-refresh côté client
+- JWT access (15min) + refresh tokens (7j **glissants**, **remplacés à chaque renouvellement**, révocables — table `AuthSession`, voir Sécurité) — auto-refresh côté client
 - **expo-server-sdk** — envoi des notifications push par le service Expo (🔄 remplace `firebase-admin`, supprimé)
 - Nettoyage automatique stories expirées toutes les heures + messages éphémères expirés toutes les 5 min (setInterval)
 
@@ -280,7 +280,9 @@ prisma/
 GET  /health
 POST /auth/send-code                              → envoie l'OTP (Twilio ou simulation console) ; `{ phone, mode? }` — `mode:'login'` refuse si compte inexistant, `mode:'signup'` refuse si déjà existant
 POST /auth/verify-code                            → vérifie OTP, crée user si nouveau, retourne JWT
-POST /auth/refresh                                → renouvelle access token
+POST /auth/refresh                                → renouvelle : NOUVELLE paire (accès + rafraîchissement — rotation, 23/10). 401 = session fermée/inconnue, 5xx = panne (les clients ne déconnectent que sur 4xx)
+POST /auth/logout                                 → **sans auth** `{ refreshToken }` : ferme la session de CET appareil (le jeton d'accès peut avoir expiré, c'est le jeton de rafraîchissement qui la désigne) → 204
+POST /auth/logout-all                             → ferme TOUTES les sessions du compte (téléphone perdu/volé), **et** oublie `fcmToken`/`voipToken` + arrête les partages de position — l'appareil retiré ne peut plus le faire lui-même → 204
 POST /web-sessions                                → **sans auth** : le navigateur demande un jeton de connexion (32 octets aléatoires, 60 s) à afficher en QR
 GET  /web-sessions/:token                         → aperçu de la demande (navigateur, date) pour que le mobile sache **ce qu'il approuve**
 POST /web-sessions/approve                        → le mobile approuve `{ token }`. ⚠️ L'identité vient de SON JWT, jamais du corps ; les jetons partent au navigateur **par socket** (`web_session_approved`), usage unique
@@ -749,6 +751,7 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 - `firebase-service-account.json` dans `.gitignore` (devenu inutile depuis la bascule sur Expo Push, mais la règle reste)
 - Jeton push **rattaché à un seul compte** (transaction) et **libéré à la déconnexion** — un appareil ne reçoit jamais les notifications d'un compte qu'il a quitté
 - Répertoire : **pré-consentement** avant lecture du carnet, numéros **non stockés** côté serveur, rate limit 12/h (anti-scraping)
+- **Sessions révocables** (23 oct. 2026, `src/modules/auth/session.service.ts`) : modèle `AuthSession` (une ligne par appareil), jetons `{ userId, sid, jti }`, **rotation** à chaque renouvellement. ⚠️ Les **5 derniers** jetons émis restent acceptés (réponse perdue, app gelée par iOS, deux onglets) ; un jeton plus ancien = copie → **session entière révoquée**. Mise à jour **atomique** (un seul `UPDATE … RETURNING`). Session fermée = refus **immédiat** : marque Redis `session_revoked:<sid>` (15 min) vérifiée par le middleware **et** le handshake socket, sockets ouverts coupés (`socket.data.sid`). ⚠️ **Jetons d'avant le 23/10** (sans `sid`) acceptés et convertis (session d'id dérivé du jeton) — sinon tout le monde déconnecté au déploiement ; `User.sessionsRevokedAt` les couvre pour « tous mes appareils ». Les deux clients enregistraient déjà un `refreshToken` renvoyé : aucun build requis pour la rotation
 - **Codes SMS limités** (22 oct. 2026, `auth.service.ts`) : par numéro 1 code / 30 s et 5 / h, par adresse IP 20 / h (tous numéros — la seule qui arrête un script qui change de numéro), **5 essais par code** puis code détruit. Réponse **429** + `code` (`OTP_RATE_LIMITED` / `OTP_TOO_MANY_ATTEMPTS`), traduit côté app (`auth.too_many_*`). Code tiré par `crypto.randomInt`. ⚠️ `trust proxy` à **1** (`index.ts`) : sans lui, l'adresse vue serait celle du relais Railway et la limite par IP bloquerait tout le monde ensemble ; `true` croirait un `X-Forwarded-For` écrit par le client
 - **Helmet** (en-têtes HTTP de sécurité) + **CORS restreint** (22 oct. 2026) : liste unique `src/lib/cors.ts` pour HTTP **et** socket, surchargeable par `CORS_ORIGINS` (Railway) — à mettre à jour le jour du nom de domaine définitif. L'app mobile n'envoie pas d'`Origin`, elle n'est pas concernée
 - **Adresses de médias vérifiées** (23 oct. 2026, `src/lib/mediaUrl.ts`) : pièces jointes, stories, photo de profil et de groupe n'acceptent que **notre** stockage (origine exacte du bucket S3 ou de CloudFront, https), plus Giphy pour les seuls `mediaType: 'gif'`. Sans cela, un « message photo » pointant vers un site tiers livrait à l'expéditeur l'IP du destinataire à l'affichage. Pièce jointe refusée = motif `invalid_media` (socket « Média refusé », REST 400) ; vignette d'une réponse à une story hors stockage = simplement retirée. Les adresses déjà en base ne sont pas touchées

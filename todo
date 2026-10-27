@@ -785,7 +785,18 @@ morte. Mobile ET web.
     `fetchRef` qui la gardait hors des dependances n'existait que pour le reessai automatique,
     supprime le matin meme.
 
-[A FAIRE - Mois 5, SECURITE] ROTATION DES JETONS DE RAFRAICHISSEMENT — inexistante.
+[FAIT 23/10 - Mois 5, SECURITE] ROTATION DES JETONS DE RAFRAICHISSEMENT.
+  FAIT : table `AuthSession` (une ligne par appareil connecte), `sid` + `jti` dans les jetons,
+  nouveau jeton a CHAQUE renouvellement (7 j glissants), `POST /auth/logout` (cet appareil) et
+  `POST /auth/logout-all` (bouton « Deconnecter tous mes appareils » du profil — coupe aussi
+  push, VoIP et partages de position). Session fermee = acces refuse TOUT DE SUITE (marque Redis
+  verifiee a chaque requete et a la connexion du socket, sockets ouverts coupes).
+  PIEGE CI-DESSOUS TRAITE : les 5 derniers jetons emis restent acceptes (reponse perdue, deux
+  onglets) ; un jeton PLUS ANCIEN ne peut venir que d'une copie → session entiere revoquee.
+  Jetons d'avant le deploiement acceptes puis convertis : personne n'est deconnecte.
+  Teste en local (24 cas, scratchpad session-test.js). A TESTER SUR TESTFLIGHT : 2 telephones,
+  « tous mes appareils » sur l'un → l'autre revient a l'accueil a sa prochaine action.
+  --- historique ---
   Constate le 11/09 en verifiant un commentaire : `POST /auth/refresh` se contente de verifier
   la signature et de renvoyer un nouvel ACCES. Le jeton de rafraichissement n'est ni fait
   tourner, ni invalide, ni stocke — il reste donc valable 7 jours, et un vol permet de

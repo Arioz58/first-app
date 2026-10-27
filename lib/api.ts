@@ -92,7 +92,7 @@ const refreshSession = async (): Promise<RefreshResult> => {
       /**
        * ⚠️ N'ÉCRIRE LE JETON DE RAFRAÎCHISSEMENT QUE SI LE SERVEUR EN RENVOIE UN.
        *
-       * `POST /auth/refresh` ne renvoie QUE `accessToken` (il n'y a pas de rotation).
+       * `POST /auth/refresh` ne renvoyait alors QUE `accessToken` (rotation ajoutée le 23/10).
        * `data.refreshToken` valait donc TOUJOURS `undefined`, et l'appel à `saveTokens` le
        * poussait tel quel dans le trousseau — `SecureStore.setItemAsync` refuse une valeur
        * qui n'est pas une chaîne, l'exception partait dans le `catch` ci-dessous, et le
