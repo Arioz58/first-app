@@ -3029,7 +3029,9 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
     n'en contenir aucun avec elle). L'app refiltre aussi, tant que Railway n'est pas a jour.
   → regles partagees dans `lib/callHistory.ts` (un seul endroit pour nommer un appel).
   → PAS de bouton video tant que la video n'existe pas (decision du 24/09).
-  [A TRANCHER] la photo des lignes (`peer.photoUrl` de `GET /calls`) ignore `privacyPhoto` —
+  [FAIT 28/10] la photo des lignes (`peer.photoUrl` de `GET /calls`) filtree, avec toutes les autres
+  fuites de photo (voir CLAUDE.md, Securite). Constat d'origine :
+  la photo des lignes (`peer.photoUrl` de `GET /calls`) ignore `privacyPhoto` —
   meme famille que les deux fuites deja notees. La fiche, elle, prend la photo filtree du profil.
   [FAIT 25/09, demande de Berke] regroupement « UserA (3) » + filtre Tous / Manques.
   → regroupe les appels CONSECUTIFS avec la meme personne ET de meme type (`callKind`).
