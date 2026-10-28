@@ -25,7 +25,7 @@ import {
 // système ne réveille l'app pour une notification — à ce moment-là aucun composant n'a été
 // rendu, et une tâche non définie est simplement perdue.
 import { registerDeliveryReceiptTask } from "../lib/deliveryReceipt";
-import { bindSocket, connectSocket, pauseSocket, resumeSocket } from "../lib/socket";
+import { bindSocket, connectSocket, pauseSocket, resumeSocket, setSocketBackground } from "../lib/socket";
 import { setSessionStarter } from "../lib/session";
 import { hydrateLiveShares } from "../lib/liveLocation";
 import { clearTokens, getAccessToken, getRefreshToken, getUserId, hydrateLocalSettings, migrateSessionAccessibility } from "../lib/storage";
@@ -40,6 +40,8 @@ import {
   acceptCall,
   callEnded,
   hangUp,
+  isCallActive,
+  resyncCall,
   incomingCall,
   peerAccepted,
   setMutedFromSystem,
@@ -414,8 +416,22 @@ export default function RootLayout() {
     const sub = AppState.addEventListener("change", (state) => {
       // « inactive » = bascule d'app, centre de contrôle, appel entrant : l'utilisateur
       // est encore devant l'app, on ne coupe pas pour si peu.
-      if (state === "background") pauseSocket();
-      else if (state === "active") resumeSocket();
+      if (state === "background") {
+        setSocketBackground(true);
+        /**
+         * ⚠️ PAS pendant un appel (28/10) : c'est par le socket qu'arrivent le décroché et le
+         * raccroché de l'autre. Le fermer était la cause des appels « capricieux » — un
+         * raccroché jamais reçu, un décroché jamais vu. Il se ferme à la fin de l'appel
+         * (`afterEnd` dans `lib/callEngine.ts`), et le serveur, prévenu de l'arrière-plan,
+         * continue d'envoyer les notifications de messages.
+         */
+        if (!isCallActive()) pauseSocket();
+      } else if (state === "active") {
+        setSocketBackground(false);
+        resumeSocket();
+        // L'écran d'appel doit dire où en est VRAIMENT l'appel, pas ce qu'on en savait.
+        resyncCall();
+      }
     });
     return () => sub.remove();
   }, []);

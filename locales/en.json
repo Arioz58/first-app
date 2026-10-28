@@ -691,6 +691,8 @@
     "incoming": "Incoming call",
     "incoming_video": "Incoming video call",
     "connecting": "Connecting…",
+    "reconnecting": "Reconnecting…",
+    "connection_lost": "Connection lost",
     "ended": "Call ended",
     "accept": "Answer",
     "decline": "Decline",

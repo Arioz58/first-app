@@ -2,17 +2,20 @@ import { useSyncExternalStore } from 'react';
 import {
   ChannelProfileType,
   ClientRoleType,
+  ConnectionStateType,
   createAgoraRtcEngine,
   MediaPlayerState,
   RemoteVideoState,
   RemoteVideoStateReason,
   type IMediaPlayer,
   type IRtcEngine,
+  UserOfflineReasonType,
 } from 'react-native-agora';
 import { AppState } from 'react-native';
 import { Camera } from 'expo-camera';
 import * as Device from 'expo-device';
 import { apiRequest } from './api';
+import { pauseSocket, resumeSocket } from './socket';
 import { enterIdleMode } from './audioMode';
 import { playRingback, playRingtone, stopCallSounds } from './callSounds';
 import {
@@ -53,6 +56,11 @@ export type CallStatus =
   | 'connecting'
   /** Les deux sont dans le canal, on s'entend. */
   | 'active'
+  /**
+   * Coupure en plein appel (l'un des deux a perdu le réseau). Comme WhatsApp : on affiche
+   * « Reconnexion… », et l'appel se termine si rien ne revient (`PEER_TIMEOUT_MS`).
+   */
+  | 'reconnecting'
   | 'ended';
 
 export type CallState = {
@@ -150,14 +158,21 @@ const ensureEngine = (appId: string): IRtcEngine => {
       remoteCount += 1;
       // ⚠️ Voir la garde de `onUserOffline` : un appel terminé ne se rouvre pas.
       if (state?.status === 'ended') return;
+      clearPeerWait();
       patch({ status: 'active', startedAt: state?.startedAt ?? Date.now(), remoteUid });
     },
     /**
      * Il est parti.
      *
-     * ⚠️ On ne termine pas l'appel ici : le serveur fait foi, et c'est `call_ended` qui
-     * clôt. Agora signale aussi ce départ lors d'une coupure réseau passagère, et
-     * raccrocher là-dessus couperait un appel qui allait se rétablir.
+     * ⚠️ Deux départs à ne pas confondre (motif fourni par Agora) :
+     * - « a QUITTÉ » le canal (`UserOfflineQuit`) : il a raccroché — l'app ne quitte le canal
+     *   qu'au raccroché (`leave`). On TERMINE l'appel ici aussi (retour de Hakan du 28/10).
+     *   ⚠️ C'est souvent le SEUL signal qui arrive : téléphone verrouillé ou app en
+     *   arrière-plan, le socket est fermé et `call_ended` du serveur ne parvient jamais.
+     *   L'appel restait alors ouvert chez celui qui n'avait pas raccroché.
+     * - « connexion PERDUE » (`UserOfflineDropped`) : coupure réseau, souvent passagère. On
+     *   ne termine PAS tout de suite — raccrocher là-dessus couperait un appel qui allait se
+     *   rétablir : « Reconnexion… » pendant 30 s, puis fin (`armPeerWait`), comme WhatsApp.
      *
      * ⚠️ ON NE REPASSE EN « Connexion… » QUE S'IL NE RESTE PLUS PERSONNE. Le faire à chaque
      * `onUserOffline` affichait « Connexion… » pendant une conversation parfaitement
@@ -213,7 +228,7 @@ const ensureEngine = (appId: string): IRtcEngine => {
     onError: (err, msg) => {
       if (__DEV__) console.warn('[call] erreur Agora', err, msg);
     },
-    onUserOffline: () => {
+    onUserOffline: (_c, _remoteUid, reason) => {
       remoteCount = Math.max(0, remoteCount - 1);
       /**
        * ⚠️ UN APPEL TERMINÉ NE REDEVIENT JAMAIS « en cours de connexion ».
@@ -226,7 +241,43 @@ const ensureEngine = (appId: string): IRtcEngine => {
        * Signalé par Berke le 22/09 — régression introduite par le compteur de participants.
        */
       if (state?.status === 'ended') return;
-      if (remoteCount === 0) patch({ status: 'connecting', remoteUid: null });
+      // Appel à deux : le seul correspondant a raccroché. Même clôture que `call_ended`.
+      if (reason === UserOfflineReasonType.UserOfflineQuit && remoteCount === 0 && state) {
+        callEnded(state.callId, 'ended');
+        return;
+      }
+      // Connexion perdue : « Reconnexion… », et fin de l'appel si l'autre ne revient pas.
+      if (remoteCount === 0) {
+        patch({ status: 'reconnecting', remoteUid: null });
+        armPeerWait();
+      }
+    },
+    /**
+     * MA connexion au canal. Réseau perdu de NOTRE côté : Agora retente seul (pendant 20 min !),
+     * mais on n'attend pas plus que WhatsApp — « Reconnexion… », puis fin au bout de 30 s.
+     */
+    onConnectionStateChanged: (_c, st) => {
+      if (__DEV__) console.log('[call] connexion', st);
+      if (!state || state.status === 'ended' || !joined) return;
+      if (st === ConnectionStateType.ConnectionStateReconnecting) {
+        if (state.status === 'active') patch({ status: 'reconnecting' });
+        armPeerWait();
+      } else if (st === ConnectionStateType.ConnectionStateConnected && remoteCount > 0) {
+        clearPeerWait();
+        if (state.status === 'reconnecting') patch({ status: 'active' });
+      } else if (st === ConnectionStateType.ConnectionStateFailed) {
+        giveUp();
+      }
+    },
+    /**
+     * Le jeton d'accès au canal expire (une heure, `lib/agora.ts` côté serveur). Sans
+     * renouvellement, Agora coupait net tout appel de plus d'une heure.
+     */
+    onTokenPrivilegeWillExpire: () => {
+      renewToken();
+    },
+    onRequestToken: () => {
+      renewToken();
     },
   });
   engine = e;
@@ -341,6 +392,144 @@ const ensureCameraPermission = async (prompt = true): Promise<boolean> => {
   }
 };
 
+/**
+ * ATTENTE DU CORRESPONDANT : décroché sans que l'autre arrive, ou coupure en plein appel.
+ *
+ * ⚠️ Avant le 28/10, rien ne bornait cette attente : l'écran restait sur « Connexion… »
+ * indéfiniment (retour de Berke et de Hakan). WhatsApp abandonne au bout d'une trentaine de
+ * secondes ; on fait pareil, en raccrochant pour de bon — le serveur clôt l'appel et les deux
+ * personnes redeviennent joignables.
+ */
+const PEER_TIMEOUT_MS = 30 * 1000;
+let peerWait: ReturnType<typeof setTimeout> | null = null;
+
+const clearPeerWait = () => {
+  if (peerWait) clearTimeout(peerWait);
+  peerWait = null;
+};
+
+/** ⚠️ Ne réarme pas une attente déjà en cours : le délai court depuis la PREMIÈRE coupure. */
+const armPeerWait = () => {
+  if (peerWait) return;
+  const callId = state?.callId;
+  peerWait = setTimeout(() => {
+    peerWait = null;
+    if (!state || state.callId !== callId || state.status === 'ended') return;
+    if (remoteCount > 0 && state.status === 'active') return;
+    giveUp();
+  }, PEER_TIMEOUT_MS);
+};
+
+/** L'appel n'a pas pu s'établir ou se rétablir : on raccroche, en disant pourquoi. */
+const giveUp = () => {
+  const current = state;
+  if (!current || current.status === 'ended') return;
+  hangUp().catch(() => {});
+  if (state?.callId === current.callId) patch({ endedReason: 'connection_lost' });
+};
+
+/**
+ * SUIVI DE L'APPEL AUPRÈS DU SERVEUR, tant qu'il vit.
+ *
+ * - Pendant la SONNERIE : on lui demande où en est l'appel toutes les 2 s. ⚠️ C'est le filet
+ *   de `call_accepted` et `call_ended` : un seul événement socket perdu suffisait à bloquer
+ *   l'appel (l'appelant ne rejoignait jamais le canal, l'autre restait sur « Connexion… »).
+ * - Une fois DÉCROCHÉ : un signal de vie toutes les 15 s (`POST /calls/:id/heartbeat`). Le
+ *   serveur clôt un appel dont un participant se tait depuis une minute — sans quoi un
+ *   téléphone tué laissait les deux personnes « occupées » pour toujours. La réponse dit
+ *   aussi l'état de l'appel : un raccroché qu'on aurait manqué est rattrapé là.
+ */
+const RING_POLL_MS = 2 * 1000;
+const HEARTBEAT_MS = 15 * 1000;
+let monitor: ReturnType<typeof setInterval> | null = null;
+let lastBeat = 0;
+let polling = false;
+
+type ServerCall = { status: string; duration?: number | null };
+
+/** Applique ce que le serveur dit de l'appel. */
+const applyServerStatus = (callId: string, server: ServerCall) => {
+  if (!state || state.callId !== callId || state.status === 'ended') return;
+  if (server.status === 'accepted') {
+    // Décroché chez l'autre, et nous n'en avons rien su : on rejoint le canal maintenant.
+    if (state.direction === 'outgoing' && state.status === 'ringing') peerAccepted();
+    return;
+  }
+  if (server.status !== 'pending') callEnded(callId, server.status);
+};
+
+/** Interroge le serveur sur l'appel en cours. ⚠️ Silencieux hors ligne : on retentera. */
+const checkServer = async (kind: 'status' | 'heartbeat') => {
+  const current = state;
+  if (!current || current.status === 'ended' || polling) return;
+  polling = true;
+  try {
+    const server = await apiRequest<ServerCall>(
+      kind === 'status' ? `/calls/${current.callId}/status` : `/calls/${current.callId}/heartbeat`,
+      kind === 'status' ? {} : { method: 'POST' },
+    );
+    applyServerStatus(current.callId, server);
+  } catch (e: any) {
+    // L'appel n'existe pas (ou plus) côté serveur : rien à attendre.
+    if (e?.status === 404) callEnded(current.callId, 'gone');
+  } finally {
+    polling = false;
+  }
+};
+
+const startMonitor = () => {
+  if (monitor) return;
+  lastBeat = 0;
+  monitor = setInterval(() => {
+    if (!state || state.status === 'ended') return stopMonitor();
+    if (state.status === 'ringing') {
+      // ⚠️ Sonnerie affichée par le SEUL système (démarrage à froid) : pas d'état à suivre.
+      checkServer('status');
+    } else if (joined && Date.now() - lastBeat >= HEARTBEAT_MS) {
+      lastBeat = Date.now();
+      checkServer('heartbeat');
+    }
+  }, RING_POLL_MS);
+};
+
+const stopMonitor = () => {
+  if (monitor) clearInterval(monitor);
+  monitor = null;
+};
+
+/**
+ * Retour au premier plan : on vérifie tout de suite où en est l'appel, sans attendre le
+ * prochain tour du suivi. L'écran ne doit jamais montrer un appel fini depuis longtemps.
+ */
+export const resyncCall = () => {
+  if (state && state.status !== 'ended') checkServer('status');
+};
+
+/** Nouveau jeton pour le canal, avant que l'actuel n'expire. */
+const renewToken = async () => {
+  const current = state;
+  if (!current || current.status === 'ended' || !engine) return;
+  try {
+    const r = await apiRequest<{ token: string }>(`/calls/${current.callId}/token`, { method: 'POST' });
+    if (state?.callId === current.callId && joined) engine.renewToken(r.token);
+  } catch {
+    // Échec : Agora redemandera (`onRequestToken`) une fois le jeton expiré.
+  }
+};
+
+/**
+ * Tout ce qui accompagne un appel FINI, quel que soit le chemin de la fin.
+ *
+ * ⚠️ Le socket est resté ouvert en arrière-plan le temps de l'appel (`setSocketBackground`) :
+ * on le referme maintenant si l'app n'est toujours pas à l'écran, sinon les messages reçus
+ * ensuite ne donneraient plus de notification chez les builds qui ne déclarent pas leur état.
+ */
+const afterEnd = () => {
+  stopMonitor();
+  clearPeerWait();
+  if (AppState.currentState === 'background') pauseSocket();
+};
+
 /** Dans le canal — certaines commandes (republier la caméra) n'ont de sens qu'ici. */
 let joined = false;
 
@@ -379,6 +568,12 @@ const join = (
     }),
   });
   joined = true;
+  // L'autre doit arriver dans les 30 s, sinon l'appel n'a pas pu s'établir.
+  armPeerWait();
+  startMonitor();
+  // Signal de vie immédiat : le serveur sait tout de suite que ce téléphone porte l'appel.
+  lastBeat = Date.now();
+  checkServer('heartbeat');
   // Caméra coupée PENDANT LA SONNERIE (ou appel réduit avant le décroché) : elle doit le
   // rester une fois dans le canal, sinon l'autre recevrait l'image qu'on a voulu cacher.
   if (sendVideo && testPlayerId === null && state?.cameraOff) applyCamera(false);
@@ -459,6 +654,10 @@ export const startCall = async (
      * autant qu'une conversation. On attend `call_accepted`.
      */
     pendingJoin = call;
+    // ⚠️ Le socket doit vivre pendant toute la sonnerie, même app en arrière-plan : c'est
+    // par lui qu'arrive le décroché. Le suivi serveur sert de filet s'il se perd.
+    resumeSocket();
+    startMonitor();
     return { ok: true };
   } catch (e: any) {
     /**
@@ -506,6 +705,8 @@ export const incomingCall = (callId: string, peer: CallPeer, type: CallType = 'a
   if (native) state = { ...state, nativeUI: true };
   else playRingtone();
   emit();
+  // Filet de `call_ended` : l'appelant qui renonce doit faire taire la sonnerie ici aussi.
+  startMonitor();
 };
 
 /**
@@ -530,6 +731,12 @@ export const acceptCall = async (callIdFromSystem?: string): Promise<boolean> =>
   if (state && state.callId.toLowerCase() === callId) {
     if (state.direction !== 'incoming' || state.status !== 'ringing') return false;
   }
+  /**
+   * ⚠️ Décroché depuis l'écran verrouillé : l'app était en arrière-plan, socket FERMÉ. Sans
+   * le rouvrir, ce téléphone n'apprenait jamais le raccroché de l'autre — le point 2 de
+   * Hakan (28/10). Il reste ouvert jusqu'à la fin de l'appel (`afterEnd`).
+   */
+  resumeSocket();
   try {
     const info = await apiRequest<{
       appId: string;
@@ -591,6 +798,7 @@ export const acceptCall = async (callIdFromSystem?: string): Promise<boolean> =>
     stopCallSounds();
     endNativeCall(callId);
     patch({ status: 'ended', endedReason: 'gone' });
+    afterEnd();
     return false;
   }
 };
@@ -610,7 +818,9 @@ export const answerFromApp = async (): Promise<boolean> => {
 
 /** L'autre a décroché : c'est notre tour de rejoindre le canal. */
 export const peerAccepted = () => {
-  if (!state || state.direction !== 'outgoing') return;
+  // ⚠️ Seulement pendant la sonnerie : le décroché arrive désormais par DEUX chemins (socket
+  // et suivi serveur), et le second aurait fait repasser un appel établi en « Connexion… ».
+  if (!state || state.direction !== 'outgoing' || state.status !== 'ringing') return;
   stopCallSounds();
   reportConnected(state.callId);
   patch({ status: 'connecting', startedAt: Date.now() });
@@ -628,7 +838,9 @@ export const peerAccepted = () => {
  */
 export const hangUp = async (): Promise<void> => {
   const current = state;
-  if (!current) return;
+  // ⚠️ Déjà fini : refermer l'écran système une seconde fois laisserait `endingOurselves`
+  // levé (voir `callEnded`).
+  if (!current || current.status === 'ended') return;
   stopCallSounds();
   // ⚠️ Sans ceci l'écran d'appel du système RESTE affiché et le téléphone se croit en
   // communication : un appel fantôme que l'utilisateur ne peut fermer qu'en tuant l'app.
@@ -636,10 +848,12 @@ export const hangUp = async (): Promise<void> => {
   leave();
   pendingJoin = null;
   patch({ status: 'ended' });
+  afterEnd();
   try {
     await apiRequest(`/calls/${current.callId}/end`, { method: 'POST' });
   } catch {
-    // Hors ligne : le balayage serveur clôra l'appel de lui-même au bout d'une minute.
+    // Hors ligne : le serveur clôt l'appel de lui-même — fin de sonnerie au bout d'une
+    // minute, ou appel décroché resté sans signal de vie (`sweepSilentCalls`).
   }
 };
 
@@ -667,11 +881,20 @@ export const callEnded = (
   opts?: { systemEnded?: boolean },
 ) => {
   if (!state || state.callId.toLowerCase() !== callId.toLowerCase()) return;
+  /**
+   * ⚠️ DÉJÀ TERMINÉ : rien à refaire. La fin arrive souvent DEUX fois — par Agora (le
+   * correspondant a quitté le canal) puis par le serveur (`call_ended`), ou après notre propre
+   * raccroché. Refermer l'écran système une seconde fois laisserait `endingOurselves` levé
+   * (`lib/callKit.ts`) : l'écho de cette fin ne revient jamais, et le PROCHAIN raccroché
+   * depuis l'écran système serait ignoré.
+   */
+  if (state.status === 'ended') return;
   stopCallSounds();
   if (!opts?.systemEnded) endNativeCall(callId);
   leave();
   pendingJoin = null;
   patch({ status: 'ended', endedReason: reason });
+  afterEnd();
 };
 
 /**

@@ -2640,6 +2640,32 @@ PUSH.
   serveur tournant sur la meme machine. ⚠️ `nodemon` ne surveille PAS le `.env` : relancer
   le backend pour qu'il serve la nouvelle `PUBLIC_URL` dans ses notifications.
 
+[FAIT 28/10 - retour Hakan point 2] APPELS FIABILISES « COMME WHATSAPP ».
+  Symptome : l'un raccroche, l'autre reste en ligne ; mon test sur simulateur restait sur
+  « Connexion… ». Audit complet du code d'appel, 6 ecarts avec WhatsApp :
+  1. CAUSE PRINCIPALE : le socket se fermait en arriere-plan, MEME PENDANT UN APPEL. Qui
+     decrochait ecran verrouille n'avait aucun socket de tout l'appel (jamais de raccroche
+     recu) ; l'appelant qui verrouillait pendant la sonnerie ne recevait jamais le decroche
+     (jamais de canal rejoint, l'autre sur « Connexion… » — piste du point 1 video).
+     → socket garde ouvert de la sonnerie au raccroche, puis referme ; il declare au serveur
+       qu'il est en arriere-plan (`app_state`), et `isUserOnMobile` l'ignore : les
+       notifications de messages continuent pendant un appel.
+  2. Appels DECROCHES jamais clos par le serveur (balayage limite a la sonnerie) → deux
+     personnes « occupees » a vie si les deux telephones perdaient le reseau.
+     → signal de vie toutes les 15 s (`POST /calls/:id/heartbeat`, Redis), balayage toutes les
+       30 s : un participant muet depuis 60 s = appel clos (`sweepSilentCalls`). Un build
+       d'avant n'envoie rien : jamais juge sur un silence qu'il ne peut pas rompre, filet a 3 h.
+  3. Coupure reseau → « Connexion… » a l'infini. → « Reconnexion… » puis fin a 30 s.
+     Meme borne au decroche si l'autre n'arrive jamais.
+  4. Pas de resynchronisation au retour au premier plan → `GET /calls/:id/status`.
+  5. L'appelant ne dependait que de `call_accepted` → interrogation toutes les 2 s pendant la
+     sonnerie (et chez l'appele, filet de l'annulation).
+  6. Jeton Agora d'1 h jamais renouvele (appels > 1 h coupes) → `POST /calls/:id/token` sur
+     `onTokenPrivilegeWillExpire`.
+  + Garde du 28/10 : « a quitte » (UserOfflineQuit) termine l'appel ; fin idempotente.
+  Teste en local (20 cas, scratchpad calls-test.js). Le reste demande deux telephones : voir
+  « A TESTER SUR TESTFLIGHT ».
+
 [EN COURS 22/09 - MOIS 4] APPELS AUDIO (Agora). Phase 1 — SOCLE SERVEUR ✅
 
   Perimetre arbitre le 22/09 par Berke : appel entrant en VRAI ECRAN D'APPEL SYSTEME
@@ -3322,6 +3348,19 @@ Retour Hakan du 21/10 :
       son ecran d'appel s'arrete aussitot. Idem sans raccrocher : arret au bout d'~1-2 min,
       appel « manque » dans ses Recents iOS.
   [ ] Apres ca, un nouvel appel vers lui sonne normalement (pas « occupe »).
+Appels fiabilises « comme WhatsApp » (28/10) — rebuild requis + backend deploye :
+  [ ] A appelle B, B decroche depuis l'ECRAN VERROUILLE, A raccroche : chez B l'appel se ferme
+      en ~1 s (le point 2 de Hakan). Puis l'inverse : B raccroche, A se ferme.
+  [ ] A appelle, VERROUILLE son telephone pendant que ca sonne, B decroche : la voix passe des
+      deux cotes en quelques secondes (avant : B restait sur « Connexion… »).
+  [ ] Mode avion chez l'un en plein appel : l'autre affiche « Reconnexion… », puis « Connexion
+      perdue » au bout de ~30 s. Couper puis remettre le reseau en moins de 30 s : l'appel
+      reprend.
+  [ ] Tuer l'app de l'un en plein appel : l'autre se ferme (~30 s max) ; une minute apres, un
+      nouvel appel entre eux sonne normalement (pas « occupe »).
+  [ ] Pendant un appel, ecran verrouille, un ami envoie un MESSAGE : la notification arrive.
+  [ ] Appel de plus d'une heure (une fois) : il ne se coupe pas a la 60e minute.
+  [ ] Android : tout ce qui precede.
 Son des notifications (21/10) :
   [ ] Choisir un son dans le profil → une notification recue app FERMEE sonne avec ce son
       (le son ne se teste pas sur simulateur : pas de push).

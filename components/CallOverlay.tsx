@@ -219,10 +219,14 @@ export function CallOverlay() {
   const isVideo = call.type === 'video';
   const label =
     call.status === 'ended'
-      ? t('calls.ended')
+      ? call.endedReason === 'connection_lost'
+        ? t('calls.connection_lost')
+        : t('calls.ended')
       : call.status === 'active'
         ? formatDuration(elapsed)
-        : call.status === 'connecting'
+        : call.status === 'reconnecting'
+          ? t('calls.reconnecting')
+          : call.status === 'connecting'
           ? t('calls.connecting')
           : call.direction === 'outgoing'
             ? t('calls.calling')

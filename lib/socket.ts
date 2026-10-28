@@ -1,3 +1,4 @@
+import { AppState } from "react-native";
 import { io, Socket } from "socket.io-client";
 import { refreshAccessToken } from "./api";
 import { BASE_URL } from "./config";
@@ -44,6 +45,9 @@ export const connectSocket = async (): Promise<Socket> => {
   socket.on("connect", () => {
     console.log("[Socket] Connecté");
     setConnectionOffline(false);
+    // ⚠️ À CHAQUE connexion : le serveur oublie l'état d'un socket fermé. Et une app
+    // réveillée écran verrouillé (appel reçu par push VoIP) se connecte déjà en arrière-plan.
+    socket?.emit("app_state", { background: inBackground() });
   });
 
   /**
@@ -178,6 +182,26 @@ export const bindSocket = (
  */
 export const pauseSocket = () => {
   socket?.disconnect();
+};
+
+/**
+ * L'app est-elle en arrière-plan ? `inactive` (centre de contrôle, bascule d'app) n'en est pas :
+ * l'utilisateur est encore devant l'écran.
+ */
+let background = AppState.currentState === "background";
+const inBackground = () => background;
+
+/**
+ * Passage en arrière-plan PENDANT UN APPEL : le socket reste ouvert, mais le serveur le sait.
+ *
+ * ⚠️ Fermer le socket pendant un appel était LA cause des appels « capricieux » (28/10) :
+ * celui qui décrochait depuis l'écran verrouillé ne recevait jamais le raccroché de l'autre,
+ * et l'appelant qui verrouillait pendant la sonnerie ne recevait jamais le décroché. Le
+ * serveur, prévenu, continue d'envoyer les notifications de messages (`isUserOnMobile`).
+ */
+export const setSocketBackground = (value: boolean) => {
+  background = value;
+  if (socket?.connected) socket.emit("app_state", { background: value });
 };
 
 /** Rouvre la connexion au retour au premier plan. */

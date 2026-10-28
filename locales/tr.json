@@ -691,6 +691,8 @@
     "incoming": "Gelen arama",
     "incoming_video": "Gelen görüntülü arama",
     "connecting": "Bağlanıyor…",
+    "reconnecting": "Yeniden bağlanıyor…",
+    "connection_lost": "Bağlantı koptu",
     "ended": "Arama sona erdi",
     "accept": "Cevapla",
     "decline": "Reddet",

@@ -50,7 +50,9 @@ export function CallBanner() {
       ? t('calls.ended')
       : status === 'active'
         ? formatDuration(elapsed)
-        : status === 'connecting'
+        : status === 'reconnecting'
+          ? t('calls.reconnecting')
+          : status === 'connecting'
           ? t('calls.connecting')
           : t('calls.calling');
 
