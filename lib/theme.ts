@@ -40,7 +40,10 @@ const LIGHT = {
   nexa: '#1E40AF', // accent (icônes/textes) — foncé sur fond clair
 };
 const DARK = {
-  canvas: '#0B0B0F',
+  // ⚠️ = `zinc-950` (#09090B), le fond des pages en `className` (`dark:bg-zinc-950`) : UN seul
+  // noir de fond dans toute l'app (28/10, demande de Berke — le plus contrasté, celui de
+  // l'onglet Appels, généralisé). Les cartes et feuilles restent sur `surface` / `zinc-900`.
+  canvas: '#09090B',
   surface: '#18181B',
   card: '#1F1F23',
   content: '#F4F4F5',

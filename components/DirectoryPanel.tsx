@@ -159,7 +159,7 @@ export function DirectoryPanel({ onOpenProfile }: { onOpenProfile: (id: string) 
         </View>
       }
       renderSectionHeader={({ section }) => (
-        <Text className="px-4 pt-5 pb-2 text-sm font-semibold uppercase text-gray-400 dark:text-zinc-500 bg-white dark:bg-zinc-900">
+        <Text className="px-4 pt-5 pb-2 text-sm font-semibold uppercase text-gray-400 dark:text-zinc-500 bg-white dark:bg-zinc-950">
           {section.title} · {section.data.length}
         </Text>
       )}

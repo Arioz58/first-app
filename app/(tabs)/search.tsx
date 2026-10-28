@@ -43,7 +43,7 @@ export default function SearchScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
+    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-950">
       <View className="px-4 pt-3 pb-2">
         <View className="flex-row items-center justify-between mb-3">
           <Text className="text-4xl font-bold text-nexa">{t('tabs.contacts')}</Text>

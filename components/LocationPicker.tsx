@@ -106,9 +106,9 @@ export function LocationPicker({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 bg-white dark:bg-zinc-900">
+      <View className="flex-1 bg-white dark:bg-zinc-950">
         <View
-          className="flex-row items-center px-4 pb-3 bg-white dark:bg-zinc-900"
+          className="flex-row items-center px-4 pb-3 bg-white dark:bg-zinc-950"
           style={{ paddingTop: insets.top + 8 }}
         >
           <TouchableOpacity onPress={onClose} className="pr-3 py-1">
@@ -157,7 +157,7 @@ export function LocationPicker({
             </View>
 
             <View
-              className="px-5 pt-4 bg-white dark:bg-zinc-900"
+              className="px-5 pt-4 bg-white dark:bg-zinc-950"
               style={{ paddingBottom: insets.bottom + 16 }}
             >
               <Text

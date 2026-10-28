@@ -51,7 +51,7 @@ export function LocationViewer({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 bg-white dark:bg-zinc-900">
+      <View className="flex-1 bg-white dark:bg-zinc-950">
         <MapView
           style={StyleSheet.absoluteFill}
           initialRegion={{

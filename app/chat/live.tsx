@@ -99,7 +99,7 @@ export default function LiveLocationScreen() {
   }, [list]);
 
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-950" edges={['top']}>
       <View className="flex-row items-center px-4 pt-2 pb-3">
         <TouchableOpacity onPress={() => router.back()} className="pr-3 py-1">
           <Ionicons name="arrow-back" size={24} color={NEXA} />

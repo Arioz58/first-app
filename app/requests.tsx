@@ -60,7 +60,7 @@ export default function RequestsScreen() {
   const other = (c: Conversation) => c.members.find((m) => m.user.id !== me)?.user;
 
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900">
+    <SafeAreaView className="flex-1 bg-white dark:bg-zinc-950">
       <View className="flex-row items-center px-4 py-3 border-b border-gray-100 dark:border-zinc-800">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
           <Ionicons name="arrow-back" size={24} color={NEXA} />

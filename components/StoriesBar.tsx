@@ -34,7 +34,8 @@ function StoryRing({ unseen, children }: { unseen: boolean; children: ReactNode 
         <View
           style={{
             width: INNER + 5, height: INNER + 5, borderRadius: (INNER + 5) / 2,
-            backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center',
+            // Le liseré entre l'anneau et la photo = la couleur du FOND de la page.
+            backgroundColor: c.canvas, alignItems: 'center', justifyContent: 'center',
           }}
         >
           {children}

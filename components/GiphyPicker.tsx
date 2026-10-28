@@ -71,7 +71,7 @@ export default function GiphyPicker({
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaProvider>
-        <SafeAreaView className="flex-1 bg-white dark:bg-zinc-900" edges={['top', 'bottom']}>
+        <SafeAreaView className="flex-1 bg-white dark:bg-zinc-950" edges={['top', 'bottom']}>
         <View className="flex-row items-center px-4 py-2 border-b border-gray-100 dark:border-zinc-800">
           <TouchableOpacity onPress={onClose} className="mr-3">
             <Ionicons name="close" size={24} color="#1E40AF" />

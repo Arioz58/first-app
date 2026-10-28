@@ -152,7 +152,7 @@ export function ConversationRow({
   return (
     <TouchableOpacity
       // Fond opaque obligatoire : il masque les actions de glissement qui vivent dessous.
-      className="flex-row items-center px-4 py-3.5 border-b border-gray-50 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+      className="flex-row items-center px-4 py-3.5 border-b border-gray-50 dark:border-zinc-800 bg-white dark:bg-zinc-950"
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={300}
