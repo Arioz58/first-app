@@ -55,7 +55,14 @@ import {
   type OutboxItem,
   type OutboxPayload,
 } from '../../lib/outbox';
-import { CACHE_CONVERSATIONS, loadCache, readCache, writeCache } from '../../lib/cache';
+import {
+  CACHE_CONVERSATIONS,
+  loadCache,
+  readCache,
+  THREAD_CACHE_SIZE,
+  threadCacheKey,
+  writeCache,
+} from '../../lib/cache';
 import { MessageMedia } from '../../components/MessageMedia';
 import { AttachmentSheet, type AttachAction } from '../../components/AttachmentSheet';
 import { PendingMediaBar, type PendingMedia } from '../../components/PendingMediaBar';
@@ -209,10 +216,8 @@ type ConvMeta = {
  *
  * ⚠️ Les derniers messages SEULEMENT, pas l'historique : c'est ce qu'on voit à l'ouverture, et
  * le reste se charge en remontant, comme avant. Un fichier par conversation (`lib/cache.ts`,
- * cloisonné par compte, effacé à la déconnexion).
+ * cloisonné par compte, effacé à la déconnexion). Clé du fil et taille : `lib/cache.ts`.
  */
-const THREAD_CACHE_SIZE = 50;
-const threadCacheKey = (conversationId: string) => `thread_${conversationId}`;
 const metaCacheKey = (conversationId: string) => `meta_${conversationId}`;
 
 /** Réponse d'une fenêtre d'historique centrée sur un message. */

@@ -179,5 +179,13 @@ export const clearCache = async (): Promise<void> => {
 export const CACHE_CONVERSATIONS = 'conversations';
 export const CACHE_FRIENDS = 'friends';
 
+/**
+ * Fin du fil d'une conversation (les `THREAD_CACHE_SIZE` derniers messages, du plus ancien au
+ * plus récent). ⚠️ Écrite par DEUX endroits — l'écran de conversation et le rattrapage à la
+ * reconnexion (`lib/sync.ts`) — d'où la clé déclarée ici.
+ */
+export const THREAD_CACHE_SIZE = 50;
+export const threadCacheKey = (conversationId: string) => `thread_${conversationId}`;
+
 /** Clés chargées au démarrage. Y ajouter une clé lourde ralentirait le lancement. */
 export const BOOT_KEYS = [CACHE_CONVERSATIONS, CACHE_FRIENDS] as const;

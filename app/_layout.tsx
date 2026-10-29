@@ -31,6 +31,7 @@ import { hydrateLiveShares } from "../lib/liveLocation";
 import { clearTokens, getAccessToken, getRefreshToken, getUserId, hydrateLocalSettings, migrateSessionAccessibility } from "../lib/storage";
 import { BOOT_KEYS, hydrateCache } from "../lib/cache";
 import { initOutbox, kickOutbox } from "../lib/outbox";
+import { syncAfterLiveMessage, syncOnConnect } from "../lib/sync";
 import { initTheme, useThemeColors } from "../lib/theme";
 import { initSounds, playReceived } from "../lib/sounds";
 import { initNotificationSound, refreshNotificationSound } from "../lib/notificationSounds";
@@ -217,6 +218,11 @@ const startSession = () => {
        */
       bindSocket(socket, "connect", "outbox", kickOutbox);
       kickOutbox();
+      // Rattrapage : la mémoire locale de chaque conversation qui a bougé (`lib/sync.ts`).
+      bindSocket(socket, "connect", "sync", syncOnConnect);
+      // …et à chaque message reçu en direct, sans quoi seule la conversation ouverte s'en souvient.
+      bindSocket(socket, "conversation_updated", "sync", syncAfterLiveMessage);
+      if (socket.connected) syncOnConnect();
 
       /**
        * APPELS. ⚠️ Écoutés au niveau de l'APPLICATION, comme les messages : un appel

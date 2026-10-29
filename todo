@@ -3374,6 +3374,20 @@ RETOUR CLIENT DU 21/10/2026 (build 28) — « synchro vocale parfaite », trois 
   [ ] A verifier en local : transfert hors ligne (vers une autre conversation et vers celle
     ouverte), reponse a une story hors ligne, connexion puis coupure du backend (memoire).
   [ ] TestFlight : reponse depuis une notification en mode avion, puis rouvrir l'app.
+  [FAIT 29/10] RATTRAPAGE A LA RECONNEXION (WA_REA.md point 2, piste 2) :
+    → backend : `GET /conversations/sync?since=` (derniere page de chaque conversation qui a
+      bouge, 20 max, 7 jours max). Teste sur la base locale (UserA : 3 conversations ; date
+      dans le futur : rien).
+    → mobile : `lib/sync.ts` au `connect` met a jour la memoire locale de chaque conversation,
+      sans l'ouvrir. Fusion seulement si la page rejoint la memoire, sinon remplacement.
+    → [FIX 29/10, test de Berke] Rien ne bougeait pour un message recu EN DIRECT (app ouverte
+      sur la liste) : aucun `connect`. Relance aussi sur `conversation_updated` (1,5 s de
+      regroupement, sauf conversation affichee).
+    Limites : modifications/reactions/suppressions seules non rattrapees (corrigees a
+    l'ouverture) ; au-dela de 20 conversations, les autres a l'ouverture.
+    ⚠️ Backend a deployer AVANT le build qui l'embarque (sinon 404, sans dommage : rien ne bouge).
+  [ ] A verifier en local : UserB envoie a UserA sans que A ouvre la conversation, couper le
+    backend, ouvrir la conversation sur A → les messages sont la.
   [ ] TestFlight : mode avion reel (pas seulement backend coupe), app tuee hors ligne, Android.
 
 ================================================================================
