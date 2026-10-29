@@ -528,7 +528,7 @@ export default function ConversationDetailsScreen() {
           {/* 2.2 Actions rapides — tuiles */}
           {data && !data.isSelf ? (
             <View
-              className="flex-row justify-around bg-white dark:bg-zinc-900 mx-4 mt-3 py-4"
+              className="flex-row bg-white dark:bg-zinc-900 mx-4 mt-3 py-4 px-1"
               style={[CARD_SHADOW, ROUND.bubble]}
             >
               <QuickAction
@@ -551,7 +551,7 @@ export default function ConversationDetailsScreen() {
               />
               <QuickAction
                 icon={isMuted ? 'notifications-off' : 'notifications-outline'}
-                label={t('details.mute')}
+                label={t('details.mute_short')}
                 active={isMuted}
                 onPress={muteMenu}
               />
@@ -881,14 +881,23 @@ function QuickAction({
   active?: boolean;
 }) {
   return (
-    <TouchableOpacity className="items-center" onPress={onPress} style={{ opacity: disabled ? 0.4 : 1 }}>
+    // Colonnes ÉGALES (`flex-1`) : avec `justify-around`, chaque tuile prenait la largeur de son
+    // libellé et les ronds tombaient à intervalles irréguliers, d'autant plus en turc.
+    <TouchableOpacity className="flex-1 items-center" onPress={onPress} style={{ opacity: disabled ? 0.4 : 1 }}>
       <View
         style={ROUND.bubble}
         className={`w-12 h-12 items-center justify-center ${active ? 'bg-nexa' : 'bg-blue-50 dark:bg-blue-950'}`}
       >
         <Ionicons name={icon} size={22} color={active ? 'white' : NEXA} />
       </View>
-      <Text className="text-[11px] text-gray-600 dark:text-zinc-300 mt-1.5">{label}</Text>
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
+        className="text-[11px] text-gray-600 dark:text-zinc-300 mt-1.5 px-0.5 text-center"
+      >
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
