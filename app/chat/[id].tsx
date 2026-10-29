@@ -96,7 +96,7 @@ import {
 } from '../../lib/storage';
 import type { ChatWallpaper } from '../../lib/chatWallpapers';
 import { bubbleGradient, resolveBubbleColor, shade } from '../../lib/bubbleColors';
-import { consumeScrollTarget } from '../../lib/chatNav';
+import { consumeOpenSearch, consumeScrollTarget } from '../../lib/chatNav';
 import { setActiveConversation } from '../../lib/unreadMessages';
 import { dismissToastsFor } from '../../lib/toasts';
 import { stopVoice, voiceSnapshot } from '../../lib/voicePlayback';
@@ -2712,6 +2712,10 @@ export default function ChatScreen() {
       loadFlags();
       const target = consumeScrollTarget(id);
       if (target) setScrollTarget(target);
+      // « Rechercher » touché dans le panneau de détails.
+      if (consumeOpenSearch(id)) {
+        setSearch({ term: '', applied: '', results: [], index: 0, loading: false });
+      }
     }, [id, loadFlags]),
   );
 

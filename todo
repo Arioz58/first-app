@@ -1846,7 +1846,7 @@ un navigateur), position en direct, QR de profil.
   ⚠️ Le QR se RENOUVELLE avant expiration (marge de 5 s), et l'attente precedente est coupee a chaque renouvellement — sinon un socket ecoute un jeton mort.
   ⚠️ `QrScanner` etendu : en mode « connexion web » il accepte un jeton opaque au lieu d'une URL `nexa://user/<id>`. La presence de `onWebSession` change ce qu'il ACCEPTE — un QR de profil n'a rien a faire dans un ecran de connexion web, et l'inverse aussi.
   → verifie par curl : creation, apercu, approbation, REJEU refuse, jeton inconnu refuse, approbation sans JWT en 401, QR expire refuse.
-  [A FAIRE] Lister et REVOQUER les sessions web depuis le mobile (WhatsApp le fait) — rejoint la revocation du refresh token deja notee au Mois 5. Sans elle, une session web approuvee ne peut plus etre coupee.
+  [FAIT 29/10, ecran « Appareils connectes » : les sessions Nexa Web y figurent (« Chrome · macOS ») et se revoquent comme les autres] Lister et REVOQUER les sessions web depuis le mobile (WhatsApp le fait) — rejoint la revocation du refresh token deja notee au Mois 5. Sans elle, une session web approuvee ne peut plus etre coupee.
 
 [ANCIEN - fait ci-dessus] Connexion par QR facon WhatsApp Web. Decide le 02/09.
   DECISION : QR en principal, OTP par numero garde en REPLI (telephone decharge, appareil photo casse). L'OTP web existe deja et reste fonctionnel.
@@ -3211,8 +3211,9 @@ notification, 3) ecran « Recents » + bulle (i), 4) plus tard : video + bascule
     voie l'image. A traiter avec couper/retourner la camera.
   [ETAPE 4] Decrocher une video depuis l'ecran verrouille : le push VoIP ne porte pas le type,
     et la demande d'autorisation camera ne peut pas s'afficher ecran verrouille.
-  [A FAIRE] Boutons d'appel de la fiche de details et du profil : encore des maquettes, AUDIO
-    COMPRIS.
+  [FAIT 29/10] Boutons d'appel de la fiche de details et du profil : branches (`lib/placeCall.ts`),
+    audio et video. « Rechercher » de la fiche aussi : retour au chat, barre de recherche ouverte
+    (`requestOpenSearch`, `lib/chatNav.ts`).
 
 [FAIT 06/10 - ETAPE 2/5 DES APPELS VIDEO] Commandes video en cours d'appel.
   → couper / rallumer la camera : `enableLocalVideo(false)` (la CAPTURE s'arrete, voyant

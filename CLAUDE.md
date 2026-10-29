@@ -219,7 +219,8 @@ lib/
 ├── upload.ts            # Upload générique S3 (presigned → PUT → URL CloudFront) + formatFileSize + firstUrl (détection de lien)
 ├── chatWallpapers.ts    # Presets de fond de conversation (asset nexa clair/sombre + unis/dégradés) — réglage local
 ├── bubbleColors.ts      # Palette de couleurs d'accent des bulles « moi » (réglage local)
-├── chatNav.ts           # Relais mémoire one-shot : détails → chat, « défiler jusqu'à ce message » (épinglé/favori)
+├── chatNav.ts           # Relais mémoire one-shot : détails → chat, « défiler jusqu'à ce message » (épinglé/favori) et « ouvrir la recherche » (bouton Rechercher des détails)
+├── placeCall.ts         # Lancer un appel hors du chat (fiche de détails, profil) + message de refus traduit (`refused` = blocage OU confidentialité, volontairement indistincts)
 ├── tabsNav.ts           # Relais mémoire one-shot : FAB → onglet Contacts, segment à ouvrir (un param de route ne se redéclencherait pas au 2ᵉ passage, valeur identique)
 ├── friendRequests.ts    # Store externe (`useSyncExternalStore`) du **compteur de demandes d'ami reçues** — alimente le badge natif de l'onglet Contacts et la pastille du segment Amis
 ├── unreadMessages.ts    # Store externe du **total de messages non lus** (détail par conversation) — badge de l'onglet Discussion **et** pastille de l'icône de l'app

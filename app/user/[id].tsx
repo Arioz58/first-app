@@ -14,7 +14,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest } from '../../lib/api';
+import type { CallType } from '../../lib/callEngine';
 import { formatLocation } from '../../lib/location';
+import { placeCall } from '../../lib/placeCall';
 
 type RelationStatus =
   | 'self'
@@ -143,6 +145,16 @@ export default function UserProfileScreen() {
     ]);
   };
 
+  /** Appel depuis le profil (29/10 — les pastilles étaient décoratives) : `lib/placeCall.ts`. */
+  const callUser = (type: CallType) => {
+    if (!data) return;
+    if (!data.canCall) {
+      Alert.alert('', t('details.call_unavailable'));
+      return;
+    }
+    placeCall({ id: data.id, name: data.name, photoUrl: data.photoUrl }, type, t);
+  };
+
   const openChat = async () => {
     try {
       const conv = await apiRequest<{ id: string }>('/conversations/direct', {
@@ -258,16 +270,18 @@ export default function UserProfileScreen() {
                   primary={data.canMessage}
                   className="flex-1"
                 />
-                <View
+                <TouchableOpacity
+                  onPress={() => callUser('audio')}
                   className={`w-12 h-12 rounded-full items-center justify-center ${data.canCall ? 'bg-blue-50 dark:bg-blue-950' : 'bg-gray-100 dark:bg-zinc-800'}`}
                 >
                   <Ionicons name="call" size={20} color={data.canCall ? NEXA : '#9CA3AF'} />
-                </View>
-                <View
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => callUser('video')}
                   className={`w-12 h-12 rounded-full items-center justify-center ${data.canCall ? 'bg-blue-50 dark:bg-blue-950' : 'bg-gray-100 dark:bg-zinc-800'}`}
                 >
                   <Ionicons name="videocam" size={20} color={data.canCall ? NEXA : '#9CA3AF'} />
-                </View>
+                </TouchableOpacity>
               </View>
               {!data.canMessage && (
                 <Text className="text-gray-400 dark:text-zinc-500 text-sm text-center mt-2">

@@ -22,7 +22,9 @@ import ChatWallpaperPicker from '../../components/ChatWallpaperPicker';
 import { UserAvatar } from '../../components/UserAvatar';
 import { apiRequest, clearConversation } from '../../lib/api';
 import { ROUND } from '../../lib/radius';
-import { requestScrollToMessage } from '../../lib/chatNav';
+import { requestOpenSearch, requestScrollToMessage } from '../../lib/chatNav';
+import type { CallType } from '../../lib/callEngine';
+import { placeCall } from '../../lib/placeCall';
 import {
   BUBBLE_COLORS,
   DEFAULT_BUBBLE_COLOR,
@@ -411,7 +413,22 @@ export default function ConversationDetailsScreen() {
     ]);
   };
 
-  const comingSoon = () => Alert.alert('', t('details.coming_soon'));
+  /** Appel depuis la fiche : même chemin que le bouton du chat (`lib/placeCall.ts`). */
+  const callPeer = (type: CallType) => {
+    if (!data) return;
+    if (!data.canCall) {
+      Alert.alert('', t('details.call_unavailable'));
+      return;
+    }
+    // Le surnom local d'abord, comme dans l'en-tête du chat.
+    placeCall({ id: data.id, name: custom.nickname || data.name, photoUrl: data.photoUrl }, type, t);
+  };
+
+  /** « Rechercher » : retour au chat, qui ouvre sa barre de recherche (`lib/chatNav.ts`). */
+  const openSearch = () => {
+    requestOpenSearch(conversationId);
+    router.back();
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-zinc-950">
@@ -518,17 +535,13 @@ export default function ConversationDetailsScreen() {
                 icon="call"
                 label={t('details.call_audio')}
                 disabled={!data.canCall}
-                onPress={() =>
-                  Alert.alert('', data.canCall ? t('details.calls_coming') : t('details.call_unavailable'))
-                }
+                onPress={() => callPeer('audio')}
               />
               <QuickAction
                 icon="videocam"
                 label={t('details.call_video')}
                 disabled={!data.canCall}
-                onPress={() =>
-                  Alert.alert('', data.canCall ? t('details.calls_coming') : t('details.call_unavailable'))
-                }
+                onPress={() => callPeer('video')}
               />
               <QuickAction
                 icon={isFavorite ? 'star' : 'star-outline'}
@@ -542,7 +555,7 @@ export default function ConversationDetailsScreen() {
                 active={isMuted}
                 onPress={muteMenu}
               />
-              <QuickAction icon="search" label={t('details.search')} onPress={comingSoon} />
+              <QuickAction icon="search" label={t('details.search')} onPress={openSearch} />
             </View>
           ) : null}
 

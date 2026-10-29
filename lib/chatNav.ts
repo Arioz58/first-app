@@ -15,3 +15,17 @@ export const consumeScrollTarget = (conversationId: string): string | null => {
   }
   return null;
 };
+
+// Même relais pour « Rechercher » du panneau de détails : le chat ouvre sa barre de recherche
+// au retour (la recherche vit dans le chat, où sont les messages à parcourir).
+let searchFor: string | null = null;
+
+export const requestOpenSearch = (conversationId: string) => {
+  searchFor = conversationId;
+};
+
+export const consumeOpenSearch = (conversationId: string): boolean => {
+  if (searchFor !== conversationId) return false;
+  searchFor = null;
+  return true;
+};
