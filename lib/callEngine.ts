@@ -216,6 +216,19 @@ const ensureEngine = (appId: string): IRtcEngine => {
     onStreamMessage: (_c, _uid, _streamId, data) => {
       if (decodeSignal(data) === VIDEO_SIGNAL) peerSwitchedToVideo();
     },
+    /**
+     * TRACES DE TEST (29/10), en développement seulement : MA caméra filme-t-elle, et part-elle ?
+     * Retour de Hakan « on se voyait pas » : la vidéo n'a jamais été vue entre deux vrais
+     * téléphones (le simulateur n'affiche rien d'Agora). Un motif d'échec ici (autorisation,
+     * capture en arrière-plan, caméra occupée) dit pourquoi l'autre ne reçoit rien ; côté
+     * simulateur, « vidéo distante » à l'état 2 (décodage) prouve que l'image arrive.
+     */
+    onLocalVideoStateChanged: (source, st, reason) => {
+      if (__DEV__) console.log('[call] vidéo locale', { source, state: st, reason });
+    },
+    onFirstLocalVideoFrame: (source, width, height) => {
+      if (__DEV__) console.log('[call] première image locale', { source, width, height });
+    },
     onRemoteAudioStateChanged: (_c, remoteUid, st, reason) => {
       if (__DEV__) console.log('[call] audio distant', { remoteUid, state: st, reason });
     },

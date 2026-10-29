@@ -3316,6 +3316,38 @@ RETOUR CLIENT DU 21/10/2026 (build 28) — « synchro vocale parfaite », trois 
   → JS (`lib/voipPush.ts`) : oublie l'appel (`callEnded(..., { systemEnded: true })`).
   ⚠️ Android : non traite (pas de PushKit ; la notification de repli n'est pas retiree).
 
+[ANALYSE 29/10 - retour Hakan point 4] « Notifications visibles mais sans son » (build 29).
+  NON REPRODUIT. Chaine verifiee de bout en bout : les 12 .wav sont a la racine de Nexa.app
+  dans l'IPA du build 29 (telecharge et liste) ; format accepte par iOS (PCM 16 bits, < 3 s) ;
+  migration `notification_sound` appliquee en prod (`prisma migrate deploy` au demarrage du
+  Dockerfile) ; Berke en local : « Pulse » ET « Son du telephone » sonnent, app en
+  arriere-plan et app tuee.
+  → Aucun correctif de code. Niveau des fichiers (−28,5 LUFS) juge suffisant : Pulse est au
+    meme niveau et s'entend bien.
+  → Questions envoyees a Hakan : Reglages › Nexa › Notifications (« Sons », livraison
+    Immediate vs Resume programme, « Distribuer discretement »), mode Concentration, et
+    notifications recues PENDANT un appel (iOS n'y joue pas le son).
+
+[EN PAUSE 29/10 - retour Hakan point 1] Video « on se voyait pas » (build 29). En attente
+  d'un 2e telephone (Berke).
+  Lecture du code : aucune faute trouvee (type renvoye par `/accept`, publication camera,
+  abonnement, vues Agora). L'image de l'autre ne s'affiche qu'en `active` + `remoteUid`.
+  Traces ajoutees (dev) : `vidéo locale` (onLocalVideoStateChanged) + `première image locale`.
+  Mesure iPhone ↔ simulateur (cas A, simulateur appelle, iPhone decroche app ouverte) :
+    iPhone RECOIT la video (distante etat 2) ; sa camera FILME et ENCODE (locale 1 → 2,
+    motif 0, 540×960) ; voix dans les deux sens. ⚠️ Manque : la trace cote SIMULATEUR
+    (`vidéo distante` a l'etat 2 avec l'uid de l'iPhone) qui prouverait que l'image ARRIVE.
+  Hypotheses restantes, par probabilite :
+    1. defaut du point 2 (corrige 28/10) : appelant verrouille pendant la sonnerie → jamais
+       dans le canal. Tranche par Hakan : « est-ce que vous vous entendiez ? »
+    2. decroche ecran verrouille : capture camera en arriere-plan (motif 6) qui ne reprendrait
+       pas au deverrouillage. Test sans push : verrouiller 5 s PENDANT un appel video, la
+       trace `vidéo locale` doit revenir a l'etat 2.
+    3. autorisation camera jamais accordee + decroche verrouille → camera coupee par choix,
+       l'autre voit l'avatar tant qu'on n'appuie pas sur le bouton camera.
+  Questions a Hakan : s'entendaient-ils ? video directe ou bascule ? qui a decroche, ecran
+  verrouille ? chacun voyait-il au moins SA propre image ?
+
 ================================================================================
 A TESTER SUR TESTFLIGHT (Berke + un ami, deux vrais telephones) — liste tenue a jour
 ================================================================================
