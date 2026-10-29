@@ -21,6 +21,7 @@ import { ROUND } from "../../lib/radius";
 import { PRIVACY_POLICY_VERSION } from "../../lib/config";
 import { connectSocket } from "../../lib/socket";
 import { startSession } from "../../lib/session";
+import { initOutbox } from "../../lib/outbox";
 import { saveTokens } from "../../lib/storage";
 
 const OTP_DURATION = 5 * 60; // 5 minutes en secondes
@@ -157,6 +158,8 @@ export default function VerifyScreen() {
         auth: false,
       });
       await saveTokens(data.accessToken, data.refreshToken, data.user.id);
+      // File d'envoi du NOUVEAU compte (celle d'un compte précédent ne doit pas partir sous son nom).
+      await initOutbox(data.user.id).catch(() => {});
       // Nouveau compte : on enregistre le consentement à la politique de confidentialité.
       if (isNew === "1") {
         await apiRequest("/users/me/privacy-consent", {

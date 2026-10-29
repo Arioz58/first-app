@@ -163,7 +163,11 @@
     "forward_n_to_other": "Forward {{count}} messages to",
     "nothing_to_forward": "None of these messages can be forwarded.",
     "forwarded": "Forwarded",
-    "forward_pending": "Wait for the upload to finish before forwarding this message."
+    "forward_pending": "Wait for the upload to finish before forwarding this message.",
+    "send_failed_title": "Message not sent",
+    "send_failed_body": "It couldn't be sent. Try sending it again, or delete it?",
+    "send_retry": "Retry",
+    "send_delete": "Delete"
   },
   "details": {
     "title": "Details",

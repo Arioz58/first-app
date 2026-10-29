@@ -163,7 +163,11 @@
     "forward_n_to_other": "{{count}} mesajı şuraya ilet",
     "nothing_to_forward": "Bu mesajların hiçbiri iletilemez.",
     "forwarded": "İletildi",
-    "forward_pending": "Bu mesajı iletmeden önce gönderimin bitmesini bekleyin."
+    "forward_pending": "Bu mesajı iletmeden önce gönderimin bitmesini bekleyin.",
+    "send_failed_title": "Mesaj gönderilemedi",
+    "send_failed_body": "Gönderilemedi. Tekrar göndermeyi denemek mi, yoksa silmek mi istersin?",
+    "send_retry": "Tekrar dene",
+    "send_delete": "Sil"
   },
   "details": {
     "title": "Ayrıntılar",

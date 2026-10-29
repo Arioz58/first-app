@@ -163,7 +163,11 @@
     "forward_n_to_other": "Transférer {{count}} messages à",
     "nothing_to_forward": "Aucun de ces messages ne peut être transféré.",
     "forwarded": "Transféré",
-    "forward_pending": "Attendez la fin de l'envoi pour transférer ce message."
+    "forward_pending": "Attendez la fin de l'envoi pour transférer ce message.",
+    "send_failed_title": "Message non envoyé",
+    "send_failed_body": "Il n'a pas pu partir. Réessayer de l'envoyer, ou le supprimer ?",
+    "send_retry": "Réessayer",
+    "send_delete": "Supprimer"
   },
   "details": {
     "title": "Détails",

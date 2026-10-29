@@ -43,7 +43,19 @@ import type { CallInfo } from '../../lib/callHistory';
 import { CallBubble } from '../../components/CallBubble';
 import { connectSocket, getSocket } from '../../lib/socket';
 import { playSent } from '../../lib/sounds';
-import { toUploadableImage, uploadFile } from '../../lib/upload';
+import {
+  enqueue,
+  itemFileUri,
+  newClientId,
+  outboxFor,
+  outboxOwner,
+  removeFromOutbox,
+  retryOutbox,
+  subscribeOutbox,
+  type OutboxItem,
+  type OutboxPayload,
+} from '../../lib/outbox';
+import { CACHE_CONVERSATIONS, loadCache, readCache, writeCache } from '../../lib/cache';
 import { MessageMedia } from '../../components/MessageMedia';
 import { AttachmentSheet, type AttachAction } from '../../components/AttachmentSheet';
 import { PendingMediaBar, type PendingMedia } from '../../components/PendingMediaBar';
@@ -192,6 +204,17 @@ type ConvMeta = {
   unreadCount?: number;
 };
 
+/**
+ * MÉMOIRE LOCALE D'UNE CONVERSATION (29/10) — ce qu'on affiche avant (ou sans) le serveur.
+ *
+ * ⚠️ Les derniers messages SEULEMENT, pas l'historique : c'est ce qu'on voit à l'ouverture, et
+ * le reste se charge en remontant, comme avant. Un fichier par conversation (`lib/cache.ts`,
+ * cloisonné par compte, effacé à la déconnexion).
+ */
+const THREAD_CACHE_SIZE = 50;
+const threadCacheKey = (conversationId: string) => `thread_${conversationId}`;
+const metaCacheKey = (conversationId: string) => `meta_${conversationId}`;
+
 /** Réponse d'une fenêtre d'historique centrée sur un message. */
 type AroundPage = { messages: Message[]; hasOlder: boolean; hasNewer: boolean };
 type Flags = { pinned: string[]; starred: string[] };
@@ -253,9 +276,19 @@ type Message = {
   // Message posé localement le temps de l'envoi (voir OPTIMISTIC dans `sendMessage`).
   // `mediaUrl` pointe alors sur le fichier du téléphone, pas encore sur S3.
   pendingLocal?: boolean;
-  // URL S3 obtenue une fois le téléversement fini : sert à reconnaître l'écho du serveur
-  // et à remplacer le brouillon EXACTEMENT à sa place.
-  pendingUploadUrl?: string | null;
+  /**
+   * Identifiant tiré par l'appareil à l'écriture (file d'envoi, `lib/outbox.ts`). C'est par lui
+   * que l'écho du serveur retrouve SA bulle « en envoi », quel que soit le type de message.
+   */
+  clientId?: string | null;
+  /** Envoi abandonné (refus du serveur, fichier disparu…) : la bulle propose Réessayer/Supprimer. */
+  sendFailed?: string | null;
+  /**
+   * Adresse SERVEUR d'un média qu'on vient d'envoyer, quand la bulle affiche encore le fichier
+   * local (voir `settleDraft`). ⚠️ C'est elle qui part dans la mémoire locale du fil : le fichier
+   * local est effacé au lancement suivant, et son chemin change à chaque mise à jour de l'app.
+   */
+  serverMediaUrl?: string | null;
   /** Message cité. Extrait plat renvoyé par le serveur — voir `Quote`. */
   replyTo?: Quote | null;
   /** Réactions emoji, une par personne au plus. */
@@ -984,13 +1017,12 @@ const formatTime = (iso: string) =>
  * accusés de réception existeront côté serveur. D'où un statut nommé plutôt qu'un booléen
  * « en cours » : les crans suivants s'ajoutent ici, sans toucher aux bulles.
  *
- * ⚠️ Pas d'état d'ÉCHEC. Le socket met les envois en tampon et les rejoue à la reconnexion
- * (`reconnection: true`, pas de mode `volatile` dans `lib/socket.ts`) : annoncer un échec
- * pour un message qui va partir serait faux, et proposer un renvoi en enverrait deux. Le
- * seul cas de perte réelle — app tuée hors ligne, le tampon vivant en mémoire — demande une
- * file d'attente persistée, pas un indicateur.
+ * ⚠️ `failed` n'est PAS « pas encore parti » : hors ligne, un message reste en `sending`
+ * (horloge) — la file d'envoi persistée (`lib/outbox.ts`) le renverra, sans doublon grâce à
+ * son `clientId`. `failed` ne marque qu'un abandon DÉFINITIF : refus du serveur (bloqué, plus
+ * membre, groupe réservé aux admins), fichier disparu, téléversement qui échoue en boucle.
  */
-type SendStatus = 'sending' | 'sent' | 'delivered' | 'read';
+type SendStatus = 'failed' | 'sending' | 'sent' | 'delivered' | 'read';
 
 // Bleu des accusés de LECTURE. Volontairement plus clair que le bleu nexa : posé sur une
 // bulle déjà bleue, l'accent de marque s'y noierait.
@@ -1005,7 +1037,9 @@ const STATUS_SLOT = 15;
 function StatusIcon({ status, tone }: { status: SendStatus; tone: string }) {
   return (
     <View style={{ width: STATUS_SLOT }} className="items-center">
-      {status === 'sending' ? (
+      {status === 'failed' ? (
+        <Ionicons name="alert-circle" size={14} color="#EF4444" />
+      ) : status === 'sending' ? (
         <Ionicons name="time-outline" size={12} color={tone} />
       ) : status === 'sent' ? (
         <Ionicons name="checkmark" size={13} color={tone} />
@@ -1243,17 +1277,6 @@ function ThreadSkeleton({ accent }: { accent: string }) {
   );
 }
 
-type MediaPayload = {
-  mediaUrl: string;
-  mediaType: 'image' | 'video' | 'audio' | 'document' | 'gif';
-  fileName?: string;
-  fileSize?: number;
-  mimeType?: string;
-  durationMs?: number;
-  batchId?: string;
-  /** Citation. Portée par le premier média d'un envoi seulement (voir `sendMessage`). */
-  replyToId?: string;
-};
 
 /**
  * Compte les pictogrammes d'un message qui n'en contient QUE.
@@ -1342,6 +1365,8 @@ type ChatRowProps = {
   /** Bulle d'appel : répondre, revenir à l'appel ou rappeler (voir `onCallPress`). */
   onCallPress: (m: Message) => void;
   onCallLongPress: (messageId: string) => void;
+  /** Bulle en échec touchée : Réessayer / Supprimer (identifiants de file de la ligne). */
+  onFailedPress: (clientIds: string[]) => void;
 };
 
 const ChatRow = React.memo(
@@ -1382,6 +1407,7 @@ const ChatRow = React.memo(
     toggleSelected,
     onCallPress,
     onCallLongPress,
+    onFailedPress,
   }: ChatRowProps) {
     // ⚠️ Lu ICI et pas en prop : le comparateur du memo l'ignorerait, mais `theirBubble`
     // change avec le thème et force déjà le re-rendu — le hook relit alors la bonne valeur.
@@ -1390,6 +1416,10 @@ const ChatRow = React.memo(
     // Un album reste « en envoi » tant qu'un seul de ses médias l'est : il ne doit
     // pas s'éclaircir par morceaux au fil des téléversements.
     const sending = row.messages.some((m) => m.pendingLocal);
+    // Échec définitif : plus de voile « en cours » sur la bulle, l'icône rouge suffit.
+    const failedIds = row.messages
+      .filter((m) => m.sendFailed && m.clientId)
+      .map((m) => m.clientId as string);
     const item = row.messages[0];
 
     // Bandeau système centré (rejoint le groupe, éphémères, etc.)
@@ -1510,7 +1540,13 @@ const ChatRow = React.memo(
             ? undefined
             : (anchor) => openMessageMenu(item.id, anchor)
         }
-        onTap={selMode && mode === 'list' ? () => toggleSelected(item.id) : undefined}
+        onTap={
+          selMode && mode === 'list'
+            ? () => toggleSelected(item.id)
+            : failedIds.length && mode === 'list'
+              ? () => onFailedPress(failedIds)
+              : undefined
+        }
         onSwipeReply={
           sending || mode === 'preview' || selMode
             ? undefined
@@ -1661,7 +1697,7 @@ const ChatRow = React.memo(
                 <BubbleTime iso={album[album.length - 1].createdAt} isMe={isMe} overlay status={sendStatus} />
               )}
               {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
-              {sending && <SendingVeil />}
+              {sending && !failedIds.length && <SendingVeil />}
             </View>
           </>
         ) : item.type === 'location' &&
@@ -1771,7 +1807,7 @@ const ChatRow = React.memo(
                   <BubbleTime iso={item.createdAt} isMe={isMe} overlay status={sendStatus} expiresAt={item.expiresAt} />
                 )}
                 {lastOfGroup && <BubbleTail isMe={isMe} color={isMe ? myTailColor : theirBubble} />}
-                {sending && <SendingVeil />}
+                {sending && !failedIds.length && <SendingVeil />}
               </View>
             ) : (
               // Audio/document : bulle aux couleurs de l'expéditeur, avec la carte
@@ -2216,7 +2252,6 @@ export default function ChatScreen() {
   const [liveShares, setLiveShares] = useState<string[]>([]);
   const myLiveExpiry = useMyLiveShare(id);
   const liveBannerVisible = !!myLiveExpiry || liveShares.length > 0;
-  const [uploading, setUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [pending, setPending] = useState<PendingMedia[]>([]); // médias choisis, pas encore envoyés
@@ -2269,6 +2304,16 @@ export default function ChatScreen() {
    */
   const [divider, setDivider] = useState<{ key: string; count: number } | null>(null);
   const openDecidedRef = useRef(false);
+  /**
+   * Le fil affiché vient de la MÉMOIRE LOCALE (posé avant la réponse du serveur, ou hors ligne).
+   * ⚠️ Si le serveur révèle ensuite des non-lus, l'ouverture doit être REJOUÉE sur le repère :
+   * c'est le défaut du 11/09 (fil collé au bas, fenêtre des non-lus ramenée au bas en boucle).
+   */
+  const posedFromCacheRef = useRef(false);
+  /** Le fil a été chargé au moins une fois depuis le serveur : on peut l'écrire en mémoire. */
+  const serverSyncedRef = useRef(false);
+  /** Relance explicite de la décision d'ouverture (voir l'effet qui appelle `scroll.open`). */
+  const [reopenTick, setReopenTick] = useState(0);
 
   /**
    * Écouteur de reconnexion, gardé pour pouvoir le retirer LUI et pas les autres.
@@ -2293,10 +2338,7 @@ export default function ChatScreen() {
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Brouillon local : la bulle est posée AVANT que le serveur ne la connaisse, pour que la
-  // mise en page soit définitive dès le premier instant. Voir OPTIMISTIC dans `sendMessage`.
-  const draftSeqRef = useRef(0);
-  const newDraftId = () => `local-${Date.now()}-${draftSeqRef.current++}`;
-
+  // mise en page soit définitive dès le premier instant. Voir `write`.
   const pushDraft = useCallback((draft: Message) => {
     // Marqué vu AVANT le rendu : le brouillon joue l'animation d'entrée, pas la vraie bulle
     // qui viendra le remplacer — sinon le message clignoterait à l'écho.
@@ -2306,31 +2348,171 @@ export default function ChatScreen() {
     scroll.follow(true);
   }, [scroll]);
 
-  /** Squelette commun à tous les brouillons ; l'appelant complète selon le type. */
-  const makeDraft = useCallback(
-    (fields: Partial<Message>): Message => ({
-      id: newDraftId(),
-      content: '',
-      createdAt: new Date().toISOString(),
-      // Le nom ne sert pas : un brouillon est toujours de nous, donc jamais titré.
-      sender: { id: currentUserId ?? '', name: '' },
-      conversationId: id,
-      pendingLocal: true,
-      ...fields,
-    }),
-    [currentUserId, id],
+
+  /**
+   * Bulle « en envoi » d'un élément de la file d'envoi.
+   *
+   * ⚠️ Son identifiant (`local-<clientId>`) ne dépend que de l'élément : rouvrir la
+   * conversation, ou relancer l'app, redonne la MÊME clé à la même bulle.
+   */
+  const draftFromItem = (item: OutboxItem, localUri?: string): Message => ({
+    id: `local-${item.clientId}`,
+    clientId: item.clientId,
+    conversationId: item.conversationId,
+    createdAt: item.createdAt,
+    // Toujours de nous : l'auteur est le compte propriétaire de la file.
+    sender: { id: outboxOwner() ?? currentUserId ?? '', name: '' },
+    pendingLocal: true,
+    sendFailed: item.failed ?? null,
+    content: item.payload.content ?? '',
+    type: item.payload.type,
+    mediaUrl: localUri ?? itemFileUri(item) ?? item.payload.mediaUrl ?? null,
+    mediaType: item.payload.mediaType ?? null,
+    fileName: item.payload.fileName ?? null,
+    fileSize: item.payload.fileSize ?? null,
+    mimeType: item.payload.mimeType ?? null,
+    durationMs: item.payload.durationMs ?? null,
+    batchId: item.payload.batchId ?? null,
+    latitude: item.payload.latitude ?? null,
+    longitude: item.payload.longitude ?? null,
+    replyTo: (item.display?.replyTo as Quote | undefined) ?? null,
+  });
+
+  /**
+   * ÉCRIRE UN MESSAGE : la bulle d'abord, la file ensuite.
+   *
+   * ⚠️ Les bulles sont posées AVANT l'écriture dans la file (copie des fichiers, disque) : le
+   * geste doit se voir à l'instant. Elles montrent le fichier d'ORIGINE du téléphone ; au
+   * prochain lancement, elles seront reconstruites depuis la copie de la file.
+   */
+  const write = useCallback(
+    (
+      entries: {
+        payload: OutboxPayload;
+        localFile?: { uri: string; contentType: string; image: boolean };
+        display?: Record<string, unknown>;
+      }[],
+    ) => {
+      const now = new Date().toISOString();
+      const withIds = entries.map((e) => ({ ...e, conversationId: id, clientId: newClientId() }));
+      for (const e of withIds) {
+        pushDraft(
+          draftFromItem(
+            {
+              clientId: e.clientId,
+              conversationId: id,
+              createdAt: now,
+              payload: e.payload,
+              attempts: 0,
+              display: e.display,
+            },
+            e.localFile?.uri,
+          ),
+        );
+      }
+      enqueue(withIds).catch(() => {});
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [id, pushDraft],
   );
 
-  const dropDraft = useCallback((draftId: string) => {
-    setMessages((prev) => prev.filter((m) => m.id !== draftId));
+  /**
+   * Le serveur a ENREGISTRÉ un message de la file (accusé, ou écho `new_message`) : la vraie
+   * bulle prend la place EXACTE du brouillon.
+   *
+   * ⚠️ On garde le fichier LOCAL comme source affichée (sinon l'image se rechargerait depuis le
+   * réseau, donc clignoterait). Si la vraie bulle est déjà là (l'écho est passé avant
+   * l'accusé), le brouillon s'efface simplement.
+   */
+  const settleDraft = useCallback((clientId: string, msg: Message) => {
+    seenIdsRef.current.add(msg.id);
+    setMessages((prev) => {
+      const at = prev.findIndex((m) => m.pendingLocal && m.clientId === clientId);
+      if (at === -1) return prev;
+      if (prev.some((m) => m.id === msg.id)) return prev.filter((_, i) => i !== at);
+      const next = [...prev];
+      next[at] = msg.mediaUrl
+        ? { ...msg, mediaUrl: prev[at].mediaUrl, serverMediaUrl: msg.mediaUrl }
+        : msg;
+      return next;
+    });
   }, []);
 
-  /** Lie le brouillon à l'URL S3 : c'est par elle qu'on reconnaîtra l'écho du serveur. */
-  const linkDraft = useCallback((draftId: string, url: string) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === draftId ? { ...m, pendingUploadUrl: url } : m)),
-    );
-  }, []);
+  // Issues de la file d'envoi pour CETTE conversation (accusé, abandon, suppression).
+  useEffect(
+    () =>
+      subscribeOutbox((e) => {
+        if (e.conversationId !== id) return;
+        if (e.type === 'sent') settleDraft(e.clientId, e.message as unknown as Message);
+        else
+          setMessages((prev) =>
+            e.type === 'removed'
+              ? prev.filter((m) => !(m.pendingLocal && m.clientId === e.clientId))
+              : prev.map((m) =>
+                  m.pendingLocal && m.clientId === e.clientId ? { ...m, sendFailed: e.reason } : m,
+                ),
+          );
+      }),
+    [id, settleDraft],
+  );
+
+  /** Pose le fil de la mémoire locale. L'ouverture (en bas) est décidée par l'effet habituel. */
+  const poseCachedThread = (cachedThread: Message[]) => {
+    posedFromCacheRef.current = true;
+    // Rattrapés, pas reçus : aucune animation d'entrée.
+    for (const m of cachedThread) seenIdsRef.current.add(m.id);
+    // Partiel par construction : le reste se charge en remontant, une fois en ligne.
+    hasOlderRef.current = true;
+    hasNewerRef.current = false;
+    replaceMessages(cachedThread);
+    setHistoryLoaded(true);
+  };
+
+  /**
+   * Écrit la fin du fil en mémoire locale, à chaque changement (écriture disque regroupée par
+   * `writeCache`).
+   *
+   * ⚠️ Jamais avant un premier chargement serveur réussi (un fil vide hors ligne écraserait
+   * la mémoire), ni quand le fil est une fenêtre au MILIEU de l'historique (ce n'est pas la fin).
+   * Ni les bulles « en envoi » : elles vivent dans la file d'envoi, qui les rajoute elle-même.
+   */
+  useEffect(() => {
+    if (!serverSyncedRef.current || hasNewerRef.current) return;
+    const real = messages
+      .filter((m) => !m.pendingLocal)
+      .slice(-THREAD_CACHE_SIZE)
+      .map((m) =>
+        m.serverMediaUrl ? { ...m, mediaUrl: m.serverMediaUrl, serverMediaUrl: undefined } : m,
+      );
+    writeCache(threadCacheKey(id), real);
+  }, [messages, id]);
+
+  /** Bulle en échec touchée : on redonne la main à l'utilisateur. */
+  const onFailedPress = useCallback(
+    (clientIds: string[]) => {
+      Alert.alert(t('chat.send_failed_title'), t('chat.send_failed_body'), [
+        {
+          text: t('chat.send_retry'),
+          onPress: () => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.clientId && clientIds.includes(m.clientId) ? { ...m, sendFailed: null } : m,
+              ),
+            );
+            clientIds.forEach((c) => retryOutbox(c));
+          },
+        },
+        {
+          text: t('chat.send_delete'),
+          style: 'destructive',
+          onPress: () => clientIds.forEach((c) => removeFromOutbox(c)),
+        },
+        { text: t('cancel'), style: 'cancel' },
+      ]);
+    },
+    [t],
+  );
+
 
   // Réception d'un album : on retient les médias jusqu'à ce qu'il soit complet.
   //
@@ -2409,9 +2591,27 @@ export default function ChatScreen() {
     // Un remplacement du fil (saut, retour au présent) périme ce qui attendait : ces pages
     // prolongeaient un contenu qui n'existe plus.
     pendingNewerRef.current = [];
+    /**
+     * ⚠️ FILE D'ENVOI : le serveur ne connaît pas encore ces messages, donc aucune page ne les
+     * contient — remplacer le fil les effacerait de l'écran alors qu'ils vont partir (ouverture,
+     * reconnexion, retour au présent, et surtout relance de l'app après un envoi hors ligne).
+     * On les repose à la fin, sauf si la page les contient déjà (envoyés, accusé pas encore
+     * reçu). Seulement quand la fenêtre touche le PRÉSENT : au milieu de l'historique, les
+     * coller en bas les poserait à côté de messages qui ne sont pas leurs voisins.
+     */
+    if (!hasNewerRef.current) {
+      const known = new Set(next.map((m) => m.clientId).filter(Boolean));
+      const drafts = outboxFor(id)
+        .filter((item) => !known.has(item.clientId))
+        .map((item) => draftFromItem(item));
+      for (const d of drafts) seenIdsRef.current.add(d.id);
+      if (drafts.length) next = [...next, ...drafts];
+    }
     messagesRef.current = next;
     setMessages(next);
-  }, []);
+    // `draftFromItem` ne lit rien d'instable : l'auteur vient de la file (`outboxOwner`).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const loadOlder = useCallback(async () => {
     if (loadingOlderRef.current || !hasOlderRef.current) return;
@@ -2528,6 +2728,8 @@ export default function ChatScreen() {
 
   useEffect(() => {
     const init = async () => {
+      // Mémoire locale de la conversation, lue au début : le `catch` (hors ligne) s'en sert aussi.
+      let cached: Message[] | null = null;
       try {
         /**
          * ⚠️ IDENTITÉ LUE EN LOCAL, plus par `GET /users/me`.
@@ -2563,63 +2765,93 @@ export default function ChatScreen() {
           () => null,
         );
 
+        /**
+         * Applique les métadonnées (nom, photo, membres, réglages). `fresh` = venues du serveur :
+         * seules elles portent le repère de non-lus, qui ne vaut qu'à l'instant de la requête.
+         */
+        const applyMeta = (meta: ConvMeta, fresh: boolean) => {
+          setConvType(meta.type);
+          setGroupPhoto(meta.photoUrl ?? null);
+          setEphemeralDuration(meta.ephemeralDuration);
+          setMutedUntil(meta.myMutedUntil);
+          setWhoCanSend(meta.whoCanSend ?? 'all');
+          setMyRole(meta.myRole ?? 'member');
+          // ⚠️ Lu ICI, avant le `POST /read` de l'ouverture : après, le serveur aurait déjà
+          // écrasé la date de lecture et ne saurait plus dire où le repère se pose.
+          if (fresh) setUnreadInfo(
+            meta.firstUnreadId ? { id: meta.firstUnreadId, count: meta.unreadCount ?? 0 } : null,
+          );
+          setMembers(
+            meta.members.map((m) => ({
+              id: m.userId,
+              name: m.user.name,
+              photoUrl: m.user.photoUrl,
+            })),
+          );
+          // Groupe : son nom. Direct : celui de l'autre participant.
+          setFetchedName(
+            meta.type === 'group'
+              ? meta.name ?? ''
+              : meta.members.find((m) => m.userId !== me.id)?.user.name ?? '',
+          );
+          // État initial des accusés, à partir des autres membres.
+          setReceipts(
+            Object.fromEntries(
+              meta.members
+                .filter((m) => m.userId !== me.id)
+                .map((m) => [
+                  m.userId,
+                  { delivered: m.lastDeliveredAt ?? undefined, read: m.lastReadAt ?? undefined },
+                ]),
+            ),
+          );
+          if (meta.type === 'direct') {
+            const other = meta.members.find((m) => m.userId !== me.id);
+            if (other) {
+              setOtherUserId(other.userId);
+              otherUserIdRef.current = other.userId;
+              // En-tête gated (re-vérifié serveur) : photo, appel, dernière connexion, en ligne.
+              apiRequest<HeaderProfile>(`/users/${other.userId}/profile`)
+                .then((p) => {
+                  setHeader({
+                    photoUrl: p.photoUrl,
+                    canCall: p.canCall,
+                    lastSeenAt: p.lastSeenAt,
+                    online: p.online,
+                  });
+                  setOnline(p.online);
+                  setLastSeen(p.lastSeenAt);
+                })
+                .catch(() => {});
+            }
+          }
+        };
+
+        /**
+         * MÉMOIRE LOCALE — le fil s'affiche AVANT la réponse du serveur, et SANS lui hors ligne.
+         *
+         * ⚠️ Posé tout de suite SEULEMENT si l'on est sûr d'ouvrir en BAS : la liste des
+         * conversations (elle aussi en mémoire) dit qu'il n'y a rien à lire. Sinon on attend le
+         * serveur, qui sait où se trouve le premier non-lu — poser la fin de la conversation
+         * avant de le savoir collait le fil au bas, et la fenêtre des non-lus arrivée ensuite y
+         * était ramenée en boucle (diagnostic du 11/09, `todo`).
+         */
+        cached = await loadCache<Message[]>(threadCacheKey(id));
+        const cachedMeta = await loadCache<ConvMeta>(metaCacheKey(id));
+        if (cachedMeta) applyMeta(cachedMeta, false);
+        const listed = readCache<{ id: string; unreadCount?: number; manualUnread?: boolean }[]>(
+          CACHE_CONVERSATIONS,
+        )?.find((c) => c.id === id);
+        // Pas une seconde fois quand `init` est rejoué à la reconnexion : il est déjà à l'écran.
+        if (cached?.length && listed && !listed.unreadCount && !posedFromCacheRef.current) {
+          poseCachedThread(cached);
+        }
+
         const meta = await apiRequest<ConvMeta>(`/conversations/${id}`);
 
-        setConvType(meta.type);
-        setGroupPhoto(meta.photoUrl ?? null);
-        setEphemeralDuration(meta.ephemeralDuration);
-        setMutedUntil(meta.myMutedUntil);
-        setWhoCanSend(meta.whoCanSend ?? 'all');
-        setMyRole(meta.myRole ?? 'member');
-        // ⚠️ Lu ICI, avant le `POST /read` de l'ouverture : après, le serveur aurait déjà
-        // écrasé la date de lecture et ne saurait plus dire où le repère se pose.
-        setUnreadInfo(
-          meta.firstUnreadId ? { id: meta.firstUnreadId, count: meta.unreadCount ?? 0 } : null,
-        );
-        setMembers(
-          meta.members.map((m) => ({
-            id: m.userId,
-            name: m.user.name,
-            photoUrl: m.user.photoUrl,
-          })),
-        );
-        // Groupe : son nom. Direct : celui de l'autre participant.
-        setFetchedName(
-          meta.type === 'group'
-            ? meta.name ?? ''
-            : meta.members.find((m) => m.userId !== me.id)?.user.name ?? '',
-        );
-        // État initial des accusés, à partir des autres membres.
-        setReceipts(
-          Object.fromEntries(
-            meta.members
-              .filter((m) => m.userId !== me.id)
-              .map((m) => [
-                m.userId,
-                { delivered: m.lastDeliveredAt ?? undefined, read: m.lastReadAt ?? undefined },
-              ]),
-          ),
-        );
-        if (meta.type === 'direct') {
-          const other = meta.members.find((m) => m.userId !== me.id);
-          if (other) {
-            setOtherUserId(other.userId);
-            otherUserIdRef.current = other.userId;
-            // En-tête gated (re-vérifié serveur) : photo, appel, dernière connexion, en ligne.
-            apiRequest<HeaderProfile>(`/users/${other.userId}/profile`)
-              .then((p) => {
-                setHeader({
-                  photoUrl: p.photoUrl,
-                  canCall: p.canCall,
-                  lastSeenAt: p.lastSeenAt,
-                  online: p.online,
-                });
-                setOnline(p.online);
-                setLastSeen(p.lastSeenAt);
-              })
-              .catch(() => {});
-          }
-        }
+        // Mémoire locale à jour : sans le repère de non-lus, qui ne vaut qu'à cet instant.
+        writeCache(metaCacheKey(id), { ...meta, firstUnreadId: null, unreadCount: 0 });
+        applyMeta(meta, true);
 
         /**
          * ⚠️ Quand il reste des messages non lus, on ne charge PAS la dernière page mais une
@@ -2655,6 +2887,17 @@ export default function ChatScreen() {
         for (const m of history) seenIdsRef.current.add(m.id);
         replaceMessages(history.reverse());
         setHistoryLoaded(true);
+        serverSyncedRef.current = true;
+        /**
+         * ⚠️ Le fil de la mémoire locale était posé « en bas », mais le serveur a trouvé des
+         * non-lus (liste en mémoire pas à jour, messages arrivés hors ligne) : on REJOUE la
+         * décision d'ouverture, qui visera le repère. Sans cela, le fil resterait en mode
+         * « suivre le bas » sur une fenêtre qui n'est pas la fin — le défaut du 11/09.
+         */
+        if (posedFromCacheRef.current && meta.firstUnreadId) {
+          openDecidedRef.current = false;
+          setReopenTick((n) => n + 1);
+        }
         // Rien à mesurer ni à caler : inutile de faire attendre devant un écran vide.
         if (!history.length) scroll.revealNow();
 
@@ -2690,15 +2933,12 @@ export default function ChatScreen() {
               // ⚠️ Remplacer sur place et non « retirer puis ajouter à la fin » : la vraie
               // bulle arrive pendant que les suivantes sont encore en téléversement, et
               // l'ajouter en queue réordonnerait l'album sous les yeux de l'utilisateur.
-              const draft = msg.mediaUrl
-                ? prev.findIndex((m) => m.pendingLocal && m.pendingUploadUrl === msg.mediaUrl)
-                : // Texte seul : pas de téléversement, donc aucune URL sur laquelle
-                  // raccrocher l'écho — on apparie sur le contenu, et UNIQUEMENT pour nos
-                  // propres envois : le correspondant peut très bien écrire le même mot.
-                  // Deux messages identiques d'affilée peuvent s'apparier dans le désordre,
-                  // sans conséquence visible puisque les bulles sont identiques.
-                  mine
-                  ? prev.findIndex((m) => m.pendingLocal && !m.mediaUrl && m.content === msg.content)
+              // ⚠️ Par `clientId` : il désigne la bulle sans ambiguïté, quel que soit le type.
+              // Avant la file d'envoi, on rapprochait par l'URL S3 ou, pour un texte, par son
+              // contenu — deux messages identiques d'affilée pouvaient alors s'échanger.
+              const draft =
+                mine && msg.clientId
+                  ? prev.findIndex((m) => m.pendingLocal && m.clientId === msg.clientId)
                   : -1;
               if (draft !== -1) {
                 seenIdsRef.current.add(msg.id); // le brouillon a déjà joué l'entrée
@@ -2708,7 +2948,9 @@ export default function ChatScreen() {
                 // précisément ce qu'on cherche à supprimer. Tout le reste vient du serveur
                 // (identifiant réel, donc épinglage et favoris fonctionnels), et la
                 // prochaine ouverture de la conversation servira l'URL distante.
-                next[draft] = { ...msg, mediaUrl: prev[draft].mediaUrl };
+                next[draft] = msg.mediaUrl
+                  ? { ...msg, mediaUrl: prev[draft].mediaUrl, serverMediaUrl: msg.mediaUrl }
+                  : msg;
                 return next;
               }
               /**
@@ -3013,8 +3255,44 @@ export default function ChatScreen() {
         };
         socket.on('connect', onReconnect);
         reconnectHandlerRef.current = onReconnect;
-      } catch {
-        router.replace('/(tabs)');
+      } catch (e) {
+        /**
+         * ⚠️ REFUS ≠ SERVEUR INJOIGNABLE (29/10, file d'envoi). On ne quitte l'écran que sur un
+         * refus du serveur (4xx : plus membre, conversation supprimée). Avant, TOUTE erreur
+         * ramenait à la liste : hors ligne, une conversation s'ouvrait puis se refermait aussitôt
+         * — impossible d'y écrire, alors que la file d'envoi est faite pour ça.
+         */
+        const status = (e as { status?: number }).status;
+        if (status !== undefined && status >= 400 && status < 500) {
+          router.replace('/(tabs)');
+          return;
+        }
+        // Hors ligne : la mémoire locale de la conversation (si on ne l'a pas déjà posée), à
+        // défaut un fil vide — les messages en attente de la file s'affichent dans les deux cas.
+        if (!posedFromCacheRef.current) {
+          if (cached?.length) {
+            poseCachedThread(cached);
+          } else {
+            replaceMessages([]);
+            setHistoryLoaded(true);
+            scroll.revealNow();
+          }
+        }
+        /**
+         * Chargement complet REPRIS à la reconnexion. ⚠️ Toutes les erreurs réseau de `init`
+         * surviennent AVANT la pose des écouteurs socket : le rejouer ne les double pas. Le
+         * poste `reconnectHandlerRef` est celui que le nettoyage de l'effet détache déjà.
+         */
+        const socket = getSocket();
+        if (socket && !reconnectHandlerRef.current) {
+          const retry = () => {
+            socket.off('connect', retry);
+            reconnectHandlerRef.current = null;
+            init();
+          };
+          socket.on('connect', retry);
+          reconnectHandlerRef.current = retry;
+        }
       }
     };
 
@@ -3113,8 +3391,6 @@ export default function ChatScreen() {
     const content = text.trim();
     const queue = pending;
     if (!content && queue.length === 0) return;
-    const socket = getSocket();
-    if (!socket) return;
 
     // La citation est consommée par CET envoi : on la capture puis on vide la barre tout de
     // suite, sinon un second message partirait en citant encore le même message.
@@ -3130,20 +3406,19 @@ export default function ChatScreen() {
      */
     playSent();
 
-    // La barre se vide tout de suite : l'envoi est acté, les uploads suivent en fond.
+    // La barre se vide tout de suite : l'envoi est acté, la file d'envoi fait le reste.
     setText('');
     setPending([]);
-    stopTyping(socket);
+    const socket = getSocket();
+    if (socket) stopTyping(socket);
 
+    /**
+     * ⚠️ HORS LIGNE COMPRIS : plus de `socket.emit` direct. Tout passe par la file d'envoi
+     * (`write` → `lib/outbox.ts`), écrite sur disque avant le moindre appel réseau — un message
+     * tapé en mode avion survit à la fermeture de l'app et part au retour du réseau.
+     */
     if (queue.length === 0) {
-      // Texte seul : aucun téléversement, mais le brouillon reste utile — sur un réseau
-      // lent la bulle apparaît quand même tout de suite, avec son horloge.
-      pushDraft(makeDraft({ content, replyTo: quoted }));
-      socket.emit('send_message', {
-        conversationId: id,
-        content,
-        replyToId: quoted?.id,
-      });
+      write([{ payload: { content, replyToId: quoted?.id }, display: { replyTo: quoted } }]);
       return;
     }
 
@@ -3156,84 +3431,28 @@ export default function ChatScreen() {
     const batchId =
       queue.length > 1 ? `${currentUserId}-${Date.now()}#${queue.length}` : undefined;
 
-    // OPTIMISTIC — l'album est posé ENTIER, tout de suite, avec les fichiers du téléphone.
-    //
-    // ⚠️ Sans ça, chaque média n'apparaissait qu'une fois téléversé : les images tombaient
-    // une par une et la légende arrivait en dernier, en faisant sauter la mise en page à
-    // chaque étape. Le brouillon montre d'emblée la forme finale ; les vraies bulles
-    // prendront sa place sans que rien ne bouge.
-    //
-    // Les brouillons portent le MÊME `batchId` que les messages à venir : c'est ce qui les
-    // réunit en un seul album, y compris pendant le remplacement où les deux cohabitent.
+    // L'album est posé ENTIER tout de suite (bulles « en envoi »), puis la file téléverse et
+    // envoie les médias UN PAR UN, dans l'ordre — la légende part avec le dernier.
     // ⚠️ La citation ne part qu'avec le PREMIER média : elle appartient à l'envoi, pas à
     // chaque pièce jointe. La répéter sur les N messages d'un album afficherait N citations
     // identiques dans une seule bulle d'album.
-    const drafts: Message[] = queue.map((item, i) =>
-      makeDraft({
-        content: i === queue.length - 1 ? content : '',
-        mediaUrl: item.uri,
-        mediaType: item.mediaType,
-        mimeType: item.contentType,
-        durationMs: item.durationMs,
-        batchId,
-        replyTo: i === 0 ? quoted : null,
-      }),
+    write(
+      queue.map((item, i) => ({
+        payload: {
+          content: i === queue.length - 1 ? content : '',
+          mediaType: item.mediaType,
+          mimeType: item.contentType,
+          durationMs: item.durationMs,
+          batchId,
+          replyToId: i === 0 ? quoted?.id : undefined,
+        },
+        localFile: { uri: item.uri, contentType: item.contentType, image: item.mediaType === 'image' },
+        display: { replyTo: i === 0 ? quoted : null },
+      })),
     );
-    for (const d of drafts) pushDraft(d);
-
-    setUploading(true);
-    let failed = 0;
-    let captionSent = false;
-    for (let i = 0; i < queue.length; i++) {
-      const item = queue[i];
-      const isLast = i === queue.length - 1;
-      const draftId = drafts[i].id;
-      try {
-        /**
-         * ⚠️ Normalisé JUSTE AVANT l'envoi, pas à la sélection : la bulle optimiste affiche
-         * l'original du téléphone, qui s'y décode très bien. Convertir plus tôt retarderait
-         * l'aperçu sans rien apporter.
-         */
-        const src =
-          item.mediaType === 'image'
-            ? await toUploadableImage(item.uri, item.contentType)
-            : { uri: item.uri, contentType: item.contentType };
-        const url = await uploadFile(src.uri, src.contentType, 'chat');
-        // L'écho du serveur est reconnu par cette URL : elle est notre seul lien avec la
-        // vraie bulle, l'identifiant du message étant attribué côté serveur.
-        linkDraft(draftId, url);
-        sendMedia(
-          {
-            mediaUrl: url,
-            mediaType: item.mediaType,
-            mimeType: item.contentType,
-            durationMs: item.durationMs,
-            batchId,
-            replyToId: i === 0 ? quoted?.id : undefined,
-          },
-          isLast ? content : '',
-        );
-        if (isLast) captionSent = true;
-      } catch {
-        failed++;
-        // Le brouillon n'aura jamais d'écho : le retirer, sinon il resterait en « envoi »
-        // pour toujours.
-        dropDraft(draftId);
-      }
-    }
-    setUploading(false);
-
-    // Le média porteur de la légende a échoué : le texte ne doit pas disparaître avec lui.
-    if (content && !captionSent) {
-      socket.emit('send_message', { conversationId: id, content, replyToId: quoted?.id });
-    }
-    if (failed) Alert.alert(t('error'), t('media.upload_error'));
   };
 
   // --- Médias / pièces jointes ---
-  const sendMedia = (payload: MediaPayload, caption = '') => {
-    getSocket()?.emit('send_message', { conversationId: id, content: caption, ...payload });
-  };
 
   // Un asset du picker → entrée de la zone d'attente (rien n'est envoyé à ce stade).
   const toPending = (asset: ImagePicker.ImagePickerAsset): PendingMedia => {
@@ -3307,36 +3526,22 @@ export default function ChatScreen() {
     const contentType = asset.mimeType ?? 'application/pdf';
     // Nom, taille et type sont connus localement : la carte de fichier est donc IDENTIQUE
     // à sa version finale dès maintenant, seule sa mise à disposition manque.
-    const draft = makeDraft({
-      mediaUrl: asset.uri,
-      mediaType: 'document',
-      fileName: asset.name,
-      fileSize: asset.size ?? undefined,
-      mimeType: contentType,
-    });
-    pushDraft(draft);
-    setUploading(true);
-    try {
-      const url = await uploadFile(asset.uri, contentType, 'chat');
-      linkDraft(draft.id, url);
-      sendMedia({
-        mediaUrl: url,
-        mediaType: 'document',
-        fileName: asset.name,
-        fileSize: asset.size ?? undefined,
-        mimeType: contentType,
-      });
-    } catch {
-      dropDraft(draft.id);
-      Alert.alert(t('error'), t('media.upload_error'));
-    } finally {
-      setUploading(false);
-    }
+    write([
+      {
+        payload: {
+          mediaType: 'document',
+          fileName: asset.name,
+          fileSize: asset.size ?? undefined,
+          mimeType: contentType,
+        },
+        localFile: { uri: asset.uri, contentType, image: false },
+      },
+    ]);
   };
 
   const onGifSelect = (url: string) => {
     setGiphyOpen(false);
-    sendMedia({ mediaUrl: url, mediaType: 'gif' });
+    write([{ payload: { mediaUrl: url, mediaType: 'gif' } }]);
   };
 
   /**
@@ -3383,13 +3588,7 @@ export default function ChatScreen() {
    */
   const sendLocation = ({ latitude, longitude, address }: PickedLocation) => {
     playSent();
-    getSocket()?.emit('send_message', {
-      conversationId: id,
-      type: 'location',
-      content: address,
-      latitude,
-      longitude,
-    });
+    write([{ payload: { type: 'location', content: address, latitude, longitude } }]);
   };
 
   // Le « + » pivote en croix tant que le panneau est ouvert (ressort, pas un timing
@@ -3461,24 +3660,12 @@ export default function ChatScreen() {
     playSent();
     // La durée est déjà connue et le fichier est local : le lecteur s'affiche complet, et
     // le vocal reste écoutable PENDANT son téléversement.
-    const draft = makeDraft({
-      mediaUrl: uri,
-      mediaType: 'audio',
-      mimeType: 'audio/m4a',
-      durationMs,
-    });
-    pushDraft(draft);
-    setUploading(true);
-    try {
-      const url = await uploadFile(uri, 'audio/m4a', 'chat');
-      linkDraft(draft.id, url);
-      sendMedia({ mediaUrl: url, mediaType: 'audio', mimeType: 'audio/m4a', durationMs });
-    } catch {
-      dropDraft(draft.id);
-      Alert.alert(t('error'), t('media.upload_error'));
-    } finally {
-      setUploading(false);
-    }
+    write([
+      {
+        payload: { mediaType: 'audio', mimeType: 'audio/m4a', durationMs },
+        localFile: { uri, contentType: 'audio/m4a', image: false },
+      },
+    ]);
   };
 
   // --- Couper les notifications ---
@@ -4139,7 +4326,8 @@ export default function ChatScreen() {
     // haut) et une mesure ultérieure rattrapait le coup ; inversée, la liste se stabilise
     // tout de suite et la fenêtre était simplement ratée.
     scroll.open(firstUnread?.key ?? null);
-  }, [rows.length, firstUnread, scroll]);
+    // `reopenTick` : relance demandée quand le fil de la mémoire locale s'est révélé faux.
+  }, [rows.length, firstUnread, scroll, reopenTick]);
 
 
   // Sous-titre (priorité : frappe > en ligne > vu le… > rien).
@@ -4440,7 +4628,15 @@ export default function ChatScreen() {
             ? dayLabel(item.createdAt, t)
             : null
         }
-        sendStatus={!isMe ? undefined : sending ? 'sending' : statusAt(item.createdAt)}
+        sendStatus={
+          !isMe
+            ? undefined
+            : row.messages.some((m) => m.sendFailed)
+              ? 'failed'
+              : sending
+                ? 'sending'
+                : statusAt(item.createdAt)
+        }
         isPinned={row.messages.some((m) => flags.pinned.includes(m.id))}
         isStarred={row.messages.some((m) => flags.starred.includes(m.id))}
         highlighted={row.messages.some((m) => m.id === highlightId)}
@@ -4469,6 +4665,7 @@ export default function ChatScreen() {
         toggleSelected={toggleSelected}
         onCallPress={onCallPress}
         onCallLongPress={onCallLongPress}
+        onFailedPress={onFailedPress}
       />
     );
   };
@@ -5028,9 +5225,6 @@ export default function ChatScreen() {
         {/* Bloc de saisie, en flux : c'est ce qui lui permet de suivre le clavier — un
             élément positionné en absolu resterait derrière lors de la translation. */}
         <View>
-        {uploading && (
-          <Text className="text-sm text-gray-400 dark:text-zinc-500 px-4 pt-1">{t('media.uploading')}</Text>
-        )}
 
         {/* Groupe réservé aux admins : simple membre → saisie bloquée */}
         {convType === 'group' &&
@@ -5099,7 +5293,7 @@ export default function ChatScreen() {
             {/* Éléments posés SUR le fond de conversation : pas de barre opaque ni de
                 séparateur, chaque bloc porte son propre verre dépoli. */}
             <View className="flex-row items-end px-3 pt-1 pb-2" style={{ gap: 8 }}>
-              <TouchableOpacity onPress={() => setAttach(!attachOpen)} disabled={uploading}>
+              <TouchableOpacity onPress={() => setAttach(!attachOpen)}>
                 <GlassSurface radius={22} style={{ width: 44, height: 44 }}>
                   <Animated.View
                     className="w-full h-full items-center justify-center"
@@ -5132,8 +5326,7 @@ export default function ChatScreen() {
                 <TouchableOpacity
                   className="w-11 h-11 bg-nexa rounded-full items-center justify-center"
                   onPress={sendMessage}
-                  disabled={uploading}
-                  style={[FLOATING_SHADOW, { opacity: uploading ? 0.5 : 1 }]}
+                  style={FLOATING_SHADOW}
                 >
                   <Ionicons name="send" size={20} color="white" />
                 </TouchableOpacity>

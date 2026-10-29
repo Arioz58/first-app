@@ -30,6 +30,7 @@ import { setSessionStarter } from "../lib/session";
 import { hydrateLiveShares } from "../lib/liveLocation";
 import { clearTokens, getAccessToken, getRefreshToken, getUserId, hydrateLocalSettings, migrateSessionAccessibility } from "../lib/storage";
 import { BOOT_KEYS, hydrateCache } from "../lib/cache";
+import { initOutbox, kickOutbox } from "../lib/outbox";
 import { initTheme, useThemeColors } from "../lib/theme";
 import { initSounds, playReceived } from "../lib/sounds";
 import { initNotificationSound, refreshNotificationSound } from "../lib/notificationSounds";
@@ -210,6 +211,12 @@ const startSession = () => {
       bindSocket(socket, "friend_request_accepted", "root", (p: { by: Actor }) => {
         socialToast(p.by, i18n.t("notifications.friend_accepted"));
       });
+      /**
+       * FILE D'ENVOI : à chaque (re)connexion, ce qui attendait part — y compris ce qui a été
+       * écrit hors ligne avant un arrêt de l'app (`lib/outbox.ts`).
+       */
+      bindSocket(socket, "connect", "outbox", kickOutbox);
+      kickOutbox();
 
       /**
        * APPELS. ⚠️ Écoutés au niveau de l'APPLICATION, comme les messages : un appel
@@ -510,6 +517,9 @@ export default function RootLayout() {
            */
           const me = await getUserId();
           if (me) await hydrateCache(me, [...BOOT_KEYS]).catch(() => {});
+          // File d'envoi du compte : les messages écrits hors ligne avant l'arrêt de l'app
+          // repartent dès la première connexion. Lue ici pour que le chat puisse les afficher.
+          if (me) await initOutbox(me).catch(() => {});
           /**
            * ⚠️ Réglages locaux de conversation chargés ici aussi : ils vivent dans le
            * trousseau, dont la lecture est asynchrone. L'écran de conversation se peignait
