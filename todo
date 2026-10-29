@@ -3348,6 +3348,22 @@ RETOUR CLIENT DU 21/10/2026 (build 28) — « synchro vocale parfaite », trois 
   Questions a Hakan : s'entendaient-ils ? video directe ou bascule ? qui a decroche, ecran
   verrouille ? chacun voyait-il au moins SA propre image ?
 
+[FAIT 29/10, VERIFIE par Berke en local] ENVOI HORS LIGNE + MEMOIRE LOCALE DES CONVERSATIONS
+  (avancement a montrer a Hakan avant le build ; inspire de WA_REA.md points 1 et 2).
+  → backend 382a0b3 : `Message.clientId` (unique par expediteur, migration `message_client_id`),
+    renvoi = message existant rendu sans rediffusion ; `send_message` repond par un accuse.
+    Teste : deux envois simultanes + un renvoi tardif = 1 seule ligne en base.
+  → mobile cabc242 : file d'envoi persistee `lib/outbox.ts` (disque avant reseau, fichiers
+    copies, un envoi a la fois par conversation, rejouee a chaque `connect`, echec definitif =
+    Reessayer/Supprimer) ; chat ouvert hors ligne au lieu de se refermer (seul un 4xx ramene a
+    la liste) ; memoire locale du fil (50 derniers messages) et de l'en-tete, posee avant le
+    serveur seulement si 0 non-lu, ouverture REJOUEE si le serveur en revele (defaut du 11/09).
+  ⚠️ Backend deploye AVANT tout build qui embarque la file (sans accuse : renvois en boucle).
+  [A FAIRE] Brancher sur la file : transfert, reponse a une story, reponse depuis une notification.
+  [A FAIRE] `hydrateCache` apres connexion (verify.tsx) : aujourd'hui la memoire locale ne
+    s'ecrit qu'a partir du lancement suivant une connexion.
+  [ ] TestFlight : mode avion reel (pas seulement backend coupe), app tuee hors ligne, Android.
+
 ================================================================================
 A TESTER SUR TESTFLIGHT (Berke + un ami, deux vrais telephones) — liste tenue a jour
 ================================================================================
