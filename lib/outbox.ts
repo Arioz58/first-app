@@ -52,6 +52,11 @@ export type OutboxPayload = {
   replyToId?: string;
   latitude?: number;
   longitude?: number;
+  /** Message transféré (le serveur l'affiche comme tel). */
+  forwarded?: boolean;
+  /** Réponse à une story (`type: 'story_reply'`). */
+  storyId?: string;
+  storyMediaUrl?: string;
 };
 
 export type OutboxItem = {

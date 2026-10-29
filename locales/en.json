@@ -369,7 +369,9 @@
     "reply_send": "Send",
     "reply_placeholder": "Message",
     "reply_failed_title": "Message not sent",
-    "reply_failed_body": "Tap to reopen the conversation and try again."
+    "reply_failed_body": "Tap to reopen the conversation and try again.",
+    "reply_queued_title": "Reply pending",
+    "reply_queued_body": "It will be sent as soon as you reopen Nexa with a connection."
   },
   "moderation": {
     "block": "Block",

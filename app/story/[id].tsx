@@ -35,7 +35,8 @@ import Reanimated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StoryBackground } from "../../components/StoryBackground";
 import { apiRequest } from "../../lib/api";
-import { connectSocket } from "../../lib/socket";
+import { CACHE_CONVERSATIONS, readCache } from "../../lib/cache";
+import { enqueue } from "../../lib/outbox";
 import { STICKER_FONT_SIZE } from "../../lib/storyStickers";
 import { getUserId } from "../../lib/storage";
 import {
@@ -84,6 +85,13 @@ type ViewerRow = {
   createdAt: string;
   viewer: { id: string; name: string; photoUrl: string | null };
 };
+/** Conversation telle que la liste la garde en mémoire locale (`lib/cache.ts`). */
+type CachedConv = {
+  id: string;
+  type: "direct" | "group";
+  members?: { userId: string }[];
+};
+
 type StoryGroup = {
   user: { id: string; name: string; photoUrl: string | null };
   stories: Story[];
@@ -469,18 +477,34 @@ export default function StoryViewScreen() {
     if (!content || sending || !story) return;
     setSending(true);
     try {
-      const conv = await apiRequest<{ id: string }>("/conversations/direct", {
-        method: "POST",
-        body: { targetUserId: userId },
-      });
-      const socket = await connectSocket();
-      socket.emit("send_message", {
-        conversationId: conv.id,
-        content,
-        type: "story_reply",
-        storyId: story.id,
-        storyMediaUrl: story.mediaUrl,
-      });
+      /**
+       * ⚠️ La conversation est d'abord cherchée dans la MÉMOIRE LOCALE de la liste : c'est ce
+       * qui permet de répondre hors ligne (la réponse part ensuite par la file d'envoi). Le
+       * serveur n'est appelé que pour une conversation encore jamais ouverte avec l'auteur —
+       * hors ligne, ce cas-là échoue comme avant.
+       */
+      const cached = readCache<CachedConv[]>(CACHE_CONVERSATIONS)?.find(
+        (c) => c.type === "direct" && c.members?.some((m) => m.userId === userId),
+      );
+      const conversationId =
+        cached?.id ??
+        (
+          await apiRequest<{ id: string }>("/conversations/direct", {
+            method: "POST",
+            body: { targetUserId: userId },
+          })
+        ).id;
+      await enqueue([
+        {
+          conversationId,
+          payload: {
+            content,
+            type: "story_reply",
+            storyId: story.id,
+            storyMediaUrl: story.mediaUrl ?? undefined,
+          },
+        },
+      ]);
       setReplyText("");
       Keyboard.dismiss();
       setSentFlash(true);

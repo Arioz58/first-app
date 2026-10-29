@@ -3359,9 +3359,21 @@ RETOUR CLIENT DU 21/10/2026 (build 28) — « synchro vocale parfaite », trois 
     la liste) ; memoire locale du fil (50 derniers messages) et de l'en-tete, posee avant le
     serveur seulement si 0 non-lu, ouverture REJOUEE si le serveur en revele (defaut du 11/09).
   ⚠️ Backend deploye AVANT tout build qui embarque la file (sans accuse : renvois en boucle).
-  [A FAIRE] Brancher sur la file : transfert, reponse a une story, reponse depuis une notification.
-  [A FAIRE] `hydrateCache` apres connexion (verify.tsx) : aujourd'hui la memoire locale ne
-    s'ecrit qu'a partir du lancement suivant une connexion.
+  [FAIT 29/10, apres le build 30] Branches sur la file :
+    → transfert : par la file (bulles « en envoi » si on transfere vers la conversation ouverte).
+      ⚠️ Corrige au passage : un media qu'on venait d'envoyer etait transfere avec son adresse
+      LOCALE (la bulle garde le fichier du telephone) → `serverMediaUrl` d'abord.
+    → reponse a une story : conversation cherchee dans la memoire locale de la liste, serveur
+      seulement si jamais ouverte (hors ligne, ce cas-la echoue encore).
+    → reponse depuis une notification : REST avec `clientId` ; sans reponse (reseau, 5xx), la
+      reponse entre dans la file SOUS LE MEME identifiant et part a la prochaine ouverture
+      (le serveur tranche « jamais arrivee » / « arrivee, reponse perdue »). Notification
+      « Reponse en attente » au lieu de « Message non envoye ». Un refus 4xx reste un echec.
+    → `hydrateCache` apres connexion (verify.tsx) : la memoire locale s'ecrivait seulement a
+      partir du lancement suivant une connexion.
+  [ ] A verifier en local : transfert hors ligne (vers une autre conversation et vers celle
+    ouverte), reponse a une story hors ligne, connexion puis coupure du backend (memoire).
+  [ ] TestFlight : reponse depuis une notification en mode avion, puis rouvrir l'app.
   [ ] TestFlight : mode avion reel (pas seulement backend coupe), app tuee hors ligne, Android.
 
 ================================================================================

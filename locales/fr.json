@@ -369,7 +369,9 @@
     "reply_send": "Envoyer",
     "reply_placeholder": "Message",
     "reply_failed_title": "Message non envoyé",
-    "reply_failed_body": "Touchez pour rouvrir la conversation et réessayer."
+    "reply_failed_body": "Touchez pour rouvrir la conversation et réessayer.",
+    "reply_queued_title": "Réponse en attente",
+    "reply_queued_body": "Elle partira dès que vous rouvrirez Nexa avec une connexion."
   },
   "moderation": {
     "block": "Bloquer",

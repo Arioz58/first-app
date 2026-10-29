@@ -2375,6 +2375,7 @@ export default function ChatScreen() {
     batchId: item.payload.batchId ?? null,
     latitude: item.payload.latitude ?? null,
     longitude: item.payload.longitude ?? null,
+    forwarded: item.payload.forwarded ?? false,
     replyTo: (item.display?.replyTo as Quote | undefined) ?? null,
   });
 
@@ -4113,11 +4114,11 @@ export default function ChatScreen() {
    * ⚠️ La CITATION n'est pas reprise : le message cité n'existe pas dans la conversation
    * d'arrivée, et l'y afficher exposerait un extrait d'une conversation dont le destinataire
    * n'est pas membre.
+   * ⚠️ Par la FILE D'ENVOI (29/10), comme tout envoi : un transfert fait hors ligne part au
+   * retour du réseau, même si l'app a été fermée entre-temps.
    */
   const forwardTo = useCallback(
     (msgs: Message[], conversationIds: string[]) => {
-      const socket = getSocket();
-      if (!socket) return;
       /**
        * ⚠️ ORDRE : conversation par conversation, et messages du plus ANCIEN au plus récent.
        *
@@ -4160,12 +4161,13 @@ export default function ChatScreen() {
           }
         }
 
-        for (const msg of ordered) {
-          socket.emit('send_message', {
-            conversationId: convId,
+        const entries = ordered.map((msg) => ({
+          payload: {
             content: msg.content ?? '',
             type: msg.type === 'story_reply' ? 'text' : msg.type,
-            mediaUrl: msg.mediaUrl ?? undefined,
+            // ⚠️ `serverMediaUrl` d'abord : un média qu'on vient d'envoyer affiche encore le
+            // fichier LOCAL (voir `settleDraft`), adresse que personne d'autre ne peut lire.
+            mediaUrl: msg.serverMediaUrl ?? msg.mediaUrl ?? undefined,
             mediaType: msg.mediaType ?? undefined,
             fileName: msg.fileName ?? undefined,
             fileSize: msg.fileSize ?? undefined,
@@ -4175,12 +4177,15 @@ export default function ChatScreen() {
             longitude: msg.longitude ?? undefined,
             batchId: msg.batchId ? freshBatch.get(msg.batchId) : undefined,
             forwarded: true,
-          });
-        }
+          } satisfies OutboxPayload,
+        }));
+        // Vers la conversation ouverte : bulles « en envoi » comme pour un message écrit.
+        if (convId === id) write(entries);
+        else enqueue(entries.map((e) => ({ ...e, conversationId: convId }))).catch(() => {});
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     },
-    [currentUserId],
+    [currentUserId, id, write],
   );
 
   // --- Valeurs dérivées ---

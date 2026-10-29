@@ -2,8 +2,9 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
-import { apiRequest } from "./api";
+import { apiRequest, NETWORK_UNAVAILABLE } from "./api";
 import i18n from "./i18n";
+import { enqueue, newClientId } from "./outbox";
 import { clearUnread } from "./unreadMessages";
 import * as SecureStore from "expo-secure-store";
 import { withBackgroundTime } from "../modules/background-time";
@@ -135,10 +136,17 @@ const sendReplyNow = async (
   } catch {
     // Trousseau indisponible : on préfère envoyer que perdre la réponse de l'utilisateur.
   }
+  /**
+   * ⚠️ `clientId` tiré AVANT l'envoi (29/10) : si la requête n'aboutit pas, la réponse passe
+   * dans la file d'envoi SOUS LE MÊME identifiant. Le serveur tranche alors les deux cas
+   * qu'on ne sait pas distinguer d'ici — requête jamais arrivée, ou arrivée mais réponse
+   * perdue (le `499` du 26/09) : il crée le message, ou rend celui qui existe déjà.
+   */
+  const clientId = newClientId();
   try {
     await apiRequest(`/conversations/${conversationId}/messages`, {
       method: "POST",
-      body: { content },
+      body: { content, clientId },
     });
     await apiRequest(`/conversations/${conversationId}/read`, { method: "POST" }).catch(
       () => {},
@@ -146,7 +154,38 @@ const sendReplyNow = async (
     // La pastille de l'onglet et celle de l'icône suivent le même store : sans cela elles
     // garderaient le compte d'avant la réponse jusqu'au prochain passage par la liste.
     clearUnread(conversationId);
-  } catch {
+  } catch (e) {
+    /**
+     * Pas de réponse (réseau, serveur en panne) : la réponse n'est PAS perdue, elle attend
+     * dans la file et partira à la prochaine ouverture de l'app — le socket étant fermé en
+     * arrière-plan, pas avant. On le dit, plutôt que d'annoncer un échec.
+     * Un REFUS du serveur (4xx : bloqué, plus membre…), lui, reste un échec : renvoyer ne
+     * changerait rien.
+     */
+    const status = (e as { status?: number }).status;
+    const message = (e as Error).message;
+    // ⚠️ Session expirée : rien ne partirait non plus plus tard, c'est un échec.
+    const unreachable =
+      message === NETWORK_UNAVAILABLE ||
+      (message !== "SESSION_EXPIRED" && (status === undefined || status >= 500));
+    if (unreachable) {
+      const queued = await enqueue([
+        { conversationId, clientId, payload: { content, type: "text" } },
+      ])
+        .then(() => true)
+        .catch(() => false);
+      if (queued) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: i18n.t("notifications.reply_queued_title"),
+            body: i18n.t("notifications.reply_queued_body"),
+            data: { conversationId },
+          },
+          trigger: null,
+        });
+        return;
+      }
+    }
     await Notifications.scheduleNotificationAsync({
       content: {
         title: i18n.t("notifications.reply_failed_title"),
