@@ -3395,6 +3395,14 @@ RETOUR CLIENT DU 21/10/2026 (build 28) — « synchro vocale parfaite », trois 
       connexion et a chaque renouvellement.
     Limite : un build sans `lib/device.ts` (le 30) apparait « Appareil inconnu ».
   [ ] A verifier en local : simulateur + iPhone sur le meme compte, deconnecter l'un depuis l'autre.
+  [FAIT 29/10] MISES A JOUR A DISTANCE (expo-updates) : runtimeVersion `fingerprint`, profil de
+    build `testflight` (canal `preview`) et `production` (canal `production`, stores), identifiant
+    de mise a jour affiche a cote de la version (profil). Procedure dans CLAUDE.md.
+  [ ] Berke : double authentification sur le compte Expo (obligatoire avant la prod).
+  [ ] Premier essai sur le build 31 : publier une petite correction sur `preview`, verifier
+    qu'elle arrive (tuer puis rouvrir l'app deux fois) et que l'identifiant change dans le profil.
+  [ ] Avant la prod : budget EAS Update avec Hakan ; `submit.testflight` a remplir (appleId,
+    ascAppId, appleTeamId) pour ne plus saisir les identifiants Apple a chaque build.
   [ ] A verifier en local : UserB envoie a UserA sans que A ouvre la conversation, couper le
     backend, ouvrir la conversation sur A → les messages sont la.
   [ ] TestFlight : mode avion reel (pas seulement backend coupe), app tuee hors ligne, Android.

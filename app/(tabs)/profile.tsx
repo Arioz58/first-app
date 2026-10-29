@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 import * as ExpoLinking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -51,7 +52,18 @@ import {
 } from '../../lib/location';
 import { getThemePref, setThemePref, useThemeColors, type ThemePref } from '../../lib/theme';
 
-const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
+/**
+ * Version affichée, suivie du début de l'identifiant de la MISE À JOUR à distance en service
+ * (`expo-updates`, 29/10) : « 1.0.0 · 3f2a9c1b ». C'est ce qui permet de savoir, sur le
+ * téléphone de quelqu'un, si une correction publiée y est déjà arrivée. Rien en
+ * développement ni sur le code embarqué dans le build (`isEmbeddedLaunch`).
+ */
+const APP_VERSION = [
+  Constants.expoConfig?.version ?? '1.0.0',
+  !Updates.isEmbeddedLaunch && Updates.updateId ? Updates.updateId.slice(0, 8) : null,
+]
+  .filter(Boolean)
+  .join(' · ');
 
 const CARD_SHADOW = {
   shadowColor: '#000',

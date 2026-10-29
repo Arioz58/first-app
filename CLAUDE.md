@@ -89,6 +89,7 @@ first-app-web/       → Next.js — client web (Mois 3). Connexion par **QR** (
 - **@shopify/flash-list** (v2) — liste du fil de discussion (mesure réelle des cellules, recyclage, `startRenderingFromBottom`) — pur JS, pas de rebuild ; ⚠️ exige la nouvelle architecture (`newArchEnabled: true`, déjà actif)
 - **qrcode** (+ `@types/qrcode`) — QR de profil rendu en **pur JS** (aucun module natif), voir `components/QrCode.tsx`
 - **react-native-agora** (4.6.4) — appels audio (Mois 4) ⚠️ **module natif** (rebuild requis) ; compatible New Architecture ; **aucun config plugin** : permissions et `UIBackgroundModes: audio` déclarés à la main dans `app.json`. ⚠️ **Après un rechargement de Metro, TUER l'app avant de tester un appel** (constaté le 3 oct. 2026) : le moteur natif est unique pour le processus et n'est jamais libéré, le JS rechargé le ré-initialise mais les événements restent attachés à l'ancienne instance native, sans écouteur → la voix passe, mais **aucun événement** n'atteint le JS (écran bloqué sur « Connexion… »). Artefact de développement seulement : l'app n'est jamais rechargée à chaud en production. ⚠️ **Le simulateur n'affiche aucune vidéo Agora** (ni la sienne ni celle reçue) et n'a pas de caméra : en `__DEV__` sur simulateur, il publie une **vidéo de test** à la place de sa caméra (`lib/callEngine.ts`) — c'est l'iPhone qui sert de témoin de l'affichage. ⚠️ Le libellé du micro se change dans l'option `microphonePermission` du plugin **expo-camera**, qui écrase `ios.infoPlist` au prebuild
+- **expo-updates** — mises à jour **à distance** du JS (29/10) ⚠️ **module natif** (rebuild requis, voir la section « Mises à jour à distance »)
 - **expo-haptics** — retours haptiques (capture, envoi, scan QR, tuiles de pièces jointes)
 - **expo-clipboard** — action « Copier » du menu contextuel d'un message ⚠️ **module natif** (rebuild requis après install)
 - **@bacons/apple-targets** — extension de notification iOS (`targets/`) ⚠️ **module natif** (rebuild requis) — voir la section Notifications push
@@ -796,6 +797,18 @@ Construction **par phases livrables**, toutes les règles de confidentialité **
 - Médias : jamais stockés en BDD — uniquement URLs vers S3/CDN.
 - **Backlog** : le fichier **`todo`** à la racine du repo mobile fait foi pour ce qui reste à faire (items barrés = livrés, avec un résumé de ce qui a été fait). Le tenir à jour en même temps que ce fichier.
 - **Android** : le fichier **`android.md`** à la racine recense tout ce qui n'a pas été vérifié sur Android ou y demande un travail à part (le dev se fait sur iOS). À compléter dès qu'une livraison laisse un écart entre les deux plateformes.
+
+## Mises à jour à distance (`expo-updates`, 29 oct. 2026)
+
+Le JS d'un build peut être remplacé **sans nouveau build ni validation Apple** : correction en quelques minutes au lieu d'un à deux jours.
+
+- **Canaux** (`eas.json`) : profil de build **`testflight`** → canal `preview` (Berke, son ami, Hakan) ; profil **`production`** → canal `production` (les stores, à la mise en ligne). Commande de build TestFlight : `npx eas-cli build --platform ios --profile testflight --auto-submit`.
+- **Publier** : `npx eas-cli update --channel preview --message "…"`. Téléchargée à l'ouverture de l'app, appliquée au **lancement suivant** (app tuée puis rouverte). L'identifiant de la mise à jour en service s'affiche à côté de la version, dans le profil.
+- ⚠️ **Compatibilité** : `runtimeVersion` = `fingerprint`. Toute modification **native** (module natif, plugin, `app.json` côté natif) change l'empreinte : une mise à jour publiée ensuite n'atteint **que** les builds compatibles. Une fonctionnalité qui ajoute un module natif demande donc toujours un **build**.
+- ⚠️ **Le backend doit rester compatible** avec les versions précédentes : plusieurs versions du JS cohabitent (téléchargée mais pas encore appliquée). Déjà la règle (ex. accusé de `send_message` optionnel).
+- **En prod (à la mise en store)** : toujours `preview` d'abord et vérifié, puis `production` **progressivement** (`--rollout-percentage`), retour arrière possible vers la mise à jour précédente. Corrections = mise à jour ; nouvelle fonctionnalité importante = build en store (règles Apple : pas de changement de nature de l'app hors validation). Une mise à jour qui plante au démarrage est abandonnée par `expo-updates` (retour à la précédente).
+- ⚠️ **Sécurité** : qui accède au compte Expo peut pousser du code à tous les utilisateurs → **double authentification obligatoire** sur le compte Expo. Coût : offre gratuite limitée en utilisateurs actifs par mois, au-delà payant — à budgéter avec le client avant la prod.
+- Sans effet en développement (Metro) : rien à changer au flux de travail local.
 
 ## Notes techniques importantes
 

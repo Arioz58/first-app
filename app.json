@@ -147,6 +147,12 @@
       "eas": {
         "projectId": "ca07cd71-3522-49e7-911f-695fbcbf1556"
       }
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ca07cd71-3522-49e7-911f-695fbcbf1556"
     }
   }
 }
