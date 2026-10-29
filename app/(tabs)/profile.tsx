@@ -29,6 +29,7 @@ import BottomSheet from '../../components/BottomSheet';
 import QrCode from '../../components/QrCode';
 import { toUploadableImage } from '../../lib/upload';
 import { apiRequest } from '../../lib/api';
+import { signOut } from '../../lib/signOut';
 import { ROUND } from '../../lib/radius';
 import { TAB_BAR_CLEARANCE } from '../../lib/layout';
 import { setSoundsEnabled, useSoundsEnabled } from '../../lib/sounds';
@@ -41,21 +42,13 @@ import {
   type NotificationSoundId,
 } from '../../lib/notificationSounds';
 import { SUPPORTED_LANGUAGES, setAppLanguage } from '../../lib/i18n';
-import { clearTokens, getRefreshToken } from '../../lib/storage';
-import { unregisterPushToken } from '../../lib/notifications';
-import { unregisterVoipPush } from '../../lib/voipPush';
-import { disconnectSocket } from '../../lib/socket';
 import { requestContactsSegment } from '../../lib/tabsNav';
-import { setUnreadCounts } from '../../lib/unreadMessages';
-import { clearToasts } from '../../lib/toasts';
-import { clearCache } from '../../lib/cache';
 import {
   clearCity,
   detectAndSaveCity,
   formatLocation,
   type ProfileLocation,
 } from '../../lib/location';
-import { stopAllLiveShares } from '../../lib/liveLocation';
 import { getThemePref, setThemePref, useThemeColors, type ThemePref } from '../../lib/theme';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
@@ -271,73 +264,17 @@ export default function ProfileScreen() {
     ]);
   };
 
-  /**
-   * Déconnexion. `everywhere` = « Déconnecter tous mes appareils » (téléphone perdu ou volé).
-   *
-   * ⚠️ Dans ce cas, le serveur est prévenu EN PREMIER et c'est lui qui oublie les jetons push et
-   * VoIP et arrête les partages de position : une fois toutes les sessions fermées, cet appareil
-   * ne pourrait plus le demander lui-même. S'il échoue, on ne touche à RIEN — l'utilisateur
-   * doit savoir que l'autre téléphone est toujours connecté.
-   */
-  const signOut = async (everywhere: boolean) => {
-    if (everywhere) {
-      try {
-        await apiRequest('/auth/logout-all', { method: 'POST' });
-      } catch {
-        Alert.alert(t('error'), t('logout_all_error'));
-        return;
-      }
-    } else {
-      // Avant d'effacer la session : la requête a besoin du jeton d'accès, et
-      // l'appareil ne doit plus recevoir les notifications de ce compte.
-      await unregisterPushToken();
-      // ⚠️ Le jeton VoIP aussi : sans cela, le compte quitté garde l'adresse de cet
-      // appareil et continuerait d'y faire sonner ses appels.
-      await unregisterVoipPush();
-    }
-    // Aucun partage de position ne doit survivre au changement de compte. Attendu :
-    // l'arrêt prévient le serveur et coupe le suivi, deux choses qui ont besoin de la
-    // session encore valide.
-    await stopAllLiveShares();
-    // Les non-lus du compte quitté ne doivent pas rester sur l'icône de l'app.
-    setUnreadCounts({});
-    // Ni ses bandeaux d'alerte à l'écran, qui mèneraient à des conversations
-    // devenues inaccessibles.
-    clearToasts();
-    // ⚠️ La mémoire locale part AVEC le compte : elle contient ses conversations et le
-    // texte de ses derniers messages. Attendue, et avant d'effacer la session — le
-    // cache est cloisonné par identifiant, qu'il faut donc encore connaître.
-    await clearCache();
-    disconnectSocket();
-    /**
-     * ⚠️ Ferme la session CÔTÉ SERVEUR (23/10) : effacer les jetons du téléphone ne suffisait
-     * pas, une copie du jeton restait utilisable 7 jours. Sans `auth` : c'est le jeton de
-     * rafraîchissement qui désigne la session. Échec ignoré (hors ligne) — on se déconnecte
-     * quand même, la session expirera seule.
-     */
-    if (!everywhere) {
-      const refreshToken = await getRefreshToken();
-      if (refreshToken) {
-        await apiRequest('/auth/logout', { method: 'POST', body: { refreshToken }, auth: false }).catch(
-          () => {},
-        );
-      }
-    }
-    await clearTokens();
-    router.replace('/(auth)/welcome');
-  };
-
   const handleLogout = () => {
     Alert.alert(t('logout_confirm_title'), t('logout_confirm_message'), [
       { text: t('cancel'), style: 'cancel' },
-      { text: t('logout'), style: 'destructive', onPress: () => signOut(false) },
-    ]);
-  };
-
-  const handleLogoutAll = () => {
-    Alert.alert(t('logout_all'), t('logout_all_confirm'), [
-      { text: t('cancel'), style: 'cancel' },
-      { text: t('logout_all_action'), style: 'destructive', onPress: () => signOut(true) },
+      {
+        text: t('logout'),
+        style: 'destructive',
+        onPress: async () => {
+          await signOut(false);
+          router.replace('/(auth)/welcome');
+        },
+      },
     ]);
   };
 
@@ -645,6 +582,11 @@ export default function ProfileScreen() {
             label={t('web_login.title')}
             onPress={() => router.push('/web-login' as any)}
           />
+          <SettingRow
+            icon="phone-portrait-outline"
+            label={t('devices.title')}
+            onPress={() => router.push('/devices' as any)}
+          />
           <SettingRow icon="lock-closed-outline" label={t('privacy_settings.title')} onPress={() => router.push('/privacy' as any)} />
           <SettingRow icon="ban-outline" label={t('blocked_title')} onPress={() => router.push('/blocked' as any)} />
           <SettingRow
@@ -662,14 +604,8 @@ export default function ProfileScreen() {
 
         {/* Déconnexion */}
         <Section>
-          <SettingRow icon="log-out-outline" label={t('logout')} onPress={handleLogout} danger />
-          <SettingRow
-            icon="phone-portrait-outline"
-            label={t('logout_all')}
-            onPress={handleLogoutAll}
-            danger
-            last
-          />
+          {/* « Déconnecter tous mes appareils » : dans « Appareils connectés » (29/10). */}
+          <SettingRow icon="log-out-outline" label={t('logout')} onPress={handleLogout} danger last />
         </Section>
       </ScrollView>
 

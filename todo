@@ -3386,6 +3386,15 @@ RETOUR CLIENT DU 21/10/2026 (build 28) — « synchro vocale parfaite », trois 
     Limites : modifications/reactions/suppressions seules non rattrapees (corrigees a
     l'ouverture) ; au-dela de 20 conversations, les autres a l'ouverture.
     ⚠️ Backend a deployer AVANT le build qui l'embarque (sinon 404, sans dommage : rien ne bouge).
+  [FAIT 29/10] APPAREILS CONNECTES (WA_REA.md) :
+    → backend : migration `auth_session_device` (AuthSession.platform/deviceModel/osName +
+      pushToken/voipToken de l'appareil), `GET /auth/sessions`, `DELETE /auth/sessions/:id`
+      (retire aussi les jetons push/VoIP de l'appareil). Teste en local (utilisateur jetable :
+      liste, autre compte refuse, jeton push retire, renouvellement refuse apres coup).
+    → mobile : `app/devices.tsx` (Vous > Confidentialite), `lib/device.ts` envoye a la
+      connexion et a chaque renouvellement.
+    Limite : un build sans `lib/device.ts` (le 30) apparait « Appareil inconnu ».
+  [ ] A verifier en local : simulateur + iPhone sur le meme compte, deconnecter l'un depuis l'autre.
   [ ] A verifier en local : UserB envoie a UserA sans que A ouvre la conversation, couper le
     backend, ouvrir la conversation sur A → les messages sont la.
   [ ] TestFlight : mode avion reel (pas seulement backend coupe), app tuee hors ligne, Android.

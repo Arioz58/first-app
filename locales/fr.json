@@ -743,5 +743,24 @@
     "tap_to_call_back": "Touchez pour rappeler",
     "last_call": "Dernier appel",
     "show_all_history": "Afficher tout l'historique"
+  },
+  "devices": {
+    "title": "Appareils connectés",
+    "intro": "Les appareils sur lesquels ton compte est ouvert. Touche un appareil que tu ne reconnais pas pour le déconnecter.",
+    "this_device": "Cet appareil",
+    "last_active": "Actif : {{when}}",
+    "since": "Connecté depuis le {{date}}",
+    "unknown": "Appareil inconnu",
+    "browser": "Navigateur",
+    "revoke_title": "Déconnecter cet appareil ?",
+    "revoke_body": "{{device}} sera déconnecté de ton compte et ne recevra plus tes notifications ni tes appels.",
+    "revoke_action": "Déconnecter",
+    "revoke_others": "Déconnecter tous les autres appareils",
+    "revoke_others_body": "Tous les appareils sauf celui-ci seront déconnectés de ton compte.",
+    "revoke_error": "Impossible de déconnecter l'appareil. Vérifie ta connexion et réessaie.",
+    "load_error": "Impossible de charger la liste des appareils.",
+    "retry": "Réessayer",
+    "revoke_others_button": "Déconnecter tous les autres appareils (sauf celui-ci)",
+    "logout_all_button": "Déconnecter tous mes appareils (y compris celui-ci)"
   }
 }

@@ -1,4 +1,5 @@
 import { BASE_URL } from "./config";
+import { deviceInfo } from "./device";
 import {
   clearTokens,
   getAccessToken,
@@ -78,7 +79,9 @@ const refreshSession = async (): Promise<RefreshResult> => {
       const res = await fetch(`${BASE_URL}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
+        // L'appareil voyage avec : les sessions d'avant l'écran « Appareils connectés » se
+        // décrivent ainsi au premier renouvellement.
+        body: JSON.stringify({ refreshToken, device: deviceInfo() }),
       });
       if (!res.ok) {
         /**

@@ -22,6 +22,7 @@ import { PRIVACY_POLICY_VERSION } from "../../lib/config";
 import { connectSocket } from "../../lib/socket";
 import { startSession } from "../../lib/session";
 import { BOOT_KEYS, hydrateCache } from "../../lib/cache";
+import { deviceInfo } from "../../lib/device";
 import { initOutbox } from "../../lib/outbox";
 import { saveTokens } from "../../lib/storage";
 
@@ -155,7 +156,7 @@ export default function VerifyScreen() {
         user: { id: string };
       }>("/auth/verify-code", {
         method: "POST",
-        body: { phone, code, name: name || "" },
+        body: { phone, code, name: name || "", device: deviceInfo() },
         auth: false,
       });
       await saveTokens(data.accessToken, data.refreshToken, data.user.id);

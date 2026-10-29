@@ -743,5 +743,24 @@
     "tap_to_call_back": "Geri aramak için dokunun",
     "last_call": "Son arama",
     "show_all_history": "Tüm geçmişi göster"
+  },
+  "devices": {
+    "title": "Bağlı cihazlar",
+    "intro": "Hesabının açık olduğu cihazlar. Tanımadığın bir cihazın oturumunu kapatmak için ona dokun.",
+    "this_device": "Bu cihaz",
+    "last_active": "Son etkinlik: {{when}}",
+    "since": "{{date}} tarihinden beri bağlı",
+    "unknown": "Bilinmeyen cihaz",
+    "browser": "Tarayıcı",
+    "revoke_title": "Bu cihazın oturumu kapatılsın mı?",
+    "revoke_body": "{{device}} hesabından çıkarılacak ve artık bildirimlerini ya da aramalarını almayacak.",
+    "revoke_action": "Oturumu kapat",
+    "revoke_others": "Diğer tüm cihazların oturumunu kapat",
+    "revoke_others_body": "Bu cihaz dışındaki tüm cihazların oturumu kapatılacak.",
+    "revoke_error": "Cihazın oturumu kapatılamadı. Bağlantını kontrol edip tekrar dene.",
+    "load_error": "Cihaz listesi yüklenemedi.",
+    "retry": "Tekrar dene",
+    "revoke_others_button": "Diğer tüm cihazlardan çıkış yap (bu cihaz hariç)",
+    "logout_all_button": "Tüm cihazlarımdan çıkış yap (bu cihaz dahil)"
   }
 }

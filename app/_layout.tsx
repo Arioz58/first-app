@@ -649,6 +649,10 @@ export default function RootLayout() {
       />
       <Stack.Screen name="privacy" options={{ headerShown: false }} />
       <Stack.Screen name="blocked" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="devices"
+        options={{ headerShown: false, animation: "slide_from_right" }}
+      />
       <Stack.Screen name="requests" options={{ headerShown: false }} />
       <Stack.Screen
         name="archived"

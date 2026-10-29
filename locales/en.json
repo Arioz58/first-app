@@ -743,5 +743,24 @@
     "tap_to_call_back": "Tap to call back",
     "last_call": "Last call",
     "show_all_history": "Show full history"
+  },
+  "devices": {
+    "title": "Linked devices",
+    "intro": "The devices where your account is signed in. Tap a device you don't recognise to sign it out.",
+    "this_device": "This device",
+    "last_active": "Active: {{when}}",
+    "since": "Signed in since {{date}}",
+    "unknown": "Unknown device",
+    "browser": "Browser",
+    "revoke_title": "Sign out this device?",
+    "revoke_body": "{{device}} will be signed out of your account and will no longer receive your notifications or calls.",
+    "revoke_action": "Sign out",
+    "revoke_others": "Sign out all other devices",
+    "revoke_others_body": "Every device except this one will be signed out of your account.",
+    "revoke_error": "Couldn't sign out the device. Check your connection and try again.",
+    "load_error": "Couldn't load your devices.",
+    "retry": "Retry",
+    "revoke_others_button": "Sign out all other devices (except this one)",
+    "logout_all_button": "Sign out all my devices (including this one)"
   }
 }
