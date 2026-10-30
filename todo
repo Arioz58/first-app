@@ -785,6 +785,13 @@ morte. Mobile ET web.
     `fetchRef` qui la gardait hors des dependances n'existait que pour le reessai automatique,
     supprime le matin meme.
 
+[FAIT 30/10 - Mois 5, SECURITE] VALIDATION DES ENTREES (zod) — backend uniquement, aucun build.
+  → `src/lib/validate.ts` + un `<module>.schemas.ts` par module : corps, requete et identifiants du chemin de chaque route, ET chaque evenement socket. Refus = 400 `INVALID_INPUT`, journalise `[validate]` (noms de champs, jamais les valeurs).
+  ⚠️ Decouvert en le faisant (30/10, instance locale separee) : UN SEUL `live_location_update` avec une latitude en texte ARRETAIT LE SERVEUR (promesse rejetee non rattrapee). Corrige par la validation + filet `unhandledRejection` dans index.ts.
+  ⚠️ `send_message` acceptait n'importe quel `type` : un client pouvait envoyer un faux bandeau systeme (« X est maintenant admin ») ou une fausse bulle d'appel. Ferme a text/location/story_reply.
+  → champs inconnus RETIRES (pas refuses) et plafonds larges : anciens builds et site inchanges. Verifie : 9 attaques refusees, 11 requetes d'usage normal acceptees.
+  A SURVEILLER apres deploiement : les lignes `[validate]` dans les logs Railway (un refus d'un vrai client = un schema trop strict a elargir).
+
 [FAIT 23/10 - Mois 5, SECURITE] ROTATION DES JETONS DE RAFRAICHISSEMENT.
   FAIT : table `AuthSession` (une ligne par appareil connecte), `sid` + `jti` dans les jetons,
   nouveau jeton a CHAQUE renouvellement (7 j glissants), `POST /auth/logout` (cet appareil) et
